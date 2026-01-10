@@ -1,0 +1,62 @@
+version: '3.8'
+
+services:
+  v-panel:
+    build:
+      context: ../..
+      dockerfile: deployments/docker/Dockerfile
+      args:
+        VERSION: ${VERSION:-dev}
+        BUILD_TIME: ${BUILD_TIME:-unknown}
+        GIT_COMMIT: ${GIT_COMMIT:-unknown}
+    image: v-panel:${VERSION:-latest}
+    container_name: v-panel
+    restart: unless-stopped
+    ports:
+      - "${V_SERVER_PORT:-8080}:8080"
+      # Add additional ports for proxy protocols as needed
+      # - "443:443"
+      # - "10086:10086"
+    environment:
+      - V_SERVER_HOST=0.0.0.0
+      - V_SERVER_PORT=8080
+      - V_SERVER_MODE=${V_SERVER_MODE:-release}
+      - V_DB_PATH=/app/data/v.db
+      - V_JWT_SECRET=${V_JWT_SECRET:-change-me-in-production}
+      - V_ADMIN_USER=${V_ADMIN_USER:-admin}
+      - V_ADMIN_PASS=${V_ADMIN_PASS:-admin123}
+      - V_LOG_LEVEL=${V_LOG_LEVEL:-info}
+      - V_LOG_FORMAT=${V_LOG_FORMAT:-json}
+      - TZ=${TZ:-UTC}
+    volumes:
+      - v-panel-data:/app/data
+      - v-panel-logs:/app/logs
+      - v-panel-xray:/app/xray
+      # Optional: mount custom config
+      # - ./config.yaml:/app/configs/config.yaml:ro
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    networks:
+      - v-panel-network
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+volumes:
+  v-panel-data:
+    name: v-panel-data
+  v-panel-logs:
+    name: v-panel-logs
+  v-panel-xray:
+    name: v-panel-xray
+
+networks:
+  v-panel-network:
+    name: v-panel-network
+    driver: bridge
