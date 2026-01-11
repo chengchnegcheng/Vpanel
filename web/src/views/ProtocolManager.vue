@@ -349,57 +349,17 @@ const loadProtocols = async () => {
   loading.value = true
   
   try {
-    // 模拟API调用
-    await new Promise(resolve => setTimeout(resolve, 500))
+    const response = await fetch('/api/protocols')
+    if (!response.ok) {
+      throw new Error('加载协议列表失败')
+    }
     
-    // 模拟数据
-    protocols.value = [
-      {
-        id: 1,
-        type: 'trojan',
-        name: 'Trojan-TCP',
-        server: 'trojan1.sh-crystalcg.com',
-        port: 60506,
-        password: '123456',
-        security: 'tls',
-        sni: 'trojan1.sh-crystalcg.com',
-        transport: 'tcp',
-        headerType: 'none',
-        wsPath: '',
-        wsHost: '',
-        remark: 'Trojan TCP连接',
-        enabled: true
-      },
-      {
-        id: 2,
-        type: 'trojan',
-        name: 'Trojan-WebSocket',
-        server: 'trojan2.sh-crystalcg.com',
-        port: 443,
-        password: 'password123',
-        security: 'tls',
-        sni: 'trojan2.sh-crystalcg.com',
-        transport: 'ws',
-        wsPath: '/trojan-ws',
-        wsHost: 'trojan2.sh-crystalcg.com',
-        remark: 'Trojan WebSocket连接',
-        enabled: true
-      },
-      {
-        id: 3,
-        type: 'vmess',
-        name: 'VMess-TCP',
-        server: 'vmess.example.com',
-        port: 8443,
-        security: 'tls',
-        transport: 'tcp',
-        remark: 'VMess TCP连接',
-        enabled: false
-      }
-    ]
+    const data = await response.json()
+    protocols.value = data.list || []
   } catch (error) {
     console.error('加载协议列表失败:', error)
     ElMessage.error('加载协议列表失败')
+    protocols.value = []
   } finally {
     loading.value = false
   }
@@ -431,7 +391,7 @@ const deleteProtocol = (row) => {
     }
   )
     .then(async () => {
-      // 模拟删除操作
+      // TODO: 替换为实际 API 调用
       await new Promise(resolve => setTimeout(resolve, 500))
       protocols.value = protocols.value.filter(p => p.id !== row.id)
       ElMessage.success('删除成功')
@@ -491,7 +451,7 @@ const saveProtocol = async () => {
     saving.value = true
     
     try {
-      // 模拟API调用
+      // TODO: 替换为实际 API 调用
       await new Promise(resolve => setTimeout(resolve, 800))
       
       // 更新或添加协议
@@ -529,7 +489,7 @@ const saveProtocol = async () => {
 // 切换协议状态
 const toggleProtocolStatus = async (row) => {
   try {
-    // 模拟API调用
+    // TODO: 替换为实际 API 调用
     await new Promise(resolve => setTimeout(resolve, 300))
     
     // 更新状态

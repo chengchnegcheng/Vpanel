@@ -391,54 +391,12 @@ onMounted(() => {
 const fetchProxies = async () => {
   loading.value = true
   try {
-    // 实际环境下应使用API调用
-    // const res = await proxiesApi.list()
-    // proxiesList.value = res.data
-    
-    // 使用模拟数据
-    setTimeout(() => {
-      proxiesList.value = [
-        {
-          id: 1,
-          name: 'VLess代理',
-          type: 'vless',
-          port: 443,
-          users: 5,
-          created: '2023-08-01 10:30:00',
-          status: true
-        },
-        {
-          id: 2,
-          name: 'VMess代理',
-          type: 'vmess',
-          port: 8080,
-          users: 8,
-          created: '2023-07-15 14:20:00',
-          status: true
-        },
-        {
-          id: 3,
-          name: 'Trojan代理',
-          type: 'trojan',
-          port: 8443,
-          users: 3,
-          created: '2023-09-02 09:15:00',
-          status: false
-        },
-        {
-          id: 4,
-          name: 'Shadowsocks代理',
-          type: 'shadowsocks',
-          port: 9000,
-          users: 10,
-          created: '2023-06-20 16:45:00',
-          status: true
-        }
-      ]
-      loading.value = false
-    }, 500)
+    const res = await proxiesApi.list()
+    proxiesList.value = res.data || []
   } catch (error) {
     ElMessage.error('获取协议列表失败')
+    proxiesList.value = []
+  } finally {
     loading.value = false
   }
 }

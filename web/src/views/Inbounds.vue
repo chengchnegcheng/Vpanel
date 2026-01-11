@@ -684,46 +684,6 @@ onMounted(() => {
 const loadInbounds = async () => {
   loading.value = true
   try {
-    // 模拟API响应
-    const mockData = {
-      total: 3,
-      list: [
-        {
-          id: 1,
-          remark: 'VIP用户',
-          protocol: 'vmess',
-          port: 10086,
-          clientCount: 5,
-          created_at: '2023-03-15 08:30:00',
-          enable: true
-        },
-        {
-          id: 2,
-          remark: '免费用户',
-          protocol: 'vless',
-          port: 20086,
-          clientCount: 10,
-          created_at: '2023-03-10 14:20:00',
-          enable: false
-        },
-        {
-          id: 3,
-          remark: '测试节点',
-          protocol: 'trojan',
-          port: 30086,
-          clientCount: 2,
-          created_at: '2023-03-05 09:15:00',
-          enable: true
-        }
-      ]
-    }
-    
-    // 更新数据
-    inbounds.value = mockData.list
-    total.value = mockData.total
-    
-    // 注释掉实际的API调用
-    /*
     const response = await api.get('/api/inbounds', {
       params: {
         page: currentPage.value,
@@ -732,16 +692,14 @@ const loadInbounds = async () => {
     })
     
     if (response.data) {
-      inbounds.value = response.data.list.map(item => ({
-        ...item,
-        clientCount: Math.floor(Math.random() * 10) + 1 // 模拟用户数
-      }))
-      total.value = response.data.total
+      inbounds.value = response.data.list || []
+      total.value = response.data.total || 0
     }
-    */
   } catch (error) {
     console.error('Failed to load inbounds:', error)
     ElMessage.error('加载入站列表失败')
+    inbounds.value = []
+    total.value = 0
   } finally {
     loading.value = false
   }
@@ -830,36 +788,23 @@ const saveInbound = async () => {
         // 其他协议配置...
       }
       
-      // 模拟提交成功
-      setTimeout(() => {
-        // 添加到本地数据
-        const newInbound = {
-          id: inbounds.value.length + 1,
-          ...submittingData,
-          created_at: new Date().toLocaleString(),
-          clientCount: 0
+      // 提交到服务器
+      try {
+        const response = await api.post('/api/inbounds', submittingData)
+        
+        if (response.data && response.data.success) {
+          ElMessage.success('添加入站成功')
+          addInboundDialogVisible.value = false
+          loadInbounds()
+        } else {
+          ElMessage.error(response.data?.message || '添加入站失败')
         }
-        
-        inbounds.value.unshift(newInbound)
-        total.value++
-        
-        ElMessage.success('添加入站成功')
-        addInboundDialogVisible.value = false
+      } catch (apiError) {
+        console.error('Failed to save inbound:', apiError)
+        ElMessage.error('添加入站失败: ' + apiError.message)
+      } finally {
         submitting.value = false
-      }, 800)
-      
-      // 注释掉实际的API调用
-      /*
-      const response = await api.post('/api/inbounds', submittingData)
-      
-      if (response.data && response.data.success) {
-        ElMessage.success('添加入站成功')
-        addInboundDialogVisible.value = false
-        loadInbounds()
-      } else {
-        ElMessage.error(response.data.message || '添加入站失败')
       }
-      */
     } catch (error) {
       console.error('Failed to save inbound:', error)
       ElMessage.error('添加入站失败: ' + error.message)
@@ -884,12 +829,13 @@ const toggleStatus = (row) => {
     type: 'warning'
   }).then(async () => {
     try {
-      // 模拟API调用
-      setTimeout(() => {
-        // 直接修改本地数据
+      const response = await api.put(`/api/inbounds/${row.id}/toggle`)
+      if (response.data && response.data.success) {
         row.enable = !row.enable
         ElMessage.success(`${action}入站成功`)
-      }, 300)
+      } else {
+        ElMessage.error(response.data?.message || `${action}入站失败`)
+      }
     } catch (error) {
       console.error(`Failed to ${action} inbound:`, error)
       ElMessage.error(`${action}入站失败: ` + error.message)
@@ -907,27 +853,13 @@ const deleteInbound = (row) => {
     type: 'warning'
   }).then(async () => {
     try {
-      // 模拟API调用
-      setTimeout(() => {
-        // 从本地数据中删除
-        const index = inbounds.value.findIndex(item => item.id === row.id)
-        if (index !== -1) {
-          inbounds.value.splice(index, 1)
-          total.value--
-        }
-        ElMessage.success('删除入站成功')
-      }, 300)
-      
-      // 注释掉实际的API调用
-      /*
       const response = await api.delete(`/api/inbounds/${row.id}`)
       if (response.data && response.data.success) {
         ElMessage.success('删除入站成功')
         loadInbounds()
       } else {
-        ElMessage.error(response.data.message || '删除入站失败')
+        ElMessage.error(response.data?.message || '删除入站失败')
       }
-      */
     } catch (error) {
       console.error('Failed to delete inbound:', error)
       ElMessage.error('删除入站失败: ' + error.message)
@@ -1057,7 +989,7 @@ const generateUUID = () => {
 
 // 获取分享链接
 const getShareLink = async (row) => {
-  // 模拟获取链接
+  // TODO: 替换为实际 API 调用获取链接
   const protocol = row.protocol
   let link = ''
   

@@ -204,7 +204,7 @@ const transports = reactive({
 // 保存设置
 const saveSettings = async () => {
   try {
-    // 模拟API调用
+    // TODO: 替换为实际 API 调用
     await new Promise(resolve => setTimeout(resolve, 500))
     ElMessage.success('协议配置已保存')
   } catch (error) {
@@ -226,7 +226,7 @@ const saveAndRestart = async () => {
       }
     )
       .then(async () => {
-        // 模拟保存和重启过程
+        // TODO: 替换为实际 API 调用
         await new Promise(resolve => setTimeout(resolve, 1000))
         ElMessage.success('协议配置已保存，Xray已重启')
       })

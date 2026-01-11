@@ -370,7 +370,7 @@ const saveAndRestart = async () => {
       try {
         await saveAllSettings()
         
-        // 模拟重启过程
+        // 重启服务
         ElMessage({
           message: '正在重启服务...',
           type: 'info',

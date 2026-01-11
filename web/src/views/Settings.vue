@@ -1934,33 +1934,19 @@ const loadVersionDetails = async (version) => {
   try {
     xraySettings.loading = true
     
-    // 在实际项目中应该从API获取版本详情
-    // const response = await api.get(`/api/xray/version/${version}/details`)
-    // 模拟API响应
-    const mockResponse = {
-      data: {
-        version: version,
-        release_date: '2023-12-15',
-        description: 'Xray-core是一个平台，用于构建用于规避网络限制的代理应用程序。',
-        changelog: [
-          '修复了TCP连接的bug',
-          '改进了WebSocket传输的稳定性',
-          '优化了内存使用',
-          '新增了对HTTP/3的支持'
-        ]
+    const response = await api.get(`/api/xray/version/${version}/details`)
+    
+    if (response.data) {
+      xraySettings.versionDetails = {
+        version: response.data.version,
+        releaseDate: response.data.release_date,
+        description: response.data.description,
+        changelog: response.data.changelog || []
       }
+      
+      // 显示版本详情对话框
+      xraySettings.showVersionDetails = true
     }
-    
-    // 更新版本详情
-    xraySettings.versionDetails = {
-      version: mockResponse.data.version,
-      releaseDate: mockResponse.data.release_date,
-      description: mockResponse.data.description,
-      changelog: mockResponse.data.changelog
-    }
-    
-    // 显示版本详情对话框
-    xraySettings.showVersionDetails = true
   } catch (error) {
     console.error('Failed to load version details:', error)
     ElMessage.error('加载版本详情失败：' + (error.message || '未知错误'))
@@ -1982,23 +1968,11 @@ const checkXrayUpdates = async () => {
     xraySettings.checkingForUpdates = true;
     ElMessage.info('正在检查Xray更新...');
     
-    // 这里应该调用实际的API
-    // const response = await api.get('/api/xray/check-updates');
+    const response = await api.get('/api/xray/check-updates');
     
-    // 模拟API响应
-    await new Promise(resolve => setTimeout(resolve, 1500));
-    const mockResponse = {
-      data: {
-        has_update: true,
-        latest_version: 'v1.8.25',
-        current_version: xraySettings.currentVersion,
-        release_notes: '- 修复了多个安全漏洞\n- 提升了性能和稳定性'
-      }
-    };
-    
-    if (mockResponse.data.has_update) {
+    if (response.data && response.data.has_update) {
       ElMessageBox.confirm(
-        `发现新版本: ${mockResponse.data.latest_version}\n\n更新说明:\n${mockResponse.data.release_notes}`,
+        `发现新版本: ${response.data.latest_version}\n\n更新说明:\n${response.data.release_notes || ''}`,
         '有可用更新',
         {
           confirmButtonText: '更新',
@@ -2007,7 +1981,7 @@ const checkXrayUpdates = async () => {
           dangerouslyUseHTMLString: true
         }
       ).then(() => {
-        downloadXrayVersion(mockResponse.data.latest_version);
+        downloadXrayVersion(response.data.latest_version);
       }).catch(() => {
         ElMessage.info('已取消更新');
       });
@@ -2032,25 +2006,22 @@ const downloadXrayVersion = async (version) => {
   xraySettings.downloadingVersion = version;
   
   try {
-    // 模拟下载进度
-    for (let i = 0; i <= 100; i += 10) {
-      xraySettings.updateProgress.percent = i;
-      await new Promise(resolve => setTimeout(resolve, 300));
-    }
+    // 调用API下载版本
+    const response = await api.post('/api/xray/download', { version }, {
+      onDownloadProgress: (progressEvent) => {
+        if (progressEvent.total) {
+          xraySettings.updateProgress.percent = Math.round((progressEvent.loaded / progressEvent.total) * 100);
+        }
+      }
+    });
     
     // 下载完成，开始安装
     xraySettings.updateProgress.status = 'installing';
     xraySettings.updateProgress.message = `正在安装 ${version}...`;
-    xraySettings.updateProgress.percent = 0;
+    xraySettings.updateProgress.percent = 50;
     
-    // 模拟安装进度
-    for (let i = 0; i <= 100; i += 20) {
-      xraySettings.updateProgress.percent = i;
-      await new Promise(resolve => setTimeout(resolve, 200));
-    }
-    
-    // 这里应该调用实际的API来安装版本
-    // await api.post('/api/xray/version', { version });
+    // 调用API安装版本
+    await api.post('/api/xray/install', { version });
     
     // 安装完成
     xraySettings.updateProgress.status = 'completed';

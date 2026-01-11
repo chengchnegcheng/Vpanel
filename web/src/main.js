@@ -26,9 +26,6 @@ app.use(router)
 app.use(pinia)
 app.use(ElementPlus)
 
-// 完全禁用所有Mock数据
-console.log('Mock functionality is completely disabled. Using real backend API.')
-
 // 初始化SSE连接监听Xray版本事件
 xrayEventSource.init()
 

@@ -56,6 +56,8 @@
 import { ref, onMounted, onUnmounted } from 'vue'
 import * as echarts from 'echarts'
 
+import { ElMessage } from 'element-plus'
+
 // 图表引用
 const realtimeChartRef = ref(null)
 const historyChartRef = ref(null)
@@ -66,23 +68,6 @@ let historyChart = null
 const loading = ref(false)
 const trafficData = ref([])
 
-// 模拟数据
-const generateMockData = () => {
-  const now = new Date()
-  return Array(10).fill(0).map((_, index) => {
-    const timestamp = new Date(now - index * 3600 * 1000)
-    const inbound = Math.floor(Math.random() * 1000)
-    const outbound = Math.floor(Math.random() * 1000)
-    return {
-      timestamp,
-      inbound,
-      outbound,
-      total: inbound + outbound,
-      protocol: ['HTTP', 'HTTPS', 'TCP', 'UDP'][Math.floor(Math.random() * 4)],
-      client: `client-${Math.floor(Math.random() * 10)}`
-    }
-  })
-}
 
 // 初始化图表
 const initCharts = () => {
@@ -202,17 +187,19 @@ const updateCharts = () => {
 const refreshData = async () => {
   loading.value = true
   try {
-    // 这里应该是从API获取数据
-    // const { data } = await api.getTrafficData()
-    // trafficData.value = data
-    
-    // 使用模拟数据
-    trafficData.value = generateMockData()
+    const response = await fetch('/api/traffic/monitor')
+    if (!response.ok) {
+      throw new Error('获取流量数据失败')
+    }
+    const data = await response.json()
+    trafficData.value = data.list || []
     
     // 更新图表
     updateCharts()
   } catch (error) {
     console.error('获取流量数据失败:', error)
+    ElMessage.error('获取流量数据失败')
+    trafficData.value = []
   } finally {
     loading.value = false
   }

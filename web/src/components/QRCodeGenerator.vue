@@ -77,21 +77,8 @@ const fetchShareLink = async () => {
     generateQRCode(data.link)
   } catch (err) {
     console.error('获取分享链接失败:', err)
-    error.value = '获取API失败，使用模拟数据'
-    
-    // 使用模拟数据
-    const mockLinks = {
-      '1': 'trojan://password123@example.com:443?security=tls&sni=example.com&allowInsecure=false#trojan1',
-      '2': 'trojan://password123@example.com:443?security=tls&sni=example.com&allowInsecure=false#trojan2',
-      '3': 'trojan://password123@example.com:60606?security=tls&sni=example.com&allowInsecure=false#trojan',
-      '4': 'trojan://password123@example.com:60605?security=tls&sni=example.com&allowInsecure=false#trojan'
-    }
-    
-    const link = mockLinks[props.proxyId] || 'trojan://password123@example.com:443?security=tls&sni=example.com#default'
-    shareLink.value = link
-    
-    // 使用模拟数据生成二维码
-    generateQRCode(link)
+    error.value = '获取分享链接失败'
+    loading.value = false
   }
 }
 

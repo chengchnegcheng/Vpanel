@@ -173,44 +173,19 @@ onMounted(() => {
 const fetchUsers = async () => {
   loading.value = true
   try {
-    // 实际项目中应从API获取用户列表
-    // 此处为模拟数据
-    setTimeout(() => {
-      users.value = [
-        {
-          id: 1,
-          username: 'admin',
-          email: 'admin@example.com',
-          role: 'admin',
-          created: '2023-01-01 12:00:00',
-          lastLogin: '2023-03-15 08:30:22',
-          status: true
-        },
-        {
-          id: 2,
-          username: 'user1',
-          email: 'user1@example.com',
-          role: 'user',
-          created: '2023-01-02 14:30:00',
-          lastLogin: '2023-03-14 16:42:51',
-          status: true
-        },
-        {
-          id: 3,
-          username: 'moderator',
-          email: 'mod@example.com',
-          role: 'user',
-          created: '2023-01-03 10:15:30',
-          lastLogin: '2023-03-10 11:20:15',
-          status: true
-        }
-      ]
-      totalUsers.value = users.value.length
-      loading.value = false
-    }, 500)
+    const response = await fetch('/api/users')
+    if (!response.ok) {
+      throw new Error('获取用户列表失败')
+    }
+    const data = await response.json()
+    users.value = data.list || []
+    totalUsers.value = data.total || 0
   } catch (error) {
     console.error('Failed to fetch users:', error)
     ElMessage.error('获取用户列表失败')
+    users.value = []
+    totalUsers.value = 0
+  } finally {
     loading.value = false
   }
 }

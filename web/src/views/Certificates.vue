@@ -275,31 +275,12 @@ const validateResult = ref(null)
 onMounted(async () => {
   loading.value = true
   try {
-    // 模拟获取证书数据
-    // 实际环境应替换为 certificatesApi.getCertificates()
-    setTimeout(() => {
-      certificates.value = [
-        {
-          id: 1,
-          domain: 'example.com',
-          provider: 'letsencrypt',
-          issueDate: '2023-06-01',
-          expireDate: '2023-09-01',
-          autoRenew: true
-        },
-        {
-          id: 2,
-          domain: 'test.example.com',
-          provider: 'zerossl',
-          issueDate: '2023-05-15',
-          expireDate: '2023-08-15',
-          autoRenew: false
-        }
-      ]
-      loading.value = false
-    }, 500)
+    const response = await certificatesApi.getCertificates()
+    certificates.value = response.data || []
   } catch (error) {
     ElMessage.error('获取证书列表失败')
+    certificates.value = []
+  } finally {
     loading.value = false
   }
 })
@@ -308,43 +289,13 @@ onMounted(async () => {
 const fetchCertificates = async () => {
   loading.value = true
   try {
-    // 实际项目中应使用API获取数据
-    // const response = await certificatesApi.getCertificates()
-    // certificates.value = response
-    
-    // 模拟数据
-    setTimeout(() => {
-      certificates.value = [
-        {
-          id: 1,
-          domain: 'example.com',
-          provider: 'letsencrypt',
-          issueDate: '2023-01-01',
-          expireDate: '2023-04-01',
-          autoRenew: true
-        },
-        {
-          id: 2,
-          domain: 'test.example.com',
-          provider: 'zerossl',
-          issueDate: '2023-01-15',
-          expireDate: '2023-04-15',
-          autoRenew: false
-        },
-        {
-          id: 3,
-          domain: 'api.example.com',
-          provider: 'custom',
-          issueDate: '2023-02-01',
-          expireDate: '2024-02-01',
-          autoRenew: true
-        }
-      ]
-      loading.value = false
-    }, 500)
+    const response = await certificatesApi.getCertificates()
+    certificates.value = response.data || []
   } catch (error) {
     console.error('Failed to fetch certificates:', error)
     ElMessage.error('获取证书列表失败')
+    certificates.value = []
+  } finally {
     loading.value = false
   }
 }
@@ -480,7 +431,7 @@ const handleValidate = async (row) => {
     // 实际项目中应调用API验证证书
     // const result = await certificatesApi.validateCertificate(row.id)
     
-    // 模拟响应
+    // TODO: 替换为实际 API 调用
     const result = {
       success: true,
       message: '证书有效',

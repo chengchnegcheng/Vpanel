@@ -274,17 +274,12 @@ const getProtocolColor = (protocol) => {
 // 加载数据
 const loadData = async () => {
   try {
-    // 实际项目中，这里应该调用API获取数据
-    // const response = await api.get('/api/dashboard')
-    // systemStats.value = response.data.system
-    // trafficStats.value = response.data.traffic
-    // protocolStats.value = response.data.protocols
-    
-    // 模拟数据更新
-    systemStats.value = {
-      cpu: Math.floor(Math.random() * 60) + 20,
-      memory: Math.floor(Math.random() * 70) + 10,
-      disk: Math.floor(Math.random() * 50) + 30
+    const response = await api.get('/api/dashboard')
+    if (response.data) {
+      systemStats.value = response.data.system || systemStats.value
+      trafficStats.value = response.data.traffic || trafficStats.value
+      protocolStats.value = response.data.protocols || protocolStats.value
+      protocolTraffic.value = response.data.protocolTraffic || protocolTraffic.value
     }
   } catch (error) {
     console.error('Failed to load dashboard data:', error)
@@ -299,25 +294,16 @@ const refreshStats = () => {
 }
 
 // 切换流量统计周期
-const changeTrafficPeriod = (period) => {
-  // 实际项目中，应该根据不同周期调用API获取数据
-  console.log('Changed traffic period to:', period)
-  
-  // 模拟数据更新
-  if (period === 'today') {
-    trafficStats.value.total = 1024 * 1024 * 1024 * 2.5
-    trafficStats.value.percentage = 25
-  } else if (period === 'week') {
-    trafficStats.value.total = 1024 * 1024 * 1024 * 8.2
-    trafficStats.value.percentage = 82
-  } else {
-    trafficStats.value.total = 1024 * 1024 * 1024 * 9.5
-    trafficStats.value.percentage = 95
+const changeTrafficPeriod = async (period) => {
+  try {
+    const response = await api.get('/api/dashboard/traffic', { params: { period } })
+    if (response.data) {
+      trafficStats.value = response.data
+    }
+  } catch (error) {
+    console.error('Failed to load traffic data:', error)
+    ElMessage.error('加载流量数据失败')
   }
-  
-  // 更新上下行流量
-  trafficStats.value.up = trafficStats.value.total * 0.3
-  trafficStats.value.down = trafficStats.value.total * 0.7
 }
 
 // 初始化

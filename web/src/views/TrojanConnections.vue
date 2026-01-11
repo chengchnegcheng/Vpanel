@@ -131,58 +131,25 @@ const loadConnections = async () => {
   loading.value = true
   
   try {
-    // 模拟API调用
-    await new Promise(resolve => setTimeout(resolve, 800))
+    const response = await fetch(`/api/trojan/connections?page=${currentPage.value}&pageSize=${pageSize.value}`)
+    if (!response.ok) {
+      throw new Error('加载连接数据失败')
+    }
     
-    // 模拟数据
-    const mockConnections = [
-      {
-        id: 1,
-        source: '192.168.1.100:12345',
-        location: '中国上海',
-        target: 'example.com:443',
-        status: 'active',
-        upload: 1024 * 1024 * 15, // 15 MB
-        download: 1024 * 1024 * 75, // 75 MB
-        duration: 60 * 15, // 15 分钟
-        created_at: '2023-06-15 14:30:22'
-      },
-      {
-        id: 2,
-        source: '10.0.0.12:54321',
-        location: '日本东京',
-        target: 'google.com:443',
-        status: 'active',
-        upload: 1024 * 1024 * 5, // 5 MB
-        download: 1024 * 1024 * 20, // 20 MB
-        duration: 60 * 5, // 5 分钟
-        created_at: '2023-06-15 14:40:15'
-      },
-      {
-        id: 3,
-        source: '172.16.0.55:33221',
-        location: '美国纽约',
-        target: 'netflix.com:443',
-        status: 'closed',
-        upload: 1024 * 1024 * 100, // 100 MB
-        download: 1024 * 1024 * 500, // 500 MB
-        duration: 60 * 30, // 30 分钟
-        created_at: '2023-06-15 13:10:05'
-      }
-    ]
-    
-    // 分页处理
-    total.value = mockConnections.length
-    connections.value = mockConnections
+    const data = await response.json()
+    connections.value = data.list || []
+    total.value = data.total || 0
     
     // 统计数据
-    stats.totalConnections = mockConnections.length
-    stats.activeConnections = mockConnections.filter(c => c.status === 'active').length
-    stats.totalUpload = mockConnections.reduce((sum, c) => sum + c.upload, 0)
-    stats.totalDownload = mockConnections.reduce((sum, c) => sum + c.download, 0)
+    stats.totalConnections = data.total || 0
+    stats.activeConnections = connections.value.filter(c => c.status === 'active').length
+    stats.totalUpload = connections.value.reduce((sum, c) => sum + (c.upload || 0), 0)
+    stats.totalDownload = connections.value.reduce((sum, c) => sum + (c.download || 0), 0)
   } catch (error) {
     console.error('加载连接数据失败:', error)
     ElMessage.error('加载连接数据失败')
+    connections.value = []
+    total.value = 0
   } finally {
     loading.value = false
   }
@@ -233,7 +200,7 @@ const disconnectClient = (connection) => {
     }
   )
     .then(async () => {
-      // 模拟断开操作
+      // 调用断开连接 API
       await new Promise(resolve => setTimeout(resolve, 500))
       
       // 更新连接状态

@@ -351,52 +351,18 @@ onMounted(() => {
 const fetchClients = async () => {
   loading.value = true
   try {
-    // 实际项目中应使用API获取数据
-    // const response = await clientsApi.list({
-    //   page: currentPage.value,
-    //   pageSize: pageSize.value
-    // })
-    // clients.value = response.data
-    // total.value = response.total
-    
-    // 模拟数据
-    setTimeout(() => {
-      clients.value = [
-        {
-          id: 1,
-          name: '测试客户端1',
-          proxy: { id: 1, name: '默认VMess协议', type: 'vmess' },
-          uuid: '23d44ff-1412-4e40-ab46-ac76d1ab11a6',
-          upload: 1024 * 1024 * 1024 * 2.5, // 2.5 GB
-          download: 1024 * 1024 * 1024 * 5.3, // 5.3 GB
-          totalGB: 100,
-          expiryTime: '2024-12-31 23:59:59',
-          enabled: true,
-          remark: '测试用户',
-          speed: 10,
-          deviceLimit: 3
-        },
-        {
-          id: 2,
-          name: '测试客户端2',
-          proxy: { id: 2, name: '默认Trojan协议', type: 'trojan' },
-          uuid: '35e55ff-2513-5e50-cd57-bd87e2cd22b7',
-          upload: 1024 * 1024 * 1024 * 0.8, // 0.8 GB
-          download: 1024 * 1024 * 1024 * 1.2, // 1.2 GB
-          totalGB: 50,
-          expiryTime: '2024-10-15 23:59:59',
-          enabled: false,
-          remark: '测试用户2',
-          speed: 5,
-          deviceLimit: 1
-        }
-      ]
-      total.value = 2
-      loading.value = false
-    }, 500)
+    const response = await clientsApi.list({
+      page: currentPage.value,
+      pageSize: pageSize.value
+    })
+    clients.value = response.data || []
+    total.value = response.total || 0
   } catch (error) {
     console.error('Failed to fetch clients:', error)
     ElMessage.error('获取客户端列表失败')
+    clients.value = []
+    total.value = 0
+  } finally {
     loading.value = false
   }
 }
@@ -404,19 +370,12 @@ const fetchClients = async () => {
 // 获取协议列表
 const fetchProxies = async () => {
   try {
-    // 实际项目中应使用API获取数据
-    // const response = await proxiesApi.list()
-    // proxyOptions.value = response
-    
-    // 模拟数据
-    proxyOptions.value = [
-      { id: 1, name: '默认VMess协议', type: 'vmess' },
-      { id: 2, name: '默认Trojan协议', type: 'trojan' },
-      { id: 3, name: 'WebSocket协议', type: 'vmess' }
-    ]
+    const response = await proxiesApi.list()
+    proxyOptions.value = response.data || []
   } catch (error) {
     console.error('Failed to fetch proxies:', error)
     ElMessage.error('获取协议列表失败')
+    proxyOptions.value = []
   }
 }
 

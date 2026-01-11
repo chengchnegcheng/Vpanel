@@ -97,7 +97,7 @@ const saveProfile = async () => {
   await profileForm.value.validate(async (valid) => {
     if (valid) {
       try {
-        // 模拟API调用
+        // TODO: 替换为实际 API 调用
         await new Promise(resolve => setTimeout(resolve, 500))
         
         // 更新用户信息
@@ -124,8 +124,7 @@ const resetForm = () => {
 
 onMounted(async () => {
   try {
-    // 模拟从API获取用户资料
-    // 这里可以替换为实际的API调用
+    // TODO: 替换为实际 API 调用获取用户资料
     await new Promise(resolve => setTimeout(resolve, 300))
     
     // 如果userStore中有用户信息，则使用它

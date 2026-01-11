@@ -69,9 +69,15 @@ export default defineComponent({
     // 获取版本列表
     const fetchVersions = async () => {
       try {
-        // 实际实现时应该从API获取
-        // 这里使用模拟数据
-        console.log('获取版本列表')
+        const response = await fetch('/api/xray/versions')
+        if (!response.ok) {
+          throw new Error('获取版本列表失败')
+        }
+        const data = await response.json()
+        versions.value = data.versions || []
+        if (data.currentVersion) {
+          currentVersion.value = data.currentVersion
+        }
       } catch (error) {
         console.error('获取版本列表失败:', error)
         ElMessage.error('获取版本列表失败')
@@ -86,8 +92,15 @@ export default defineComponent({
 
       switching.value = true
       try {
-        // 模拟API调用
-        await new Promise(resolve => setTimeout(resolve, 1000))
+        const response = await fetch('/api/xray/switch-version', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ version: selectedVersion.value })
+        })
+        
+        if (!response.ok) {
+          throw new Error('版本切换失败')
+        }
         
         currentVersion.value = selectedVersion.value
         ElMessage.success(`已切换到 ${selectedVersion.value}`)
@@ -103,8 +116,11 @@ export default defineComponent({
     const restartService = async () => {
       restarting.value = true
       try {
-        // 模拟API调用
-        await new Promise(resolve => setTimeout(resolve, 1500))
+        const response = await fetch('/api/xray/restart', { method: 'POST' })
+        
+        if (!response.ok) {
+          throw new Error('重启服务失败')
+        }
         
         ElMessage.success('服务已重启')
       } catch (error) {
@@ -118,8 +134,15 @@ export default defineComponent({
     // 更新设置
     const updateSettings = async () => {
       try {
-        // 模拟API调用
-        await new Promise(resolve => setTimeout(resolve, 500))
+        const response = await fetch('/api/xray/settings', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ autoUpdate: autoUpdate.value })
+        })
+        
+        if (!response.ok) {
+          throw new Error('更新设置失败')
+        }
         
         ElMessage.success(`自动更新已${autoUpdate.value ? '启用' : '禁用'}`)
       } catch (error) {

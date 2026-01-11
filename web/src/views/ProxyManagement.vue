@@ -220,66 +220,11 @@ const fetchProxyList = async () => {
     }
     
     const data = await response.json()
-    proxyList.value = data
+    proxyList.value = data || []
   } catch (err) {
     console.error('获取代理列表失败:', err)
-    error.value = '获取代理列表失败，使用模拟数据'
-    
-    // 使用模拟数据
-    proxyList.value = [
-      {
-        id: '1',
-        name: '香港服务器',
-        protocol: 'trojan',
-        server: 'example.com',
-        port: 443,
-        settings: {
-          password: 'password123',
-          sni: 'example.com',
-          allowInsecure: false
-        },
-        remark: '香港高速节点'
-      },
-      {
-        id: '2',
-        name: '新加坡服务器',
-        protocol: 'trojan',
-        server: 'example.com',
-        port: 443,
-        settings: {
-          password: 'password123',
-          sni: 'example.com',
-          allowInsecure: false
-        },
-        remark: '新加坡稳定节点'
-      },
-      {
-        id: '3',
-        name: '日本服务器',
-        protocol: 'trojan',
-        server: 'example.com',
-        port: 60606,
-        settings: {
-          password: 'password123',
-          sni: 'example.com',
-          allowInsecure: false
-        },
-        remark: '日本游戏专用'
-      },
-      {
-        id: '4',
-        name: '美国服务器',
-        protocol: 'trojan',
-        server: 'example.com',
-        port: 60605,
-        settings: {
-          password: 'password123',
-          sni: 'example.com',
-          allowInsecure: false
-        },
-        remark: '美国流媒体解锁'
-      }
-    ]
+    error.value = '获取代理列表失败'
+    proxyList.value = []
   } finally {
     loading.value = false
   }
@@ -349,31 +294,7 @@ const submitProxyForm = async () => {
       ElMessage.success(isEditing.value ? '代理更新成功' : '代理添加成功')
     } catch (err) {
       console.error('提交表单失败:', err)
-      
-      // 模拟成功
-      if (isEditing.value) {
-        // 更新操作
-        const index = proxyList.value.findIndex(item => item.id === currentEditId.value)
-        if (index !== -1) {
-          proxyList.value[index] = { 
-            ...proxyList.value[index], 
-            ...proxyForm, 
-            id: currentEditId.value 
-          }
-        }
-        ElMessage.success('模拟更新成功')
-      } else {
-        // 添加操作
-        const newId = (Math.max(...proxyList.value.map(p => parseInt(p.id))) + 1).toString()
-        proxyList.value.push({
-          id: newId,
-          ...proxyForm
-        })
-        ElMessage.success('模拟添加成功')
-      }
-      
-      // 关闭对话框
-      showAddProxyDialog.value = false
+      ElMessage.error(isEditing.value ? '代理更新失败' : '代理添加失败')
     } finally {
       submitting.value = false
     }
@@ -417,9 +338,7 @@ const handleDeleteProxy = async (id) => {
     ElMessage.success('代理删除成功')
   } catch (err) {
     console.error('删除代理失败:', err)
-    // 模拟成功
-    proxyList.value = proxyList.value.filter(item => item.id !== id)
-    ElMessage.success('模拟删除成功')
+    ElMessage.error('删除代理失败')
   }
 }
 

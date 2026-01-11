@@ -193,9 +193,8 @@ export const useUserStore = defineStore('user', () => {
     error.value = null
     
     try {
-      // 实际项目中应替换为真实API端点
+      // TODO: 替换为真实 API 端点
       // const response = await axios.post('/api/users', userData)
-      // 模拟成功响应
       const newUser = {
         ...userData,
         id: Date.now(),
@@ -218,9 +217,8 @@ export const useUserStore = defineStore('user', () => {
     error.value = null
     
     try {
-      // 实际项目中应替换为真实API端点
+      // TODO: 替换为真实 API 端点
       // const response = await axios.put(`/api/users/${userId}`, userData)
-      // 模拟成功响应
       return { ...userData, id: userId }
     } catch (err) {
       error.value = err.response?.data?.message || '更新用户失败'
@@ -235,9 +233,8 @@ export const useUserStore = defineStore('user', () => {
     error.value = null
     
     try {
-      // 实际项目中应替换为真实API端点
+      // TODO: 替换为真实 API 端点
       // await axios.delete(`/api/users/${userId}`)
-      // 模拟成功响应
       return true
     } catch (err) {
       error.value = err.response?.data?.message || '删除用户失败'
@@ -252,9 +249,8 @@ export const useUserStore = defineStore('user', () => {
     error.value = null
     
     try {
-      // 实际项目中应替换为真实API端点
+      // TODO: 替换为真实 API 端点
       // await axios.patch(`/api/users/${userId}/status`, { status })
-      // 模拟成功响应
       return true
     } catch (err) {
       error.value = err.response?.data?.message || '更新用户状态失败'
@@ -269,10 +265,9 @@ export const useUserStore = defineStore('user', () => {
     error.value = null
     
     try {
-      // 实际项目中应替换为真实API端点
+      // TODO: 替换为真实 API 端点
       // const response = await axios.put('/api/users/profile', profileData)
       
-      // 模拟成功响应
       // 更新本地用户数据
       user.value = {
         ...user.value,
@@ -293,10 +288,9 @@ export const useUserStore = defineStore('user', () => {
     error.value = null
     
     try {
-      // 实际项目中应替换为真实API端点
+      // TODO: 替换为真实 API 端点
       // await axios.post('/api/users/change-password', passwordData)
       
-      // 模拟成功响应
       return true
     } catch (err) {
       error.value = err.response?.data?.message || '修改密码失败'

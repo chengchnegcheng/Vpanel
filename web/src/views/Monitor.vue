@@ -250,40 +250,28 @@ export default {
     // 方法
     const fetchStats = async () => {
       try {
-        // TODO: 替换为实际的 API 调用
-        // const response = await monitorService.getStats()
-        // Object.assign(stats, response.data)
+        const response = await fetch('/api/monitor/stats')
+        if (!response.ok) {
+          throw new Error('获取系统状态失败')
+        }
+        const data = await response.json()
         
-        // 模拟数据
-        stats.cpu = Math.random() * 30 + 40 // 40-70% 范围内随机
-        stats.memory = Math.random() * 20 + 60 // 60-80% 范围内随机
-        stats.network.upload = Math.random() * 1024 * 1024 * 5 // 0-5MB/s
-        stats.network.download = Math.random() * 1024 * 1024 * 10 // 0-10MB/s
-        stats.disk.used = 800 * 1024 * 1024 * 1024 // 800GB
-        stats.disk.total = 1000 * 1024 * 1024 * 1024 // 1TB
-        stats.uptime = Math.floor(Date.now() / 1000) - Math.floor(Math.random() * 86400 * 7) // 1-7天
+        // 更新统计数据
+        if (data.cpu !== undefined) stats.cpu = data.cpu
+        if (data.memory !== undefined) stats.memory = data.memory
+        if (data.network) {
+          stats.network.upload = data.network.upload || 0
+          stats.network.download = data.network.download || 0
+        }
+        if (data.disk) {
+          stats.disk.used = data.disk.used || 0
+          stats.disk.total = data.disk.total || 1
+        }
+        if (data.uptime !== undefined) stats.uptime = data.uptime
         
         // 更新系统信息
-        if (!systemInfo.hostname) {
-          systemInfo.hostname = 'server-' + Math.floor(Math.random() * 1000)
-          systemInfo.os = 'Linux'
-          systemInfo.platform = 'Ubuntu'
-          systemInfo.release = '20.04 LTS'
-          systemInfo.arch = 'x86_64'
-          systemInfo.cpuCores = 8
-          systemInfo.loadAvg = [stats.cpu / 100 * 8, (stats.cpu / 100 * 8) * 0.8, (stats.cpu / 100 * 8) * 0.6]
-          systemInfo.memoryTotal = 16 * 1024 * 1024 * 1024 // 16GB
-          systemInfo.memoryUsed = systemInfo.memoryTotal * (stats.memory / 100)
-          systemInfo.memoryFree = systemInfo.memoryTotal - systemInfo.memoryUsed
-          systemInfo.goroutines = Math.floor(Math.random() * 100) + 50
-          systemInfo.processMemory = Math.floor(Math.random() * 500 * 1024 * 1024) + 100 * 1024 * 1024
-          systemInfo.ip = '192.168.1.' + Math.floor(Math.random() * 254 + 1)
-        } else {
-          systemInfo.loadAvg = [stats.cpu / 100 * 8, (stats.cpu / 100 * 8) * 0.8, (stats.cpu / 100 * 8) * 0.6]
-          systemInfo.memoryUsed = systemInfo.memoryTotal * (stats.memory / 100)
-          systemInfo.memoryFree = systemInfo.memoryTotal - systemInfo.memoryUsed
-          systemInfo.goroutines = Math.floor(Math.random() * 100) + 50
-          systemInfo.processMemory = Math.floor(Math.random() * 500 * 1024 * 1024) + 100 * 1024 * 1024
+        if (data.systemInfo) {
+          Object.assign(systemInfo, data.systemInfo)
         }
         
         // 更新总网络流量

@@ -272,74 +272,36 @@ export default {
     const fetchTrafficData = async () => {
       loading.value = true
       try {
-        // TODO: 替换为实际的 API 调用
-        // const response = await trafficService.getTrafficData(dateRange.value)
-        // userTraffic.value = response.data.users
+        const params = {
+          startTime: dateRange.value && dateRange.value[0] ? dateRange.value[0].toISOString() : undefined,
+          endTime: dateRange.value && dateRange.value[1] ? dateRange.value[1].toISOString() : undefined
+        }
         
-        // 模拟数据
-        setTimeout(() => {
-          const users = []
-          for (let i = 1; i <= 20; i++) {
-            const totalTraffic = Math.floor(Math.random() * 100) * 1024 * 1024 * 1024 // 0-100GB
-            const uploadTraffic = Math.floor(totalTraffic * (0.3 + Math.random() * 0.4)) // 30-70% 的总流量
-            const downloadTraffic = totalTraffic - uploadTraffic
-            const trafficLimit = (Math.floor(Math.random() * 5) + 5) * 10 * 1024 * 1024 * 1024 // 50-100GB
-            const lastOnline = new Date()
-            lastOnline.setHours(lastOnline.getHours() - Math.floor(Math.random() * 48)) // 0-48小时前
-            
-            const user = {
-              id: i,
-              username: i === 1 ? 'admin' : `user${i}`,
-              email: i === 1 ? 'admin@example.com' : `user${i}@example.com`,
-              totalTraffic,
-              uploadTraffic,
-              downloadTraffic,
-              trafficLimit,
-              lastOnline,
-              createdAt: new Date(Date.now() - Math.floor(Math.random() * 90) * 86400000), // 0-90天前
-              trafficLog: []
-            }
-            
-            // 生成每日流量记录
-            const days = 30
-            for (let day = 0; day < days; day++) {
-              const date = new Date()
-              date.setDate(date.getDate() - day)
-              const total = Math.floor(Math.random() * 2 * 1024 * 1024 * 1024) // 0-2GB
-              const upload = Math.floor(total * (0.3 + Math.random() * 0.4))
-              const download = total - upload
-              
-              user.trafficLog.push({
-                date: `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`,
-                total,
-                upload,
-                download
-              })
-            }
-            
-            users.push(user)
-          }
-          
-          userTraffic.value = users
-
-          // 计算总流量统计
-          totalStats.totalTraffic = users.reduce((sum, user) => sum + user.totalTraffic, 0)
-          totalStats.uploadTraffic = users.reduce((sum, user) => sum + user.uploadTraffic, 0)
-          totalStats.downloadTraffic = users.reduce((sum, user) => sum + user.downloadTraffic, 0)
-          totalStats.activeUsers = users.filter(user => {
-            const lastOnline = new Date(user.lastOnline)
-            const now = new Date()
-            return (now - lastOnline) < 24 * 60 * 60 * 1000 // 24小时内活跃
-          }).length
-          
-          // 初始化图表
-          initTrafficChart()
-          
-          loading.value = false
-        }, 500)
+        const response = await fetch('/api/traffic?' + new URLSearchParams(params))
+        if (!response.ok) {
+          throw new Error('获取流量数据失败')
+        }
+        
+        const data = await response.json()
+        userTraffic.value = data.users || []
+        
+        // 计算总流量统计
+        totalStats.totalTraffic = userTraffic.value.reduce((sum, user) => sum + (user.totalTraffic || 0), 0)
+        totalStats.uploadTraffic = userTraffic.value.reduce((sum, user) => sum + (user.uploadTraffic || 0), 0)
+        totalStats.downloadTraffic = userTraffic.value.reduce((sum, user) => sum + (user.downloadTraffic || 0), 0)
+        totalStats.activeUsers = userTraffic.value.filter(user => {
+          const lastOnline = new Date(user.lastOnline)
+          const now = new Date()
+          return (now - lastOnline) < 24 * 60 * 60 * 1000
+        }).length
+        
+        // 初始化图表
+        initTrafficChart()
       } catch (error) {
         ElMessage.error('获取流量数据失败')
         console.error(error)
+        userTraffic.value = []
+      } finally {
         loading.value = false
       }
     }
@@ -373,9 +335,10 @@ export default {
       ).then(async () => {
         try {
           // TODO: 替换为实际的 API 调用
+          // TODO: 替换为实际 API 调用
           // await trafficService.resetUserTraffic(user.id)
           
-          // 模拟重置
+          // 重置本地数据
           const index = userTraffic.value.findIndex(u => u.id === user.id)
           if (index !== -1) {
             userTraffic.value[index].totalTraffic = 0
@@ -419,7 +382,7 @@ export default {
         date.setDate(date.getDate() - i)
         dates.push(`${date.getMonth() + 1}-${date.getDate()}`)
         
-        // 模拟每天的流量数据
+        // 生成每天的流量数据 (TODO: 替换为实际 API 数据)
         const uploadValue = Math.floor(Math.random() * 10 * 1024 * 1024 * 1024) // 0-10GB
         const downloadValue = Math.floor(Math.random() * 20 * 1024 * 1024 * 1024) // 0-20GB
         

@@ -3,7 +3,7 @@
     <!-- 错误提示条，添加条件控制只在错误时显示 -->
     <el-alert
       v-if="apiError"
-      title="获取系统状态失败，使用模拟数据"
+      title="获取系统状态失败"
       type="error"
       show-icon
       :closable="false"
@@ -303,81 +303,7 @@ const generateTimePoints = (count) => {
   })
 }
 
-// 生成模拟数据
-const generateMockData = () => {
-  // 检测操作系统类型
-  let osType = 'Unknown'
-  let kernelVersion = 'Unknown'
-  
-  if (navigator.platform.indexOf('Win') !== -1) {
-    osType = 'Windows'
-    kernelVersion = 'Windows NT 10.0'
-  } else if (navigator.platform.indexOf('Mac') !== -1) {
-    osType = 'macOS'
-    kernelVersion = 'Darwin 21.6.0'
-  } else if (navigator.platform.indexOf('Linux') !== -1) {
-    osType = 'Linux'
-    kernelVersion = 'Linux 5.15.0-76-generic'
-  }
-  
-  // 系统信息
-  systemInfo.value = {
-    os: osType,
-    kernel: kernelVersion,
-    hostname: window.location.hostname || 'localhost',
-    uptime: '0 days, 0 hours, 0 minutes',
-    load: osType === 'Windows' ? [0, 0, 0] : [0.8, 1.0, 1.2],
-    ipAddress: '0.0.0.0'
-  }
-  
-  // CPU信息
-  cpuUsage.value = 45
-  cpuInfo.value = {
-    cores: 8,
-    model: osType === 'Windows' ? 'Intel Core i7-10700K (Windows)' : 
-           osType === 'macOS' ? 'Apple M1 (macOS)' : 
-           'Intel Xeon E5-2680 (Linux)'
-  }
-  
-  // 内存信息
-  const totalMem = 16 * 1024 * 1024 * 1024 // 16GB
-  const usedMem = totalMem * 0.4 // 使用40%
-  memoryUsage.value = 40
-  memoryInfo.value = {
-    used: usedMem,
-    total: totalMem
-  }
-  
-  // 磁盘信息
-  const totalDisk = 500 * 1024 * 1024 * 1024 // 500GB
-  const usedDisk = totalDisk * 0.35 // 使用35%
-  diskUsage.value = 35
-  diskInfo.value = {
-    used: usedDisk,
-    total: totalDisk
-  }
-  
-  // 进程信息 - 根据操作系统使用不同的进程列表
-  if (osType === 'Windows') {
-    processes.value = [
-      { pid: 4, name: 'System', user: 'SYSTEM', cpu: '0.1', memory: '0.5', memoryUsed: 50 * 1024 * 1024, started: '2023-03-10 00:00:00', state: 'running' },
-      { pid: 728, name: 'svchost.exe', user: 'SYSTEM', cpu: '1.2', memory: '0.8', memoryUsed: 80 * 1024 * 1024, started: '2023-03-15 08:30:00', state: 'running' },
-      { pid: 1524, name: 'v.exe', user: 'USER', cpu: '2.5', memory: '1.2', memoryUsed: 120 * 1024 * 1024, started: '2023-03-15 08:31:20', state: 'running' }
-    ]
-  } else if (osType === 'macOS') {
-    processes.value = [
-      { pid: 1, name: 'launchd', user: 'root', cpu: '0.1', memory: '0.3', memoryUsed: 30 * 1024 * 1024, started: '2023-03-10 00:00:00', state: 'running' },
-      { pid: 324, name: 'WindowServer', user: 'root', cpu: '1.5', memory: '1.0', memoryUsed: 100 * 1024 * 1024, started: '2023-03-15 08:30:00', state: 'running' },
-      { pid: 1524, name: 'v', user: 'user', cpu: '2.0', memory: '1.1', memoryUsed: 110 * 1024 * 1024, started: '2023-03-15 08:31:20', state: 'running' }
-    ]
-  } else {
-    processes.value = [
-      { pid: 1, name: 'systemd', user: 'root', cpu: '0.5', memory: '0.8', memoryUsed: 80 * 1024 * 1024, started: '2023-03-10 00:00:00', state: 'running' },
-      { pid: 854, name: 'v-core', user: 'root', cpu: '2.1', memory: '1.2', memoryUsed: 120 * 1024 * 1024, started: '2023-03-15 08:30:00', state: 'running' },
-      { pid: 1275, name: 'nginx', user: 'www-data', cpu: '1.5', memory: '0.7', memoryUsed: 70 * 1024 * 1024, started: '2023-03-15 08:31:20', state: 'running' }
-    ]
-  }
-}
+
 
 // 更新图表数据
 const updateCharts = () => {
@@ -465,9 +391,8 @@ const refreshData = async () => {
     }
   } catch (error) {
     console.error('获取系统状态失败:', error)
-    // 设置错误状态，使用模拟数据
     apiError.value = true
-    generateMockData()
+    ElMessage.error('获取系统状态失败')
   } finally {
     loading.value = false
     // 更新图表

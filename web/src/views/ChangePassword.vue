@@ -184,7 +184,7 @@ const changePassword = async () => {
   await passwordFormRef.value.validate(async (valid) => {
     if (valid) {
       try {
-        // 模拟API调用
+        // TODO: 替换为实际 API 调用
         await new Promise(resolve => setTimeout(resolve, 500))
         
         // 调用 store 方法更新密码

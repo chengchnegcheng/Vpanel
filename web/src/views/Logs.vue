@@ -236,135 +236,30 @@ export default {
       loading.value = true
       
       try {
-        // TODO: 替换为实际的 API 调用
-        // const params = {
-        //   page: currentPage.value,
-        //   size: pageSize.value,
-        //   type: logType.value !== 'all' ? logType.value : undefined,
-        //   level: logLevel.value !== 'all' ? logLevel.value : undefined,
-        //   query: searchQuery.value || undefined,
-        //   startTime: dateRange.value && dateRange.value[0] ? dateRange.value[0].toISOString() : undefined,
-        //   endTime: dateRange.value && dateRange.value[1] ? dateRange.value[1].toISOString() : undefined
-        // }
-        // const response = await logsService.getLogs(params)
-        // logs.value = response.data.logs
-        // totalLogs.value = response.data.total
+        const params = {
+          page: currentPage.value,
+          size: pageSize.value,
+          type: logType.value !== 'all' ? logType.value : undefined,
+          level: logLevel.value !== 'all' ? logLevel.value : undefined,
+          query: searchQuery.value || undefined,
+          startTime: dateRange.value && dateRange.value[0] ? dateRange.value[0].toISOString() : undefined,
+          endTime: dateRange.value && dateRange.value[1] ? dateRange.value[1].toISOString() : undefined
+        }
         
-        // 模拟数据
-        setTimeout(() => {
-          const sampleLogs = []
-          const logTypes = ['system', 'error', 'access', 'user']
-          const logLevels = ['info', 'warning', 'error', 'critical']
-          const sources = ['系统', '用户模块', '认证模块', '流量模块', '代理服务', '协议处理', '控制台']
-          
-          const getRandomMessage = (type, level) => {
-            if (type === 'system') {
-              if (level === 'info') return '系统启动完成，监听端口: 8080'
-              if (level === 'warning') return '系统资源使用率超过80%，请关注服务器负载'
-              if (level === 'error') return '配置文件加载失败: 无法解析 config.json'
-              if (level === 'critical') return '严重错误: 数据库连接失败，无法启动服务'
-            } else if (type === 'error') {
-              if (level === 'info') return '错误已被自动修复: 连接超时问题'
-              if (level === 'warning') return '发现潜在问题: 内存泄漏可能出现在用户连接处理中'
-              if (level === 'error') return 'HTTP请求处理错误: 404 找不到页面 /api/v1/users/123'
-              if (level === 'critical') return '严重错误: 无法写入日志文件，磁盘空间已满'
-            } else if (type === 'access') {
-              if (level === 'info') return '用户登录成功: admin 从 192.168.1.100'
-              if (level === 'warning') return '多次失败的登录尝试: 用户 user1 从 192.168.1.101'
-              if (level === 'error') return '访问被拒绝: 用户 user2 尝试访问未授权资源'
-              if (level === 'critical') return '检测到潜在的暴力破解攻击，来源IP: 192.168.1.102'
-            } else if (type === 'user') {
-              if (level === 'info') return '用户 admin 修改了系统设置'
-              if (level === 'warning') return '用户 user1 尝试修改管理员密码'
-              if (level === 'error') return '用户操作失败: user2 尝试删除系统日志'
-              if (level === 'critical') return '检测到可疑的用户操作: user3 尝试修改系统关键文件'
-            }
-            return '日志消息'
-          }
-          
-          for (let i = 0; i < 200; i++) {
-            const type = logTypes[Math.floor(Math.random() * logTypes.length)]
-            const level = logLevels[Math.floor(Math.random() * logLevels.length)]
-            const source = sources[Math.floor(Math.random() * sources.length)]
-            
-            // 生成随机日期，最近30天内
-            const timestamp = new Date()
-            timestamp.setDate(timestamp.getDate() - Math.floor(Math.random() * 30))
-            timestamp.setHours(Math.floor(Math.random() * 24))
-            timestamp.setMinutes(Math.floor(Math.random() * 60))
-            timestamp.setSeconds(Math.floor(Math.random() * 60))
-            
-            const message = getRandomMessage(type, level)
-            
-            const log = {
-              id: i + 1,
-              timestamp,
-              type,
-              level,
-              source,
-              message,
-              stackTrace: level === 'error' || level === 'critical' ? 
-                '错误在 /app/services/userService.js:123\n' +
-                'at processRequest (/app/middleware/auth.js:45)\n' +
-                'at handleRequest (/app/server.js:67)\n' +
-                'at Server.emit (events.js:315)' : null,
-              ip: type === 'access' ? `192.168.1.${Math.floor(Math.random() * 254) + 1}` : null,
-              username: type === 'user' || type === 'access' ? 
-                Math.random() > 0.7 ? 'admin' : `user${Math.floor(Math.random() * 10) + 1}` : null,
-              metadata: {
-                browser: 'Chrome',
-                os: 'Windows',
-                duration: Math.floor(Math.random() * 500) + 'ms'
-              }
-            }
-            
-            sampleLogs.push(log)
-          }
-          
-          // 筛选
-          let filtered = sampleLogs
-          
-          if (logType.value !== 'all') {
-            filtered = filtered.filter(log => log.type === logType.value)
-          }
-          
-          if (logLevel.value !== 'all') {
-            filtered = filtered.filter(log => log.level === logLevel.value)
-          }
-          
-          if (searchQuery.value) {
-            const query = searchQuery.value.toLowerCase()
-            filtered = filtered.filter(log => 
-              log.message.toLowerCase().includes(query) || 
-              (log.username && log.username.toLowerCase().includes(query)) ||
-              log.source.toLowerCase().includes(query)
-            )
-          }
-          
-          if (dateRange.value && dateRange.value.length === 2) {
-            const start = dateRange.value[0]
-            const end = dateRange.value[1]
-            filtered = filtered.filter(log => {
-              const timestamp = new Date(log.timestamp)
-              return timestamp >= start && timestamp <= end
-            })
-          }
-          
-          // 排序 - 按时间倒序
-          filtered.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))
-          
-          totalLogs.value = filtered.length
-          
-          // 分页
-          const startIndex = (currentPage.value - 1) * pageSize.value
-          const endIndex = startIndex + pageSize.value
-          logs.value = filtered.slice(startIndex, endIndex)
-          
-          loading.value = false
-        }, 500)
+        const response = await fetch('/api/logs?' + new URLSearchParams(params))
+        if (!response.ok) {
+          throw new Error('获取日志数据失败')
+        }
+        
+        const data = await response.json()
+        logs.value = data.logs || []
+        totalLogs.value = data.total || 0
       } catch (error) {
         ElMessage.error('获取日志数据失败')
         console.error(error)
+        logs.value = []
+        totalLogs.value = 0
+      } finally {
         loading.value = false
       }
     }
@@ -393,9 +288,10 @@ export default {
       ).then(async () => {
         try {
           // TODO: 替换为实际的 API 调用
+          // TODO: 替换为实际 API 调用
           // await logsService.deleteLog(log.id)
           
-          // 模拟删除
+          // 从列表中移除
           logs.value = logs.value.filter(item => item.id !== log.id)
           totalLogs.value--
           
