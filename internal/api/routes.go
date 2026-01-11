@@ -61,6 +61,8 @@ func (r *Router) Setup() {
 	proxyHandler := handlers.NewProxyHandler(r.proxyManager, r.repos.Proxy, r.logger)
 	systemHandler := handlers.NewSystemHandler(r.config, r.logger)
 	healthHandler := handlers.NewHealthHandler(r.repos, r.logger)
+	roleHandler := handlers.NewRoleHandler(r.logger)
+	statsHandler := handlers.NewStatsHandler(r.logger, r.repos)
 
 	// Auth middleware
 	authMiddleware := middleware.NewAuthMiddleware(r.authService, r.logger)
@@ -78,6 +80,11 @@ func (r *Router) Setup() {
 			auth.POST("/login", authHandler.Login)
 			auth.POST("/refresh", authHandler.RefreshToken)
 		}
+
+		// SSE endpoint (placeholder - returns 204 No Content to avoid HTML fallback)
+		api.GET("/sse/xray-events", func(c *gin.Context) {
+			c.Status(204)
+		})
 
 		// Protected routes
 		protected := api.Group("")
@@ -104,8 +111,31 @@ func (r *Router) Setup() {
 			system := protected.Group("/system")
 			{
 				system.GET("/info", systemHandler.GetInfo)
-				system.GET("/status", systemHandler.GetStatus)
+				system.GET("/status", systemHandler.GetDetailedStatus)
 				system.GET("/stats", systemHandler.GetStats)
+			}
+
+			// Role routes
+			roles := protected.Group("/roles")
+			{
+				roles.GET("", roleHandler.ListRoles)
+				roles.POST("", roleHandler.CreateRole)
+				roles.GET("/:id", roleHandler.GetRole)
+				roles.PUT("/:id", roleHandler.UpdateRole)
+				roles.DELETE("/:id", roleHandler.DeleteRole)
+			}
+
+			// Permissions route
+			protected.GET("/permissions", roleHandler.GetPermissions)
+
+			// Stats routes
+			stats := protected.Group("/stats")
+			{
+				stats.GET("/dashboard", statsHandler.GetDashboardStats)
+				stats.GET("/protocol", statsHandler.GetProtocolStats)
+				stats.GET("/traffic", statsHandler.GetTrafficStats)
+				stats.GET("/user", statsHandler.GetUserStats)
+				stats.GET("/detailed", statsHandler.GetDetailedStats)
 			}
 
 			// User management (admin only)
@@ -123,7 +153,11 @@ func (r *Router) Setup() {
 
 	// Static files for frontend (if enabled)
 	if r.config.Server.StaticPath != "" {
-		r.engine.Static("/static", r.config.Server.StaticPath)
+		// Serve static assets (js, css, images, etc.)
+		r.engine.Static("/assets", r.config.Server.StaticPath+"/assets")
+		// Serve favicon
+		r.engine.StaticFile("/favicon.ico", r.config.Server.StaticPath+"/favicon.ico")
+		// SPA fallback - serve index.html for all other routes
 		r.engine.NoRoute(func(c *gin.Context) {
 			c.File(r.config.Server.StaticPath + "/index.html")
 		})

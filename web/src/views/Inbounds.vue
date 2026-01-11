@@ -512,7 +512,7 @@
 import { ref, reactive, onMounted, computed, nextTick, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { InfoFilled, Plus, Delete } from '@element-plus/icons-vue'
-import axios from 'axios'
+import api from '@/api/index'
 import QRCode from 'qrcode'
 
 // 数据表格
@@ -724,7 +724,7 @@ const loadInbounds = async () => {
     
     // 注释掉实际的API调用
     /*
-    const response = await axios.get('/api/inbounds', {
+    const response = await api.get('/api/inbounds', {
       params: {
         page: currentPage.value,
         pageSize: pageSize.value
@@ -850,7 +850,7 @@ const saveInbound = async () => {
       
       // 注释掉实际的API调用
       /*
-      const response = await axios.post('/api/inbounds', submittingData)
+      const response = await api.post('/api/inbounds', submittingData)
       
       if (response.data && response.data.success) {
         ElMessage.success('添加入站成功')
@@ -920,7 +920,7 @@ const deleteInbound = (row) => {
       
       // 注释掉实际的API调用
       /*
-      const response = await axios.delete(`/api/inbounds/${row.id}`)
+      const response = await api.delete(`/api/inbounds/${row.id}`)
       if (response.data && response.data.success) {
         ElMessage.success('删除入站成功')
         loadInbounds()
@@ -944,7 +944,7 @@ const copyLink = async (row) => {
     let link = '';
     // 使用API获取实际链接
     try {
-      const response = await axios.get(`/api/inbounds/${row.id}/link`)
+      const response = await api.get(`/api/inbounds/${row.id}/link`)
       if (response.data && response.data.link) {
         link = response.data.link;
       } else {
@@ -1079,7 +1079,7 @@ const getShareLink = async (row) => {
   
   // 实际的API调用替代方案
   /*
-  const response = await axios.get(`/api/inbounds/${row.id}/link`)
+  const response = await api.get(`/api/inbounds/${row.id}/link`)
   if (response.data && response.data.link) {
     return response.data.link
   } else {

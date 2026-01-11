@@ -90,6 +90,12 @@ func main() {
 		RefreshTokenExpiry:  cfg.Auth.RefreshTokenExpiry,
 	})
 
+	// Ensure default admin user exists
+	if err := ensureAdminUser(repos.User, authService, cfg, log); err != nil {
+		log.Error("failed to ensure admin user", logger.F("error", err))
+		os.Exit(1)
+	}
+
 	// Initialize proxy manager
 	proxyManager := proxy.NewManager(repos.Proxy)
 
@@ -128,4 +134,39 @@ func main() {
 	}
 
 	log.Info("server stopped gracefully")
+}
+
+
+// ensureAdminUser creates the default admin user if it doesn't exist.
+func ensureAdminUser(userRepo repository.UserRepository, authService *auth.Service, cfg *config.Config, log logger.Logger) error {
+	ctx := context.Background()
+
+	// Check if admin user exists
+	_, err := userRepo.GetByUsername(ctx, cfg.Auth.AdminUsername)
+	if err == nil {
+		// Admin user already exists
+		log.Info("admin user already exists", logger.F("username", cfg.Auth.AdminUsername))
+		return nil
+	}
+
+	// Create admin user
+	passwordHash, err := authService.HashPassword(cfg.Auth.AdminPassword)
+	if err != nil {
+		return fmt.Errorf("failed to hash admin password: %w", err)
+	}
+
+	adminUser := &repository.User{
+		Username:     cfg.Auth.AdminUsername,
+		PasswordHash: passwordHash,
+		Email:        "",
+		Role:         "admin",
+		Enabled:      true,
+	}
+
+	if err := userRepo.Create(ctx, adminUser); err != nil {
+		return fmt.Errorf("failed to create admin user: %w", err)
+	}
+
+	log.Info("admin user created", logger.F("username", cfg.Auth.AdminUsername))
+	return nil
 }

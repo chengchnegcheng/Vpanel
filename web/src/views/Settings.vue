@@ -754,7 +754,7 @@
 import { ref, reactive, onMounted, computed, watch, onUnmounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useUserStore } from '@/stores/user'
-import axios from 'axios'
+import api, { systemApi } from '@/api/index'
 import { InfoFilled, CopyDocument, Refresh, Connection, Download, Link, Loading, ArrowRight } from '@element-plus/icons-vue'
 
 // store
@@ -921,7 +921,7 @@ const restartXray = async () => {
     // 检测是否为Windows平台
     let isWindows = false;
     try {
-      const systemInfoResponse = await axios.get('/api/system/info')
+      const systemInfoResponse = await api.get('/system/info')
       if (systemInfoResponse.data && systemInfoResponse.data.os) {
         isWindows = systemInfoResponse.data.os === 'windows';
         console.log(`Detected platform: ${systemInfoResponse.data.os} (Windows: ${isWindows})`);
@@ -936,7 +936,7 @@ const restartXray = async () => {
     
     // 停止服务
     try {
-      await axios.post('/api/xray/stop', {}, { timeout: stopTimeout })
+      await api.post('/xray/stop', {}, { timeout: stopTimeout })
     } catch (stopError) {
       console.error('Failed to stop Xray:', stopError)
       
@@ -958,7 +958,7 @@ const restartXray = async () => {
     
     // 先获取当前系统信息
     try {
-      const systemInfoResponse = await axios.get('/api/system/info')
+      const systemInfoResponse = await api.get('/system/info')
       if (systemInfoResponse.data) {
         console.log('Current system info:', systemInfoResponse.data)
         // 记录系统信息，用于可能的问题排查
@@ -975,7 +975,7 @@ const restartXray = async () => {
     
     // 启动服务，对于Windows平台使用更长的超时时间
     try {
-      const startResponse = await axios.post('/api/xray/start', {}, { timeout: startTimeout })
+      const startResponse = await api.post('/xray/start', {}, { timeout: startTimeout })
       
       // 检查启动是否成功
       if (startResponse.data && startResponse.data.success) {
@@ -1006,7 +1006,7 @@ const restartXray = async () => {
         await new Promise(resolve => setTimeout(resolve, 3000))
         
         try {
-          const statusResponse = await axios.get('/api/xray/status', { timeout: 10000 })
+          const statusResponse = await api.get('/xray/status', { timeout: 10000 })
           if (statusResponse.data && statusResponse.data.running) {
             // 服务实际上已经在运行
             ElMessage.success('Xray服务已成功启动，但响应超时')
@@ -1034,7 +1034,7 @@ const restartXray = async () => {
         try {
           await syncVersionsFromGitHub()
           // 再次尝试启动
-          const retryResponse = await axios.post('/api/xray/start', {}, { timeout: startTimeout })
+          const retryResponse = await api.post('/xray/start', {}, { timeout: startTimeout })
           if (retryResponse.data && retryResponse.data.success) {
             ElMessage.success('Xray服务已在同步版本后成功启动')
             setTimeout(() => {
@@ -1096,7 +1096,7 @@ const restartXray = async () => {
     // 尝试恢复服务
     try {
       ElMessage.warning('正在尝试恢复服务...')
-      await axios.post('/api/xray/start', {}, { timeout: 15000 })
+      await api.post('/xray/start', {}, { timeout: 15000 })
     } catch (recoveryError) {
       console.error('Failed to recover Xray service:', recoveryError)
       ElMessage.error({
@@ -1250,7 +1250,7 @@ const loadXrayVersions = async () => {
     // 尝试从API获取Xray版本信息
     let versionsUpdated = false
     try {
-      const response = await axios.get('/api/xray/versions')
+      const response = await api.get('/xray/versions')
       if (response.data && response.data.current_version) {
         xraySettings.currentVersion = response.data.current_version
       }
@@ -1322,7 +1322,7 @@ const syncVersionsFromGitHub = async () => {
     })
     
     // 调用后端API同步版本
-    const response = await axios.post('/api/xray/sync-versions-from-github', {}, {
+    const response = await api.post('/xray/sync-versions-from-github', {}, {
       timeout: 30000 // 增加超时时间到30秒，GitHub访问可能较慢
     })
     
@@ -1332,7 +1332,7 @@ const syncVersionsFromGitHub = async () => {
     if (response.data && response.data.success) {
       // 同步成功，获取同步到的版本列表
       try {
-        const syncResponse = await axios.get('/api/xray/versions')
+        const syncResponse = await api.get('/xray/versions')
         if (syncResponse.data && Array.isArray(syncResponse.data.supported_versions) && syncResponse.data.supported_versions.length > 0) {
           xraySettings.versions = syncResponse.data.supported_versions
           
@@ -1415,7 +1415,7 @@ const syncVersionsFromGitHub = async () => {
       
       // 尝试更新服务器版本列表
       try {
-        await axios.post('/api/xray/update-versions', {
+        await api.post('/xray/update-versions', {
           versions: xraySettings.versions
         })
         console.log('Updated server versions with fallback list')
@@ -1436,7 +1436,7 @@ const loadXraySettings = async () => {
   try {
     console.log('开始加载Xray设置，当前值：', { ...xraySettings });
     
-    const response = await axios.get('/api/settings/xray');
+    const response = await api.get('/settings/xray');
     
     if (response.data) {
       // 确保使用正确的属性名从API响应获取数据
@@ -1473,7 +1473,7 @@ const refreshXrayVersions = async () => {
     xraySettings.loading = true;
     
     // 获取版本列表
-    const response = await axios.get('/api/xray/versions');
+    const response = await api.get('/xray/versions');
     if (response && response.data) {
       // 确保数据有效
       if (Array.isArray(response.data.supported_versions) && response.data.supported_versions.length > 0) {
@@ -1523,7 +1523,7 @@ const refreshXrayVersions = async () => {
 // 刷新Xray运行状态
 const refreshXrayStatus = async () => {
   try {
-    const response = await axios.get('/api/xray/status');
+    const response = await api.get('/xray/status');
     if (response && response.data) {
       xraySettings.running = response.data.running || false;
       
@@ -1743,7 +1743,7 @@ const testCustomConfig = async () => {
   }
   
   try {
-    await axios.post('/api/xray/test-config', {
+    await api.post('/xray/test-config', {
       config_path: xraySettings.configPath
     })
     ElMessage.success('配置文件测试通过')
@@ -1767,7 +1767,7 @@ const saveXraySettings = async () => {
     console.log('保存设置请求数据:', requestData);
     
     // 发送正确的属性名与API匹配
-    const response = await axios.post('/api/settings/xray', requestData);
+    const response = await api.post('/settings/xray', requestData);
     
     console.log('保存设置响应数据:', response.data);
     
@@ -1795,7 +1795,7 @@ const saveXraySettings = async () => {
 // 加载协议设置
 const loadProtocolSettings = async () => {
   try {
-    const response = await axios.get('/api/settings/protocols')
+    const response = await api.get('/settings/protocols')
     if (response.data) {
       // 协议设置
       protocolSettings.enableTrojan = response.data.protocols?.trojan ?? true
@@ -1822,7 +1822,7 @@ const loadProtocolSettings = async () => {
 const saveProtocolSettings = async () => {
   protocolsLoading.value = true
   try {
-    await axios.post('/api/settings/protocols', {
+    await api.post('/settings/protocols', {
       protocols: {
         trojan: protocolSettings.enableTrojan,
         vmess: protocolSettings.enableVMess,
@@ -1881,7 +1881,7 @@ const toggleAutoUpdate = async (newValue) => {
     const originalValue = xraySettings.autoUpdate;
     
     // 发送请求
-    const response = await axios.post('/api/settings/xray', requestData);
+    const response = await api.post('/settings/xray', requestData);
     
     console.log('自动更新响应数据:', response.data);
     
@@ -1892,14 +1892,14 @@ const toggleAutoUpdate = async (newValue) => {
       setTimeout(async () => {
         try {
           // 进行多次验证确保设置生效
-          const verify1 = await axios.get('/api/settings/xray');
+          const verify1 = await api.get('/settings/xray');
           console.log('验证1结果:', verify1.data);
           
           // 再次刷新设置
           await refreshXraySettings();
           
           // 最终验证
-          const verify2 = await axios.get('/api/settings/xray');
+          const verify2 = await api.get('/settings/xray');
           console.log('验证2结果:', verify2.data);
           
           // 检查设置是否一致
@@ -1935,7 +1935,7 @@ const loadVersionDetails = async (version) => {
     xraySettings.loading = true
     
     // 在实际项目中应该从API获取版本详情
-    // const response = await axios.get(`/api/xray/version/${version}/details`)
+    // const response = await api.get(`/api/xray/version/${version}/details`)
     // 模拟API响应
     const mockResponse = {
       data: {
@@ -1983,7 +1983,7 @@ const checkXrayUpdates = async () => {
     ElMessage.info('正在检查Xray更新...');
     
     // 这里应该调用实际的API
-    // const response = await axios.get('/api/xray/check-updates');
+    // const response = await api.get('/api/xray/check-updates');
     
     // 模拟API响应
     await new Promise(resolve => setTimeout(resolve, 1500));
@@ -2050,7 +2050,7 @@ const downloadXrayVersion = async (version) => {
     }
     
     // 这里应该调用实际的API来安装版本
-    // await axios.post('/api/xray/version', { version });
+    // await api.post('/api/xray/version', { version });
     
     // 安装完成
     xraySettings.updateProgress.status = 'completed';
@@ -2263,7 +2263,7 @@ const handleSwitchVersion = async () => {
     
     try {
       // 发送版本切换请求
-      const response = await axios.post('/api/xray/switch-version', {
+      const response = await api.post('/xray/switch-version', {
         version: xraySettings.selectedVersion
       }, { 
         timeout: 300000, // 增加到5分钟(300000ms)，因为下载可能需要较长时间 

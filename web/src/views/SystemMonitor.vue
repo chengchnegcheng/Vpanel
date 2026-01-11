@@ -417,152 +417,61 @@ const refreshData = async () => {
   loading.value = true
   apiError.value = false
   
-  // 添加重试逻辑
-  let retryCount = 0;
-  const maxRetries = 3;
-  const retryDelay = 1000; // 1秒延迟
-  
-  const tryFetchData = async () => {
-    try {
-      // 使用原生fetch直接访问后端API，绕过任何可能的mock机制
-      console.log(`Fetching system status from backend... (attempt ${retryCount + 1}/${maxRetries + 1})`)
-      const response = await window.fetch('/api/system/status')
-      console.log('Raw response status:', response.status, response.statusText)
-      
-      if (response.ok) {
-        const result = await response.json()
-        console.log('API Response from backend (full):', JSON.stringify(result)) // 更详细的调试日志
-        
-        if (result && result.code === 200 && result.data) {
-          const data = result.data
-          
-          // 更新系统信息 - 添加更详细的日志
-          if (data.systemInfo) {
-            console.log('Updating system info with:', data.systemInfo)
-            systemInfo.value = data.systemInfo
-            
-            // 确保load数组正确处理
-            if (!systemInfo.value.load || systemInfo.value.load === null) {
-              console.log('Load array is null or undefined, setting to [0,0,0]')
-              systemInfo.value.load = [0, 0, 0]
-            }
-          } else {
-            console.warn('systemInfo missing in API response')
-          }
-          
-          // 更新CPU信息
-          if (data.cpuInfo) {
-            cpuInfo.value = data.cpuInfo
-            cpuUsage.value = data.cpuUsage || 0
-          }
-          
-          // 更新内存信息
-          if (data.memoryInfo) {
-            memoryInfo.value = data.memoryInfo
-            memoryUsage.value = data.memoryUsage || 0
-          }
-          
-          // 更新磁盘信息
-          if (data.diskInfo) {
-            diskInfo.value = data.diskInfo
-            diskUsage.value = data.diskUsage || 0
-          }
-          
-          // 更新进程列表
-          if (data.processes) {
-            processes.value = data.processes
-          }
-          
-          // 成功获取数据，清除错误状态
-          apiError.value = false;
-          return true;
-        } else {
-          console.error('Invalid API response format:', result)
-          throw new Error('API返回数据格式不正确')
-        }
-      } else {
-        console.error('API request failed with status:', response.status)
-        throw new Error('API请求失败: ' + response.statusText)
-      }
-    } catch (error) {
-      console.error(`获取系统状态失败 (尝试 ${retryCount + 1}/${maxRetries + 1}):`, error)
-      
-      if (retryCount < maxRetries) {
-        retryCount++;
-        console.log(`将在 ${retryDelay}ms 后重试...`)
-        await new Promise(resolve => setTimeout(resolve, retryDelay));
-        return tryFetchData();
-      }
-      
-      // 所有重试都失败，尝试使用axios
-      try {
-        console.log('Trying to fetch data using axios...')
-        const response = await systemApi.getSystemStatus()
-        console.log('Axios API Response:', response) // 添加调试日志
-        
-        if (response && response.code === 200 && response.data) {
-          const data = response.data
-          
-          // 更新系统信息
-          if (data.systemInfo) {
-            console.log('Updating system info from axios with:', data.systemInfo)
-            systemInfo.value = data.systemInfo
-            
-            // 确保load数组正确处理
-            if (!systemInfo.value.load || systemInfo.value.load === null) {
-              systemInfo.value.load = [0, 0, 0]
-            }
-          }
-          
-          // 更新CPU信息
-          if (data.cpuInfo) {
-            cpuInfo.value = data.cpuInfo
-            cpuUsage.value = data.cpuUsage || 0
-          }
-          
-          // 更新内存信息
-          if (data.memoryInfo) {
-            memoryInfo.value = data.memoryInfo
-            memoryUsage.value = data.memoryUsage || 0
-          }
-          
-          // 更新磁盘信息
-          if (data.diskInfo) {
-            diskInfo.value = data.diskInfo
-            diskUsage.value = data.diskUsage || 0
-          }
-          
-          // 更新进程列表
-          if (data.processes) {
-            processes.value = data.processes
-          }
-          
-          // 成功获取数据，清除错误状态
-          apiError.value = false;
-          return true;
-        } else {
-          console.error('Invalid API response format (axios):', response)
-          throw new Error('API返回数据格式不正确(axios)')
-        }
-      } catch (axiosError) {
-        console.error('获取系统状态失败 (axios):', axiosError)
-        ElMessage.error('获取系统状态失败，使用模拟数据')
-        // 设置错误状态
-        apiError.value = true
-        // 如果两种请求都失败，使用模拟数据
-        generateMockData()
-        return false;
-      }
-    }
-  };
-  
   try {
-    await tryFetchData();
+    console.log('Fetching system status from backend...')
+    const response = await systemApi.getSystemStatus()
+    console.log('API Response:', response)
     
-    // 更新图表
-    updateCharts()
+    if (response && response.code === 200 && response.data) {
+      const data = response.data
+      
+      // 更新系统信息
+      if (data.systemInfo) {
+        console.log('Updating system info with:', data.systemInfo)
+        systemInfo.value = data.systemInfo
+        
+        // 确保load数组正确处理
+        if (!systemInfo.value.load || systemInfo.value.load === null) {
+          systemInfo.value.load = [0, 0, 0]
+        }
+      }
+      
+      // 更新CPU信息
+      if (data.cpuInfo) {
+        cpuInfo.value = data.cpuInfo
+        cpuUsage.value = data.cpuUsage || 0
+      }
+      
+      // 更新内存信息
+      if (data.memoryInfo) {
+        memoryInfo.value = data.memoryInfo
+        memoryUsage.value = data.memoryUsage || 0
+      }
+      
+      // 更新磁盘信息
+      if (data.diskInfo) {
+        diskInfo.value = data.diskInfo
+        diskUsage.value = data.diskUsage || 0
+      }
+      
+      // 更新进程列表
+      if (data.processes) {
+        processes.value = data.processes
+      }
+      
+      apiError.value = false
+    } else {
+      throw new Error('API返回数据格式不正确')
+    }
+  } catch (error) {
+    console.error('获取系统状态失败:', error)
+    // 设置错误状态，使用模拟数据
+    apiError.value = true
+    generateMockData()
   } finally {
     loading.value = false
+    // 更新图表
+    updateCharts()
   }
 }
 
@@ -572,6 +481,9 @@ const handleResize = () => {
   diskChart?.resize()
 }
 
+// 定时器引用
+let timer = null
+
 onMounted(() => {
   // 初始化图表
   initCharts()
@@ -580,18 +492,20 @@ onMounted(() => {
   refreshData()
   
   // 开始定时更新
-  const timer = setInterval(refreshData, 30000) // 每30秒更新一次
+  timer = setInterval(refreshData, 30000) // 每30秒更新一次
   
   // 监听窗口大小变化
   window.addEventListener('resize', handleResize)
-  
-  // 清理函数
-  onUnmounted(() => {
+})
+
+onUnmounted(() => {
+  if (timer) {
     clearInterval(timer)
-    window.removeEventListener('resize', handleResize)
-    resourceChart?.dispose()
-    diskChart?.dispose()
-  })
+    timer = null
+  }
+  window.removeEventListener('resize', handleResize)
+  resourceChart?.dispose()
+  diskChart?.dispose()
 })
 </script>
 

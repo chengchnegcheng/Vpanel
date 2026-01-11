@@ -6,6 +6,9 @@ FROM node:20-alpine AS frontend-builder
 
 WORKDIR /app/web
 
+# Use China npm mirror for faster downloads
+RUN npm config set registry https://registry.npmmirror.com/
+
 # Copy frontend files
 COPY web/package*.json ./
 RUN npm ci --legacy-peer-deps
@@ -16,8 +19,11 @@ RUN npm run build
 # Stage 2: Build backend
 FROM golang:1.23-alpine AS backend-builder
 
-# Install build dependencies
-RUN apk add --no-cache git ca-certificates tzdata
+# Install build dependencies (including gcc for CGO)
+RUN apk add --no-cache git ca-certificates tzdata gcc musl-dev
+
+# Set Go proxy for faster downloads
+ENV GOPROXY=https://goproxy.cn,direct
 
 WORKDIR /app
 
@@ -85,6 +91,7 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
 # Set environment variables
 ENV V_SERVER_HOST=0.0.0.0 \
     V_SERVER_PORT=8080 \
+    V_SERVER_STATIC_PATH=/app/web/dist \
     V_DB_PATH=/app/data/v.db \
     V_LOG_LEVEL=info \
     V_LOG_FORMAT=json \

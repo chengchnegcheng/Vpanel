@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
-import axios from 'axios'
+import api from '@/api/index'
 
 export const useUserStore = defineStore('user', () => {
   // 状态
@@ -39,32 +39,27 @@ export const useUserStore = defineStore('user', () => {
     try {
       console.log('Login attempt:', credentials.username, '********')
       
-      // 使用完整URL直接访问后端API
-      const response = await axios.post('http://localhost:8080/api/auth/login', credentials, {
-        timeout: 15000, // 15秒超时
-        headers: {
-          'Content-Type': 'application/json',
-          'Accept': 'application/json'
-        }
-      })
+      // 使用配置好的 api 实例
+      const response = await api.post('/auth/login', credentials)
       
-      console.log('Login response:', response.data)
+      console.log('Login response:', response)
       
       // 检查响应中是否包含错误信息
-      if (response.data && response.data.error) {
-        console.error('Login error from server:', response.data.error)
-        error.value = response.data.error
-        throw new Error(response.data.error)
+      if (response && response.error) {
+        console.error('Login error from server:', response.error)
+        error.value = response.error
+        throw new Error(response.error)
       }
       
-      // 检查响应是否包含必要的数据
-      if (!response.data.token || !response.data.user) {
-        console.error('Invalid login response format:', response.data)
+      // 检查响应是否包含必要的数据（api 拦截器已经返回 response.data）
+      const data = response.data || response
+      if (!data.token || !data.user) {
+        console.error('Invalid login response format:', response)
         error.value = '服务器返回的数据格式不正确'
         throw new Error('服务器返回的数据格式不正确')
       }
       
-      const { token: newToken, user: userInfo } = response.data
+      const { token: newToken, user: userInfo } = data
       console.log('Login successful:', userInfo)
       
       setToken(newToken)
@@ -103,25 +98,22 @@ export const useUserStore = defineStore('user', () => {
     error.value = null
     
     try {
-      // 使用完整URL直接访问后端API
-      const response = await axios.get('http://localhost:8080/api/auth/user', {
-        headers: {
-          'Authorization': `Bearer ${token.value}`
-        }
-      })
-      console.log('Get user response:', response.data)
+      // 使用配置好的 api 实例（已包含认证 token）
+      const response = await api.get('/auth/me')
+      console.log('Get user response:', response)
       
-      if (response.data && response.data.error) {
-        error.value = response.data.error
-        throw new Error(response.data.error)
+      if (response && response.error) {
+        error.value = response.error
+        throw new Error(response.error)
       }
       
-      if (!response.data.user) {
+      const data = response.data || response
+      if (!data.user && !data.id) {
         error.value = '服务器返回的数据格式不正确'
         throw new Error('服务器返回的数据格式不正确')  
       }
       
-      setUser(response.data.user)
+      setUser(data.user || data)
       return user.value
     } catch (err) {
       console.error('Get user error:', err)
@@ -148,32 +140,28 @@ export const useUserStore = defineStore('user', () => {
     
     try {
       console.log('Fetching users with params:', params)
-      const response = await axios.get('http://localhost:8080/api/users', { 
-        params,
-        headers: {
-          'Authorization': `Bearer ${token.value}`
-        }
-      })
-      console.log('Users response:', response.data)
+      const response = await api.get('/users', { params })
+      console.log('Users response:', response)
       
       // 适配不同的响应格式
       let users = [];
       let total = 0;
       
-      if (Array.isArray(response.data)) {
+      const data = response.data || response
+      if (Array.isArray(data)) {
         // 如果响应直接是数组
-        users = response.data;
-        total = response.data.length;
-      } else if (response.data && response.data.users) {
+        users = data;
+        total = data.length;
+      } else if (data && data.users) {
         // 如果响应中有users字段
-        users = response.data.users;
-        total = response.data.total || users.length;
-      } else if (response.data && response.data.data && Array.isArray(response.data.data)) {
+        users = data.users;
+        total = data.total || users.length;
+      } else if (data && data.data && Array.isArray(data.data)) {
         // 如果响应中有data字段
-        users = response.data.data;
-        total = response.data.total || users.length;
+        users = data.data;
+        total = data.total || users.length;
       } else {
-        console.error('Unknown response format:', response.data);
+        console.error('Unknown response format:', response);
         users = [];
         total = 0;
       }

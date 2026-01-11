@@ -42,7 +42,7 @@ const routes = [
       {
         path: 'roles',
         name: 'Roles',
-        component: () => import('../views/RolesNew.vue'),
+        component: () => import('../views/Roles.vue'),
         meta: { requiresAuth: true }
       },
       {
@@ -60,7 +60,7 @@ const routes = [
       {
         path: 'stats',
         name: 'Stats',
-        component: () => import('../views/StatsNew.vue'),
+        component: () => import('../views/Stats.vue'),
         meta: { requiresAuth: true }
       },
       {

@@ -178,7 +178,7 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
-import axios from 'axios'
+import api from '@/api/index'
 
 // 系统状态数据
 const systemStats = ref({
@@ -275,7 +275,7 @@ const getProtocolColor = (protocol) => {
 const loadData = async () => {
   try {
     // 实际项目中，这里应该调用API获取数据
-    // const response = await axios.get('/api/dashboard')
+    // const response = await api.get('/api/dashboard')
     // systemStats.value = response.data.system
     // trafficStats.value = response.data.traffic
     // protocolStats.value = response.data.protocols

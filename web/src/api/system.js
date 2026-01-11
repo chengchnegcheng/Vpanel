@@ -1,21 +1,12 @@
-import axios from 'axios'
+import api from './index'
 
-// 配置axios拦截器，确保正确处理API响应
-axios.interceptors.response.use(
-  response => response.data,
-  error => {
-    console.error('API error:', error)
-    return Promise.reject(error)
-  }
-)
-
-const api = {
+const systemApi = {
   /**
    * 获取系统监控数据
    * @returns {Promise} 返回系统监控数据
    */
   getSystemStatus() {
-    return axios.get('/api/system/status')
+    return api.get('/system/status')
   },
 
   /**
@@ -23,7 +14,7 @@ const api = {
    * @returns {Promise} 返回系统信息
    */
   getSystemInfo() {
-    return axios.get('/api/system/info')
+    return api.get('/system/info')
   },
 
   /**
@@ -31,7 +22,7 @@ const api = {
    * @returns {Promise} 返回CPU使用情况
    */
   getCpuUsage() {
-    return axios.get('/api/system/cpu')
+    return api.get('/system/cpu')
   },
 
   /**
@@ -39,7 +30,7 @@ const api = {
    * @returns {Promise} 返回内存使用情况
    */
   getMemoryUsage() {
-    return axios.get('/api/system/memory')
+    return api.get('/system/memory')
   },
 
   /**
@@ -47,7 +38,7 @@ const api = {
    * @returns {Promise} 返回磁盘使用情况
    */
   getDiskUsage() {
-    return axios.get('/api/system/disk')
+    return api.get('/system/disk')
   },
 
   /**
@@ -55,8 +46,8 @@ const api = {
    * @returns {Promise} 返回进程列表
    */
   getProcessList() {
-    return axios.get('/api/system/processes')
+    return api.get('/system/processes')
   }
 }
 
-export default api 
+export default systemApi
