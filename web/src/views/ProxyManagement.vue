@@ -145,6 +145,7 @@ import { ref, reactive, computed, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import { Plus } from '@element-plus/icons-vue'
 import ProxyCard from '../components/ProxyCard.vue'
+import api from '@/api/index'
 
 // 代理列表
 const proxyList = ref([])
@@ -213,14 +214,8 @@ const fetchProxyList = async () => {
   error.value = ''
   
   try {
-    const response = await fetch('/api/proxies')
-    
-    if (!response.ok) {
-      throw new Error(`HTTP错误 ${response.status}`)
-    }
-    
-    const data = await response.json()
-    proxyList.value = data || []
+    const response = await api.get('/proxies')
+    proxyList.value = Array.isArray(response) ? response : (response.data || [])
   } catch (err) {
     console.error('获取代理列表失败:', err)
     error.value = '获取代理列表失败'
@@ -263,25 +258,13 @@ const submitProxyForm = async () => {
     submitting.value = true
     
     try {
-      const url = isEditing.value 
-        ? `/api/proxy/${currentEditId.value}`
-        : '/api/proxy'
-      
-      const method = isEditing.value ? 'PUT' : 'POST'
-      
       // 根据协议准备不同的数据
       const requestData = { ...proxyForm }
       
-      const response = await fetch(url, {
-        method,
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(requestData)
-      })
-      
-      if (!response.ok) {
-        throw new Error(`HTTP错误 ${response.status}`)
+      if (isEditing.value) {
+        await api.put(`/proxies/${currentEditId.value}`, requestData)
+      } else {
+        await api.post('/proxies', requestData)
       }
       
       // 刷新代理列表
@@ -324,13 +307,7 @@ const handleEditProxy = (id) => {
 // 处理删除代理
 const handleDeleteProxy = async (id) => {
   try {
-    const response = await fetch(`/api/proxy/${id}`, {
-      method: 'DELETE'
-    })
-    
-    if (!response.ok) {
-      throw new Error(`HTTP错误 ${response.status}`)
-    }
+    await api.delete(`/proxies/${id}`)
     
     // 刷新代理列表
     fetchProxyList()

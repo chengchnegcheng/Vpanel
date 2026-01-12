@@ -142,6 +142,7 @@
 <script>
 import { ref, reactive, computed, onMounted, onBeforeUnmount } from 'vue'
 import { ElMessage } from 'element-plus'
+import api from '@/api/index'
 
 export default {
   name: 'Monitor',
@@ -250,11 +251,8 @@ export default {
     // 方法
     const fetchStats = async () => {
       try {
-        const response = await fetch('/api/monitor/stats')
-        if (!response.ok) {
-          throw new Error('获取系统状态失败')
-        }
-        const data = await response.json()
+        const response = await api.get('/monitor/stats')
+        const data = response.data || response
         
         // 更新统计数据
         if (data.cpu !== undefined) stats.cpu = data.cpu
@@ -281,8 +279,7 @@ export default {
         // 更新当前时间
         currentTime.value = new Date().toLocaleString()
       } catch (error) {
-        ElMessage.error('获取系统状态失败')
-        console.error(error)
+        console.error('获取系统状态失败:', error)
       }
     }
 

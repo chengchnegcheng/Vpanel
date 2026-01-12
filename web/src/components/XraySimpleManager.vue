@@ -43,6 +43,7 @@
 <script>
 import { defineComponent, ref, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
+import api from '@/api/index'
 
 export default defineComponent({
   name: 'XraySimpleManager',
@@ -69,18 +70,13 @@ export default defineComponent({
     // 获取版本列表
     const fetchVersions = async () => {
       try {
-        const response = await fetch('/api/xray/versions')
-        if (!response.ok) {
-          throw new Error('获取版本列表失败')
-        }
-        const data = await response.json()
+        const data = await api.get('/xray/versions')
         versions.value = data.versions || []
         if (data.currentVersion) {
           currentVersion.value = data.currentVersion
         }
       } catch (error) {
         console.error('获取版本列表失败:', error)
-        ElMessage.error('获取版本列表失败')
       }
     }
 
@@ -92,21 +88,11 @@ export default defineComponent({
 
       switching.value = true
       try {
-        const response = await fetch('/api/xray/switch-version', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ version: selectedVersion.value })
-        })
-        
-        if (!response.ok) {
-          throw new Error('版本切换失败')
-        }
-        
+        await api.post('/xray/switch-version', { version: selectedVersion.value })
         currentVersion.value = selectedVersion.value
         ElMessage.success(`已切换到 ${selectedVersion.value}`)
       } catch (error) {
         console.error('版本切换失败:', error)
-        ElMessage.error('版本切换失败')
       } finally {
         switching.value = false
       }
@@ -116,19 +102,33 @@ export default defineComponent({
     const restartService = async () => {
       restarting.value = true
       try {
-        const response = await fetch('/api/xray/restart', { method: 'POST' })
-        
-        if (!response.ok) {
-          throw new Error('重启服务失败')
-        }
-        
+        await api.post('/xray/restart')
         ElMessage.success('服务已重启')
       } catch (error) {
         console.error('重启服务失败:', error)
-        ElMessage.error('重启服务失败')
       } finally {
         restarting.value = false
       }
+    }
+
+    // 更新设置
+    const updateSettings = async () => {
+      try {
+        await api.put('/xray/settings', { autoUpdate: autoUpdate.value })
+        ElMessage.success(`自动更新已${autoUpdate.value ? '启用' : '禁用'}`)
+      } catch (error) {
+        console.error('更新设置失败:', error)
+      }
+    }
+
+    return {
+      currentVersion,
+      selectedVersion,
+      versions,
+      autoUpdate,
+      switching,
+      restarting,
+      swit
     }
 
     // 更新设置

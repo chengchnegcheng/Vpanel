@@ -83,6 +83,35 @@ func (e *ValidationError) Error() string {
 	return fmt.Sprintf("config validation error: %s - %s", e.Field, e.Message)
 }
 
+// ValidationErrors represents multiple configuration validation errors.
+type ValidationErrors struct {
+	Errors []ValidationError
+}
+
+func (e *ValidationErrors) Error() string {
+	if len(e.Errors) == 0 {
+		return "no validation errors"
+	}
+	var msgs []string
+	for _, err := range e.Errors {
+		msgs = append(msgs, err.Error())
+	}
+	return strings.Join(msgs, "; ")
+}
+
+// Add adds a validation error.
+func (e *ValidationErrors) Add(field, message string) {
+	e.Errors = append(e.Errors, ValidationError{Field: field, Message: message})
+}
+
+// HasErrors returns true if there are validation errors.
+func (e *ValidationErrors) HasErrors() bool {
+	return len(e.Errors) > 0
+}
+
+// MinJWTSecretLength is the minimum required length for JWT secrets.
+const MinJWTSecretLength = 32
+
 // Loader handles configuration loading from various sources.
 type Loader struct {
 	configPath string
@@ -137,39 +166,231 @@ func (l *Loader) loadFromFile(cfg *Config) error {
 
 // Validate validates the configuration and returns any errors.
 func (cfg *Config) Validate() error {
+	errs := &ValidationErrors{}
+
 	// Validate server config
-	if cfg.Server.Port < 1 || cfg.Server.Port > 65535 {
-		return &ValidationError{Field: "server.port", Message: "must be between 1 and 65535"}
-	}
+	cfg.validateServer(errs)
 
 	// Validate database config
-	if cfg.Database.Path == "" {
-		return &ValidationError{Field: "database.path", Message: "must not be empty"}
+	cfg.validateDatabase(errs)
+
+	// Validate auth config
+	cfg.validateAuth(errs)
+
+	// Validate xray config
+	cfg.validateXray(errs)
+
+	// Validate log config
+	cfg.validateLog(errs)
+
+	if errs.HasErrors() {
+		return errs
 	}
 
-	// Validate auth config - JWT secret is required in production
+	return nil
+}
+
+// validateServer validates server configuration.
+func (cfg *Config) validateServer(errs *ValidationErrors) {
+	if cfg.Server.Port < 1 || cfg.Server.Port > 65535 {
+		errs.Add("server.port", "must be between 1 and 65535")
+	}
+
+	validModes := map[string]bool{"debug": true, "release": true, "test": true}
+	if !validModes[strings.ToLower(cfg.Server.Mode)] {
+		errs.Add("server.mode", "must be one of: debug, release, test")
+	}
+
+	if cfg.Server.ReadTimeout < 0 {
+		errs.Add("server.read_timeout", "must be non-negative")
+	}
+
+	if cfg.Server.WriteTimeout < 0 {
+		errs.Add("server.write_timeout", "must be non-negative")
+	}
+
+	// Validate TLS configuration
+	if (cfg.Server.TLSCert != "" && cfg.Server.TLSKey == "") ||
+		(cfg.Server.TLSCert == "" && cfg.Server.TLSKey != "") {
+		errs.Add("server.tls", "both tls_cert and tls_key must be provided together")
+	}
+}
+
+// validateDatabase validates database configuration.
+func (cfg *Config) validateDatabase(errs *ValidationErrors) {
+	if cfg.Database.Path == "" && cfg.Database.DSN == "" {
+		errs.Add("database.path", "database path or DSN must not be empty")
+	}
+
+	validDrivers := map[string]bool{"sqlite": true, "postgres": true, "mysql": true}
+	if !validDrivers[strings.ToLower(cfg.Database.Driver)] {
+		errs.Add("database.driver", "must be one of: sqlite, postgres, mysql")
+	}
+
+	// Validate DSN format based on driver
+	if cfg.Database.DSN != "" {
+		if err := cfg.validateDSN(); err != nil {
+			errs.Add("database.dsn", err.Error())
+		}
+	}
+
+	if cfg.Database.MaxOpenConns < 1 {
+		errs.Add("database.max_open_conns", "must be at least 1")
+	}
+
+	if cfg.Database.MaxIdleConns < 0 {
+		errs.Add("database.max_idle_conns", "must be non-negative")
+	}
+
+	if cfg.Database.MaxIdleConns > cfg.Database.MaxOpenConns {
+		errs.Add("database.max_idle_conns", "must not exceed max_open_conns")
+	}
+}
+
+// validateDSN validates the database connection string format.
+func (cfg *Config) validateDSN() error {
+	dsn := cfg.Database.DSN
+	driver := strings.ToLower(cfg.Database.Driver)
+
+	switch driver {
+	case "sqlite":
+		// SQLite DSN is just a file path
+		if dsn == "" {
+			return fmt.Errorf("SQLite DSN (file path) must not be empty")
+		}
+	case "postgres":
+		// PostgreSQL DSN format: postgres://user:password@host:port/dbname?sslmode=disable
+		// or: host=localhost port=5432 user=postgres password=secret dbname=mydb
+		if !strings.HasPrefix(dsn, "postgres://") && !strings.HasPrefix(dsn, "postgresql://") {
+			if !strings.Contains(dsn, "host=") && !strings.Contains(dsn, "dbname=") {
+				return fmt.Errorf("invalid PostgreSQL DSN format")
+			}
+		}
+	case "mysql":
+		// MySQL DSN format: user:password@tcp(host:port)/dbname?charset=utf8mb4
+		if !strings.Contains(dsn, "@") || !strings.Contains(dsn, "/") {
+			return fmt.Errorf("invalid MySQL DSN format, expected: user:password@tcp(host:port)/dbname")
+		}
+	}
+
+	return nil
+}
+
+// validateAuth validates authentication configuration.
+func (cfg *Config) validateAuth(errs *ValidationErrors) {
+	// JWT secret validation - must be at least 32 characters in production
 	if cfg.Auth.JWTSecret == "" {
 		// Generate a warning but don't fail - use a default for development
 		cfg.Auth.JWTSecret = "development-secret-change-in-production"
+	} else if len(cfg.Auth.JWTSecret) < MinJWTSecretLength {
+		errs.Add("auth.jwt_secret", fmt.Sprintf("must be at least %d characters for security", MinJWTSecretLength))
 	}
 
 	if cfg.Auth.AdminUsername == "" {
-		return &ValidationError{Field: "auth.admin_username", Message: "must not be empty"}
+		errs.Add("auth.admin_username", "must not be empty")
 	}
 
 	if cfg.Auth.AdminPassword == "" {
-		return &ValidationError{Field: "auth.admin_password", Message: "must not be empty"}
+		errs.Add("auth.admin_password", "must not be empty")
 	}
 
-	// Validate log config
+	// Validate password strength for admin
+	if len(cfg.Auth.AdminPassword) < 8 {
+		errs.Add("auth.admin_password", "must be at least 8 characters")
+	}
+
+	if cfg.Auth.TokenExpiry <= 0 {
+		errs.Add("auth.token_expiry", "must be positive")
+	}
+
+	if cfg.Auth.RefreshTokenExpiry <= 0 {
+		errs.Add("auth.refresh_token_expiry", "must be positive")
+	}
+
+	if cfg.Auth.RefreshTokenExpiry < cfg.Auth.TokenExpiry {
+		errs.Add("auth.refresh_token_expiry", "must be greater than or equal to token_expiry")
+	}
+}
+
+// validateXray validates Xray configuration.
+func (cfg *Config) validateXray(errs *ValidationErrors) {
+	if cfg.Xray.BinPath == "" {
+		errs.Add("xray.bin_path", "must not be empty")
+	}
+
+	if cfg.Xray.ConfigPath == "" {
+		errs.Add("xray.config_path", "must not be empty")
+	}
+}
+
+// validateLog validates logging configuration.
+func (cfg *Config) validateLog(errs *ValidationErrors) {
 	validLevels := map[string]bool{"debug": true, "info": true, "warn": true, "error": true, "fatal": true}
 	if !validLevels[strings.ToLower(cfg.Log.Level)] {
-		return &ValidationError{Field: "log.level", Message: "must be one of: debug, info, warn, error, fatal"}
+		errs.Add("log.level", "must be one of: debug, info, warn, error, fatal")
 	}
 
 	validFormats := map[string]bool{"json": true, "text": true}
 	if !validFormats[strings.ToLower(cfg.Log.Format)] {
-		return &ValidationError{Field: "log.format", Message: "must be one of: json, text"}
+		errs.Add("log.format", "must be one of: json, text")
+	}
+
+	validOutputs := map[string]bool{"stdout": true, "stderr": true, "file": true}
+	if cfg.Log.Output != "" && !validOutputs[strings.ToLower(cfg.Log.Output)] {
+		// Allow file paths
+		if !strings.HasPrefix(cfg.Log.Output, "/") && !strings.HasPrefix(cfg.Log.Output, "./") {
+			errs.Add("log.output", "must be one of: stdout, stderr, or a file path")
+		}
+	}
+}
+
+// ValidateJWTSecret validates a JWT secret string.
+func ValidateJWTSecret(secret string) error {
+	if secret == "" {
+		return &ValidationError{Field: "jwt_secret", Message: "must not be empty"}
+	}
+	if len(secret) < MinJWTSecretLength {
+		return &ValidationError{
+			Field:   "jwt_secret",
+			Message: fmt.Sprintf("must be at least %d characters for security", MinJWTSecretLength),
+		}
+	}
+	return nil
+}
+
+// IsProductionMode returns true if the server is in production mode.
+func (cfg *Config) IsProductionMode() bool {
+	return strings.ToLower(cfg.Server.Mode) == "release"
+}
+
+// ValidateForProduction performs stricter validation for production environments.
+func (cfg *Config) ValidateForProduction() error {
+	errs := &ValidationErrors{}
+
+	// Basic validation first
+	if err := cfg.Validate(); err != nil {
+		if ve, ok := err.(*ValidationErrors); ok {
+			errs.Errors = append(errs.Errors, ve.Errors...)
+		} else {
+			return err
+		}
+	}
+
+	// Production-specific validations
+	if cfg.Auth.JWTSecret == "development-secret-change-in-production" {
+		errs.Add("auth.jwt_secret", "must be set to a secure value in production")
+	}
+
+	if cfg.Auth.AdminPassword == "admin123" {
+		errs.Add("auth.admin_password", "must be changed from default in production")
+	}
+
+	if cfg.Server.Mode != "release" {
+		errs.Add("server.mode", "should be 'release' in production")
+	}
+
+	if errs.HasErrors() {
+		return errs
 	}
 
 	return nil

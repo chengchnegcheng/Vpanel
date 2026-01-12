@@ -279,3 +279,231 @@ func TestErrorLoggingWithRequestContext_LogLevelBasedOnStatus(t *testing.T) {
 
 	properties.TestingRun(t)
 }
+
+
+// Property 28: Correlation ID Propagation
+// For any API request, a unique correlation ID SHALL be generated and included
+// in all log entries and error responses related to that request.
+// **Validates: Requirements 10.3**
+
+func TestCorrelationIDPropagation(t *testing.T) {
+	properties := gopter.NewProperties(gopter.DefaultTestParameters())
+
+	properties.Property("correlation ID is generated when not provided", prop.ForAll(
+		func(path string) bool {
+			if path == "" || !strings.HasPrefix(path, "/") {
+				return true
+			}
+
+			router := gin.New()
+			router.Use(RequestIDMiddleware())
+
+			var capturedRequestID, capturedCorrelationID string
+			router.GET(path, func(c *gin.Context) {
+				capturedRequestID = GetRequestID(c)
+				capturedCorrelationID = GetCorrelationID(c)
+				c.JSON(http.StatusOK, gin.H{"ok": true})
+			})
+
+			req := httptest.NewRequest("GET", path, nil)
+			w := httptest.NewRecorder()
+			router.ServeHTTP(w, req)
+
+			// Request ID should be generated
+			if capturedRequestID == "" {
+				t.Log("Request ID was not generated")
+				return false
+			}
+
+			// Correlation ID should equal request ID when not provided
+			if capturedCorrelationID != capturedRequestID {
+				t.Logf("Correlation ID (%s) should equal Request ID (%s) when not provided",
+					capturedCorrelationID, capturedRequestID)
+				return false
+			}
+
+			// Response headers should contain both IDs
+			if w.Header().Get(RequestIDHeader) != capturedRequestID {
+				t.Log("Request ID not in response header")
+				return false
+			}
+			if w.Header().Get(CorrelationIDHeader) != capturedCorrelationID {
+				t.Log("Correlation ID not in response header")
+				return false
+			}
+
+			return true
+		},
+		gen.OneConstOf("/api/test", "/api/users", "/api/proxies", "/health"),
+	))
+
+	properties.TestingRun(t)
+}
+
+func TestCorrelationIDPropagation_CustomIDs(t *testing.T) {
+	properties := gopter.NewProperties(gopter.DefaultTestParameters())
+
+	properties.Property("custom request and correlation IDs are preserved", prop.ForAll(
+		func(requestID, correlationID string) bool {
+			router := gin.New()
+			router.Use(RequestIDMiddleware())
+
+			var capturedRequestID, capturedCorrelationID string
+			router.GET("/test", func(c *gin.Context) {
+				capturedRequestID = GetRequestID(c)
+				capturedCorrelationID = GetCorrelationID(c)
+				c.JSON(http.StatusOK, gin.H{"ok": true})
+			})
+
+			req := httptest.NewRequest("GET", "/test", nil)
+			req.Header.Set(RequestIDHeader, requestID)
+			req.Header.Set(CorrelationIDHeader, correlationID)
+			w := httptest.NewRecorder()
+			router.ServeHTTP(w, req)
+
+			// Custom request ID should be preserved
+			if capturedRequestID != requestID {
+				t.Logf("Request ID not preserved: expected %s, got %s", requestID, capturedRequestID)
+				return false
+			}
+
+			// Custom correlation ID should be preserved
+			if capturedCorrelationID != correlationID {
+				t.Logf("Correlation ID not preserved: expected %s, got %s", correlationID, capturedCorrelationID)
+				return false
+			}
+
+			// Response headers should contain the custom IDs
+			if w.Header().Get(RequestIDHeader) != requestID {
+				t.Log("Custom Request ID not in response header")
+				return false
+			}
+			if w.Header().Get(CorrelationIDHeader) != correlationID {
+				t.Log("Custom Correlation ID not in response header")
+				return false
+			}
+
+			return true
+		},
+		gen.Identifier(),
+		gen.Identifier(),
+	))
+
+	properties.TestingRun(t)
+}
+
+func TestCorrelationIDPropagation_InContext(t *testing.T) {
+	properties := gopter.NewProperties(gopter.DefaultTestParameters())
+
+	properties.Property("correlation ID is available in request context", prop.ForAll(
+		func(correlationID string) bool {
+			if correlationID == "" {
+				return true
+			}
+
+			router := gin.New()
+			router.Use(RequestIDMiddleware())
+
+			var contextRequestID, contextCorrelationID string
+			router.GET("/test", func(c *gin.Context) {
+				// Get from standard context
+				contextRequestID = GetRequestIDFromContext(c.Request.Context())
+				contextCorrelationID = GetCorrelationIDFromContext(c.Request.Context())
+				c.JSON(http.StatusOK, gin.H{"ok": true})
+			})
+
+			req := httptest.NewRequest("GET", "/test", nil)
+			req.Header.Set(CorrelationIDHeader, correlationID)
+			w := httptest.NewRecorder()
+			router.ServeHTTP(w, req)
+
+			// Request ID should be in context
+			if contextRequestID == "" {
+				t.Log("Request ID not in context")
+				return false
+			}
+
+			// Correlation ID should be in context
+			if contextCorrelationID != correlationID {
+				t.Logf("Correlation ID not in context: expected %s, got %s", correlationID, contextCorrelationID)
+				return false
+			}
+
+			return true
+		},
+		gen.AlphaString().SuchThat(func(s string) bool { return len(s) > 0 && len(s) < 50 }),
+	))
+
+	properties.TestingRun(t)
+}
+
+func TestRequestContextExtraction(t *testing.T) {
+	properties := gopter.NewProperties(gopter.DefaultTestParameters())
+
+	properties.Property("request context contains all expected fields", prop.ForAll(
+		func(requestID, userAgent string) bool {
+			if requestID == "" || userAgent == "" {
+				return true
+			}
+
+			router := gin.New()
+			router.Use(RequestIDMiddleware())
+
+			var rc *RequestContext
+			router.GET("/test", func(c *gin.Context) {
+				rc = GetRequestContext(c)
+				c.JSON(http.StatusOK, gin.H{"ok": true})
+			})
+
+			req := httptest.NewRequest("GET", "/test", nil)
+			req.Header.Set(RequestIDHeader, requestID)
+			req.Header.Set("User-Agent", userAgent)
+			w := httptest.NewRecorder()
+			router.ServeHTTP(w, req)
+
+			if rc == nil {
+				t.Log("RequestContext is nil")
+				return false
+			}
+
+			// Check all fields
+			if rc.RequestID != requestID {
+				t.Logf("RequestID mismatch: expected %s, got %s", requestID, rc.RequestID)
+				return false
+			}
+			if rc.CorrelationID != requestID { // Should equal request ID when not provided separately
+				t.Logf("CorrelationID mismatch: expected %s, got %s", requestID, rc.CorrelationID)
+				return false
+			}
+			if rc.UserAgent != userAgent {
+				t.Logf("UserAgent mismatch: expected %s, got %s", userAgent, rc.UserAgent)
+				return false
+			}
+			if rc.Path != "/test" {
+				t.Logf("Path mismatch: expected /test, got %s", rc.Path)
+				return false
+			}
+			if rc.Method != "GET" {
+				t.Logf("Method mismatch: expected GET, got %s", rc.Method)
+				return false
+			}
+
+			// Check ToMap conversion
+			m := rc.ToMap()
+			if m["request_id"] != requestID {
+				t.Log("ToMap request_id mismatch")
+				return false
+			}
+			if m["correlation_id"] != requestID {
+				t.Log("ToMap correlation_id mismatch")
+				return false
+			}
+
+			return true
+		},
+		gen.AlphaString().SuchThat(func(s string) bool { return len(s) > 0 && len(s) < 50 }),
+		gen.AlphaString().SuchThat(func(s string) bool { return len(s) > 0 && len(s) < 100 }),
+	))
+
+	properties.TestingRun(t)
+}

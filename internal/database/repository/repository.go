@@ -10,14 +10,39 @@ import (
 
 // User represents a user in the database.
 type User struct {
-	ID           int64     `gorm:"primaryKey;autoIncrement"`
-	Username     string    `gorm:"uniqueIndex;size:50;not null"`
-	PasswordHash string    `gorm:"column:password;size:255;not null"`
-	Email        string    `gorm:"size:100"`
-	Role         string    `gorm:"size:20;default:user"`
-	Enabled      bool      `gorm:"default:true"`
-	CreatedAt    time.Time `gorm:"autoCreateTime"`
-	UpdatedAt    time.Time `gorm:"autoUpdateTime"`
+	ID                  int64      `gorm:"primaryKey;autoIncrement"`
+	Username            string     `gorm:"uniqueIndex;size:50;not null"`
+	PasswordHash        string     `gorm:"column:password;size:255;not null"`
+	Email               string     `gorm:"size:100;index"`
+	Role                string     `gorm:"size:20;default:user;index"`
+	Enabled             bool       `gorm:"default:true;index"`
+	TrafficLimit        int64      `gorm:"default:0"`
+	TrafficUsed         int64      `gorm:"default:0"`
+	ExpiresAt           *time.Time `gorm:"index"`
+	ForcePasswordChange bool       `gorm:"default:false"`
+	CreatedAt           time.Time  `gorm:"autoCreateTime"`
+	UpdatedAt           time.Time  `gorm:"autoUpdateTime"`
+}
+
+// IsExpired checks if the user account has expired.
+func (u *User) IsExpired() bool {
+	if u.ExpiresAt == nil {
+		return false
+	}
+	return time.Now().After(*u.ExpiresAt)
+}
+
+// IsTrafficExceeded checks if the user has exceeded their traffic limit.
+func (u *User) IsTrafficExceeded() bool {
+	if u.TrafficLimit <= 0 {
+		return false // No limit
+	}
+	return u.TrafficUsed >= u.TrafficLimit
+}
+
+// CanAccess checks if the user can access the system.
+func (u *User) CanAccess() bool {
+	return u.Enabled && !u.IsExpired() && !u.IsTrafficExceeded()
 }
 
 // TableName returns the table name for User.
@@ -60,6 +85,21 @@ func (Traffic) TableName() string {
 	return "traffic"
 }
 
+// LoginHistory represents a login attempt record in the database.
+type LoginHistory struct {
+	ID        int64     `gorm:"primaryKey;autoIncrement"`
+	UserID    int64     `gorm:"index;not null"`
+	IP        string    `gorm:"size:50"`
+	UserAgent string    `gorm:"size:255"`
+	Success   bool      `gorm:"default:false"`
+	CreatedAt time.Time `gorm:"autoCreateTime;index"`
+}
+
+// TableName returns the table name for LoginHistory.
+func (LoginHistory) TableName() string {
+	return "login_history"
+}
+
 // UserRepository defines the interface for user data access.
 type UserRepository interface {
 	Create(ctx context.Context, user *User) error
@@ -90,18 +130,32 @@ type TrafficRepository interface {
 	GetTotalByUser(ctx context.Context, userID int64) (upload, download int64, err error)
 }
 
+// LoginHistoryRepository defines the interface for login history data access.
+type LoginHistoryRepository interface {
+	Create(ctx context.Context, history *LoginHistory) error
+	GetByUserID(ctx context.Context, userID int64, limit, offset int) ([]*LoginHistory, error)
+	DeleteByUserID(ctx context.Context, userID int64) error
+	Count(ctx context.Context, userID int64) (int64, error)
+}
+
 // Repositories holds all repository instances.
 type Repositories struct {
-	User    UserRepository
-	Proxy   ProxyRepository
-	Traffic TrafficRepository
+	User         UserRepository
+	Proxy        ProxyRepository
+	Traffic      TrafficRepository
+	LoginHistory LoginHistoryRepository
+	Role         RoleRepository
+	Settings     SettingsRepository
 }
 
 // NewRepositories creates all repository instances.
 func NewRepositories(db *gorm.DB) *Repositories {
 	return &Repositories{
-		User:    NewUserRepository(db),
-		Proxy:   NewProxyRepository(db),
-		Traffic: NewTrafficRepository(db),
+		User:         NewUserRepository(db),
+		Proxy:        NewProxyRepository(db),
+		Traffic:      NewTrafficRepository(db),
+		LoginHistory: NewLoginHistoryRepository(db),
+		Role:         NewRoleRepository(db),
+		Settings:     NewSettingsRepository(db),
 	}
 }

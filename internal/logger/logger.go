@@ -337,3 +337,20 @@ func Error(msg string, fields ...Field) {
 func Fatal(msg string, fields ...Field) {
 	globalLogger.Fatal(msg, fields...)
 }
+
+// nopLogger is a no-operation logger for testing.
+type nopLogger struct{}
+
+// NewNopLogger creates a new no-operation logger.
+func NewNopLogger() Logger {
+	return &nopLogger{}
+}
+
+func (l *nopLogger) Debug(msg string, fields ...Field) {}
+func (l *nopLogger) Info(msg string, fields ...Field)  {}
+func (l *nopLogger) Warn(msg string, fields ...Field)  {}
+func (l *nopLogger) Error(msg string, fields ...Field) {}
+func (l *nopLogger) Fatal(msg string, fields ...Field) {}
+func (l *nopLogger) With(fields ...Field) Logger       { return l }
+func (l *nopLogger) SetLevel(level Level)              {}
+func (l *nopLogger) GetLevel() Level                   { return InfoLevel }

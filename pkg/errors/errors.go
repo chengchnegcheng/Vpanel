@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"time"
 )
 
 // ErrorCode represents an error code type.
@@ -22,18 +23,43 @@ const (
 	ErrCodeConfig       ErrorCode = "CONFIG_ERROR"
 	ErrCodeConflict     ErrorCode = "CONFLICT"
 	ErrCodeBadRequest   ErrorCode = "BAD_REQUEST"
+	ErrCodeRateLimit    ErrorCode = "RATE_LIMIT_EXCEEDED"
+	ErrCodeCacheError   ErrorCode = "CACHE_ERROR"
+	ErrCodeXrayError    ErrorCode = "XRAY_ERROR"
 )
 
 // AppError represents an application error with code, message, and context.
 type AppError struct {
-	Code      ErrorCode      `json:"code"`
+	Code       ErrorCode      `json:"code"`
+	Message    string         `json:"message"`
+	Details    any            `json:"details,omitempty"`
+	Context    map[string]any `json:"context,omitempty"`
+	Cause      error          `json:"-"`
+	Operation  string         `json:"-"` // The operation that failed
+	Entity     string         `json:"-"` // The entity involved (e.g., "user", "proxy")
+	EntityID   any            `json:"-"` // The entity ID if applicable
+	HTTPCode   int            `json:"-"` // Custom HTTP status code override
+}
+
+// ErrorResponse represents the standardized API error response format.
+// This is the structure returned to API clients.
+type ErrorResponse struct {
+	Code      string         `json:"code"`
 	Message   string         `json:"message"`
 	Details   any            `json:"details,omitempty"`
-	Context   map[string]any `json:"context,omitempty"`
-	Cause     error          `json:"-"`
-	Operation string         `json:"-"` // The operation that failed
-	Entity    string         `json:"-"` // The entity involved (e.g., "user", "proxy")
-	EntityID  any            `json:"-"` // The entity ID if applicable
+	RequestID string         `json:"request_id,omitempty"`
+	Timestamp string         `json:"timestamp"`
+}
+
+// FieldError represents a validation error for a specific field.
+type FieldError struct {
+	Field   string `json:"field"`
+	Message string `json:"message"`
+}
+
+// ValidationErrors holds multiple field validation errors.
+type ValidationErrors struct {
+	Fields map[string]string `json:"fields"`
 }
 
 // Error implements the error interface.
@@ -71,6 +97,10 @@ func (e *AppError) Is(target error) bool {
 
 // HTTPStatus returns the appropriate HTTP status code for the error.
 func (e *AppError) HTTPStatus() int {
+	// Allow custom HTTP status code override
+	if e.HTTPCode != 0 {
+		return e.HTTPCode
+	}
 	switch e.Code {
 	case ErrCodeValidation, ErrCodeBadRequest:
 		return http.StatusBadRequest
@@ -82,11 +112,30 @@ func (e *AppError) HTTPStatus() int {
 		return http.StatusForbidden
 	case ErrCodeConflict:
 		return http.StatusConflict
-	case ErrCodeDatabase, ErrCodeInternal, ErrCodeConfig:
+	case ErrCodeRateLimit:
+		return http.StatusTooManyRequests
+	case ErrCodeDatabase, ErrCodeInternal, ErrCodeConfig, ErrCodeCacheError, ErrCodeXrayError:
 		return http.StatusInternalServerError
 	default:
 		return http.StatusInternalServerError
 	}
+}
+
+// ToResponse converts AppError to ErrorResponse for API responses.
+func (e *AppError) ToResponse(requestID string) *ErrorResponse {
+	return &ErrorResponse{
+		Code:      string(e.Code),
+		Message:   e.Message,
+		Details:   e.Details,
+		RequestID: requestID,
+		Timestamp: time.Now().UTC().Format(time.RFC3339),
+	}
+}
+
+// WithHTTPStatus sets a custom HTTP status code.
+func (e *AppError) WithHTTPStatus(status int) *AppError {
+	e.HTTPCode = status
+	return e
 }
 
 // WithContext adds context to the error.
@@ -209,10 +258,15 @@ func NewConfigError(message string, cause error) *AppError {
 }
 
 // NewConflictError creates a conflict error.
-func NewConflictError(message string) *AppError {
+func NewConflictError(entity, field string, value any) *AppError {
 	return &AppError{
 		Code:    ErrCodeConflict,
-		Message: message,
+		Message: fmt.Sprintf("%s with %s '%v' already exists", entity, field, value),
+		Entity:  entity,
+		Details: map[string]any{
+			"field": field,
+			"value": value,
+		},
 	}
 }
 
@@ -221,6 +275,43 @@ func NewBadRequestError(message string) *AppError {
 	return &AppError{
 		Code:    ErrCodeBadRequest,
 		Message: message,
+	}
+}
+
+// NewRateLimitError creates a rate limit exceeded error.
+func NewRateLimitError(message string) *AppError {
+	return &AppError{
+		Code:    ErrCodeRateLimit,
+		Message: message,
+	}
+}
+
+// NewCacheError creates a cache error.
+func NewCacheError(operation string, cause error) *AppError {
+	return &AppError{
+		Code:      ErrCodeCacheError,
+		Message:   fmt.Sprintf("cache operation failed: %s", operation),
+		Operation: operation,
+		Cause:     cause,
+	}
+}
+
+// NewXrayError creates an Xray error.
+func NewXrayError(operation string, cause error) *AppError {
+	return &AppError{
+		Code:      ErrCodeXrayError,
+		Message:   fmt.Sprintf("xray operation failed: %s", operation),
+		Operation: operation,
+		Cause:     cause,
+	}
+}
+
+// NewValidationErrorWithFields creates a validation error with field-specific messages.
+func NewValidationErrorWithFields(message string, fields map[string]string) *AppError {
+	return &AppError{
+		Code:    ErrCodeValidation,
+		Message: message,
+		Details: &ValidationErrors{Fields: fields},
 	}
 }
 
@@ -265,4 +356,52 @@ func IsUnauthorized(err error) bool {
 // IsDatabase checks if the error is a database error.
 func IsDatabase(err error) bool {
 	return GetCode(err) == ErrCodeDatabase
+}
+
+// IsRateLimit checks if the error is a rate limit error.
+func IsRateLimit(err error) bool {
+	return GetCode(err) == ErrCodeRateLimit
+}
+
+// IsCacheError checks if the error is a cache error.
+func IsCacheError(err error) bool {
+	return GetCode(err) == ErrCodeCacheError
+}
+
+// IsXrayError checks if the error is an Xray error.
+func IsXrayError(err error) bool {
+	return GetCode(err) == ErrCodeXrayError
+}
+
+// IsForbidden checks if the error is a forbidden error.
+func IsForbidden(err error) bool {
+	return GetCode(err) == ErrCodeForbidden
+}
+
+// IsConflict checks if the error is a conflict error.
+func IsConflict(err error) bool {
+	return GetCode(err) == ErrCodeConflict
+}
+
+// ToErrorResponse converts any error to an ErrorResponse.
+// If the error is not an AppError, it creates a generic internal error response.
+func ToErrorResponse(err error, requestID string) *ErrorResponse {
+	if appErr, ok := AsAppError(err); ok {
+		return appErr.ToResponse(requestID)
+	}
+	// For non-AppError, return a sanitized internal error
+	return &ErrorResponse{
+		Code:      string(ErrCodeInternal),
+		Message:   "An internal error occurred",
+		RequestID: requestID,
+		Timestamp: time.Now().UTC().Format(time.RFC3339),
+	}
+}
+
+// GetHTTPStatus returns the HTTP status code for any error.
+func GetHTTPStatus(err error) int {
+	if appErr, ok := AsAppError(err); ok {
+		return appErr.HTTPStatus()
+	}
+	return http.StatusInternalServerError
 }

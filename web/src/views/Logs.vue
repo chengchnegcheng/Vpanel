@@ -165,6 +165,7 @@
 <script>
 import { ref, computed, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import api from '@/api/index'
 
 export default {
   name: 'Logs',
@@ -246,12 +247,8 @@ export default {
           endTime: dateRange.value && dateRange.value[1] ? dateRange.value[1].toISOString() : undefined
         }
         
-        const response = await fetch('/api/logs?' + new URLSearchParams(params))
-        if (!response.ok) {
-          throw new Error('获取日志数据失败')
-        }
-        
-        const data = await response.json()
+        const response = await api.get('/logs', { params })
+        const data = response.data || response
         logs.value = data.logs || []
         totalLogs.value = data.total || 0
       } catch (error) {

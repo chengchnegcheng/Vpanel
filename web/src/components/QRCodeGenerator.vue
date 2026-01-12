@@ -41,6 +41,7 @@ import { ref, computed, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import { Loading, WarningFilled, CopyDocument } from '@element-plus/icons-vue'
 import QRCode from 'qrcode'
+import api from '@/api/index'
 
 const props = defineProps({
   proxyId: {
@@ -64,13 +65,8 @@ const fetchShareLink = async () => {
   error.value = ''
   
   try {
-    const response = await fetch(`/api/proxy/${props.proxyId}/link`)
-    
-    if (!response.ok) {
-      throw new Error(`HTTP错误 ${response.status}`)
-    }
-    
-    const data = await response.json()
+    const response = await api.get(`/proxies/${props.proxyId}/link`)
+    const data = response.data || response
     shareLink.value = data.link
     
     // 生成二维码

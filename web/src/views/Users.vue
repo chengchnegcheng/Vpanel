@@ -109,6 +109,7 @@ import { ref, reactive, computed, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Search } from '@element-plus/icons-vue'
 import { useUserStore } from '@/stores/user'
+import api from '@/api/index'
 
 // Store
 const userStore = useUserStore()
@@ -173,13 +174,29 @@ onMounted(() => {
 const fetchUsers = async () => {
   loading.value = true
   try {
-    const response = await fetch('/api/users')
-    if (!response.ok) {
-      throw new Error('获取用户列表失败')
+    const response = await api.get('/users')
+    // 后端返回数组或对象格式
+    if (Array.isArray(response)) {
+      users.value = response.map(u => ({
+        id: u.id,
+        username: u.username,
+        email: u.email,
+        role: u.role,
+        status: u.status !== false,
+        created: u.created_at || u.created,
+        lastLogin: u.last_login || '-'
+      }))
+      totalUsers.value = response.length
+    } else if (response && response.list) {
+      users.value = response.list
+      totalUsers.value = response.total || response.list.length
+    } else if (response && response.users) {
+      users.value = response.users
+      totalUsers.value = response.total || response.users.length
+    } else {
+      users.value = []
+      totalUsers.value = 0
     }
-    const data = await response.json()
-    users.value = data.list || []
-    totalUsers.value = data.total || 0
   } catch (error) {
     console.error('Failed to fetch users:', error)
     ElMessage.error('获取用户列表失败')
@@ -225,8 +242,8 @@ const handleToggleStatus = async (row) => {
   try {
     const action = row.status ? '禁用' : '启用'
     
-    // 实际项目中应调用API更新用户状态
-    // await userStore.updateUserStatus(row.id, !row.status)
+    // 调用 API 更新用户状态
+    await api.put(`/users/${row.id}`, { status: !row.status })
     
     row.status = !row.status
     ElMessage.success(`已${action}用户：${row.username}`)
@@ -248,8 +265,8 @@ const handleDelete = (row) => {
   )
   .then(async () => {
     try {
-      // 实际项目中应调用API删除用户
-      // await userStore.deleteUser(row.id)
+      // 调用 API 删除用户
+      await api.delete(`/users/${row.id}`)
       
       users.value = users.value.filter(u => u.id !== row.id)
       totalUsers.value = users.value.length
@@ -272,29 +289,29 @@ const handleSaveUser = async () => {
       try {
         if (dialogType.value === 'add') {
           // 添加新用户
-          // 实际项目中应调用API创建用户
-          // await userStore.createUser(userForm)
+          const response = await api.post('/users', {
+            username: userForm.username,
+            email: userForm.email,
+            password: userForm.password,
+            role: userForm.role
+          })
           
-          const newUser = {
-            ...userForm,
-            id: Date.now(),
-            created: new Date().toLocaleString(),
-            lastLogin: '-',
-            status: true
-          }
-          users.value.push(newUser)
-          totalUsers.value = users.value.length
+          // 刷新用户列表
+          await fetchUsers()
           ElMessage.success('添加成功')
         } else {
           // 更新现有用户
-          // 实际项目中应调用API更新用户
-          // await userStore.updateUser(userForm.id, userForm)
+          await api.put(`/users/${userForm.id}`, {
+            username: userForm.username,
+            email: userForm.email,
+            role: userForm.role
+          })
           
           const index = users.value.findIndex(u => u.id === userForm.id)
           if (index !== -1) {
             users.value[index] = { ...users.value[index], ...userForm }
-            ElMessage.success('更新成功')
           }
+          ElMessage.success('更新成功')
         }
         dialogVisible.value = false
       } catch (error) {

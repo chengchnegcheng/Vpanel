@@ -684,14 +684,26 @@ onMounted(() => {
 const loadInbounds = async () => {
   loading.value = true
   try {
-    const response = await api.get('/api/inbounds', {
+    const response = await api.get('/api/proxies', {
       params: {
-        page: currentPage.value,
-        pageSize: pageSize.value
+        limit: pageSize.value,
+        offset: (currentPage.value - 1) * pageSize.value
       }
     })
     
-    if (response.data) {
+    // 后端返回数组格式
+    if (Array.isArray(response.data)) {
+      inbounds.value = response.data.map(p => ({
+        id: p.id,
+        remark: p.name || p.remark,
+        protocol: p.protocol,
+        port: p.port,
+        enable: p.enabled,
+        clientCount: 0,
+        created_at: p.created_at
+      }))
+      total.value = response.data.length
+    } else if (response.data) {
       inbounds.value = response.data.list || []
       total.value = response.data.total || 0
     }
@@ -790,7 +802,7 @@ const saveInbound = async () => {
       
       // 提交到服务器
       try {
-        const response = await api.post('/api/inbounds', submittingData)
+        const response = await api.post('/api/proxies', submittingData)
         
         if (response.data && response.data.success) {
           ElMessage.success('添加入站成功')
@@ -829,7 +841,7 @@ const toggleStatus = (row) => {
     type: 'warning'
   }).then(async () => {
     try {
-      const response = await api.put(`/api/inbounds/${row.id}/toggle`)
+      const response = await api.post(`/api/proxies/${row.id}/toggle`)
       if (response.data && response.data.success) {
         row.enable = !row.enable
         ElMessage.success(`${action}入站成功`)
@@ -853,7 +865,7 @@ const deleteInbound = (row) => {
     type: 'warning'
   }).then(async () => {
     try {
-      const response = await api.delete(`/api/inbounds/${row.id}`)
+      const response = await api.delete(`/api/proxies/${row.id}`)
       if (response.data && response.data.success) {
         ElMessage.success('删除入站成功')
         loadInbounds()
@@ -876,7 +888,7 @@ const copyLink = async (row) => {
     let link = '';
     // 使用API获取实际链接
     try {
-      const response = await api.get(`/api/inbounds/${row.id}/link`)
+      const response = await api.get(`/api/proxies/${row.id}/link`)
       if (response.data && response.data.link) {
         link = response.data.link;
       } else {

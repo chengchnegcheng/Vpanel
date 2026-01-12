@@ -83,6 +83,8 @@ func (h *AuthMiddlewareHandler) Authenticate() gin.HandlerFunc {
 
 		// Store claims in context
 		c.Set(string(UserClaimsKey), claims)
+		// Also store user_id for backward compatibility with handlers
+		c.Set("user_id", claims.UserID)
 		c.Next()
 	}
 }
@@ -181,6 +183,8 @@ func AuthMiddleware(authService auth.Service) gin.HandlerFunc {
 
 		// Store claims in context
 		c.Set(string(UserClaimsKey), claims)
+		// Also store user_id for backward compatibility with handlers
+		c.Set("user_id", claims.UserID)
 		c.Next()
 	}
 }
@@ -261,6 +265,8 @@ func OptionalAuthMiddleware(authService auth.Service) gin.HandlerFunc {
 		claims, err := authService.ValidateToken(token)
 		if err == nil {
 			c.Set(string(UserClaimsKey), claims)
+			// Also store user_id for backward compatibility with handlers
+			c.Set("user_id", claims.UserID)
 		}
 
 		c.Next()

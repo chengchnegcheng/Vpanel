@@ -108,6 +108,7 @@
 import { ref, reactive, onMounted, onUnmounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Refresh } from '@element-plus/icons-vue'
+import api from '@/api/index'
 
 // 连接列表
 const connections = ref([])
@@ -131,12 +132,14 @@ const loadConnections = async () => {
   loading.value = true
   
   try {
-    const response = await fetch(`/api/trojan/connections?page=${currentPage.value}&pageSize=${pageSize.value}`)
-    if (!response.ok) {
-      throw new Error('加载连接数据失败')
-    }
+    const response = await api.get('/trojan/connections', {
+      params: {
+        page: currentPage.value,
+        pageSize: pageSize.value
+      }
+    })
     
-    const data = await response.json()
+    const data = response.data || response
     connections.value = data.list || []
     total.value = data.total || 0
     

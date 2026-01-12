@@ -2,105 +2,131 @@
 package handlers
 
 import (
+	"context"
 	"net/http"
 	"strconv"
 
 	"github.com/gin-gonic/gin"
 
+	"v/internal/api/middleware"
+	"v/internal/database/repository"
 	"v/internal/logger"
+	"v/pkg/errors"
 )
 
-// Role represents a user role.
-type Role struct {
+// RoleResponse represents a role in API responses.
+type RoleResponse struct {
 	ID          int64    `json:"id"`
 	Name        string   `json:"name"`
 	Description string   `json:"description"`
 	Permissions []string `json:"permissions"`
-	UserCount   int      `json:"user_count"`
+	UserCount   int64    `json:"user_count"`
 	IsSystem    bool     `json:"is_system"`
 }
 
 // RoleHandler handles role-related requests.
 type RoleHandler struct {
-	logger logger.Logger
-	roles  map[int64]*Role
+	logger   logger.Logger
+	roleRepo repository.RoleRepository
 }
 
 // NewRoleHandler creates a new RoleHandler.
-func NewRoleHandler(log logger.Logger) *RoleHandler {
-	// Initialize with default roles
-	roles := map[int64]*Role{
-		1: {
-			ID:          1,
-			Name:        "admin",
-			Description: "系统管理员，拥有所有权限",
-			Permissions: []string{"*"},
-			UserCount:   1,
-			IsSystem:    true,
-		},
-		2: {
-			ID:          2,
-			Name:        "user",
-			Description: "普通用户，可以管理自己的代理",
-			Permissions: []string{"proxy:read", "proxy:write", "profile:read", "profile:write"},
-			UserCount:   0,
-			IsSystem:    true,
-		},
-		3: {
-			ID:          3,
-			Name:        "viewer",
-			Description: "只读用户，只能查看信息",
-			Permissions: []string{"proxy:read", "profile:read", "stats:read"},
-			UserCount:   0,
-			IsSystem:    true,
-		},
+func NewRoleHandler(log logger.Logger, roleRepo repository.RoleRepository) *RoleHandler {
+	return &RoleHandler{
+		logger:   log,
+		roleRepo: roleRepo,
+	}
+}
+
+// InitSystemRoles initializes system roles in the database.
+func (h *RoleHandler) InitSystemRoles(ctx context.Context) error {
+	return h.roleRepo.EnsureSystemRoles(ctx)
+}
+
+// toRoleResponse converts a repository Role to RoleResponse.
+func (h *RoleHandler) toRoleResponse(ctx context.Context, role *repository.Role) (*RoleResponse, error) {
+	perms, err := role.GetPermissionsList()
+	if err != nil {
+		return nil, err
 	}
 
-	return &RoleHandler{
-		logger: log,
-		roles:  roles,
+	userCount, err := h.roleRepo.GetUserCount(ctx, role.Name)
+	if err != nil {
+		return nil, err
 	}
+
+	return &RoleResponse{
+		ID:          role.ID,
+		Name:        role.Name,
+		Description: role.Description,
+		Permissions: perms,
+		UserCount:   userCount,
+		IsSystem:    role.IsSystem,
+	}, nil
 }
 
 // ListRoles returns all roles.
 func (h *RoleHandler) ListRoles(c *gin.Context) {
-	roles := make([]*Role, 0, len(h.roles))
-	for _, role := range h.roles {
-		roles = append(roles, role)
+	ctx := c.Request.Context()
+
+	roles, err := h.roleRepo.List(ctx)
+	if err != nil {
+		h.logger.Error("Failed to list roles", logger.F("error", err))
+		middleware.RespondWithError(c, errors.NewDatabaseError("list roles", err))
+		return
+	}
+
+	responses := make([]*RoleResponse, 0, len(roles))
+	for _, role := range roles {
+		resp, err := h.toRoleResponse(ctx, role)
+		if err != nil {
+			h.logger.Error("Failed to convert role", logger.F("error", err))
+			continue
+		}
+		responses = append(responses, resp)
 	}
 
 	c.JSON(http.StatusOK, gin.H{
 		"code":    200,
 		"message": "success",
-		"data":    roles,
+		"data":    responses,
 	})
 }
 
 // GetRole returns a specific role.
 func (h *RoleHandler) GetRole(c *gin.Context) {
+	ctx := c.Request.Context()
+
 	idStr := c.Param("id")
 	id, err := strconv.ParseInt(idStr, 10, 64)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"code":    400,
-			"message": "invalid role id",
-		})
+		middleware.RespondWithError(c, errors.NewValidationError("invalid role id", nil))
 		return
 	}
 
-	role, exists := h.roles[id]
-	if !exists {
-		c.JSON(http.StatusNotFound, gin.H{
-			"code":    404,
-			"message": "role not found",
-		})
+	role, err := h.roleRepo.GetByID(ctx, id)
+	if err != nil {
+		h.logger.Error("Failed to get role", logger.F("error", err))
+		middleware.RespondWithError(c, errors.NewDatabaseError("get role", err))
+		return
+	}
+
+	if role == nil {
+		middleware.RespondWithError(c, errors.NewNotFoundError("role", id))
+		return
+	}
+
+	resp, err := h.toRoleResponse(ctx, role)
+	if err != nil {
+		h.logger.Error("Failed to convert role", logger.F("error", err))
+		middleware.RespondWithError(c, errors.NewInternalError("failed to convert role", err))
 		return
 	}
 
 	c.JSON(http.StatusOK, gin.H{
 		"code":    200,
 		"message": "success",
-		"data":    role,
+		"data":    resp,
 	})
 }
 
@@ -111,51 +137,93 @@ type CreateRoleRequest struct {
 	Permissions []string `json:"permissions"`
 }
 
+// ValidPermissions contains all valid permission keys.
+var ValidPermissions = map[string]bool{
+	"*":             true,
+	"proxy:read":    true,
+	"proxy:write":   true,
+	"user:read":     true,
+	"user:write":    true,
+	"role:read":     true,
+	"role:write":    true,
+	"stats:read":    true,
+	"system:read":   true,
+	"system:write":  true,
+	"profile:read":  true,
+	"profile:write": true,
+}
+
+// validatePermissions checks if all permissions are valid.
+func validatePermissions(perms []string) []string {
+	var invalid []string
+	for _, p := range perms {
+		if !ValidPermissions[p] {
+			invalid = append(invalid, p)
+		}
+	}
+	return invalid
+}
+
 // CreateRole creates a new role.
 func (h *RoleHandler) CreateRole(c *gin.Context) {
+	ctx := c.Request.Context()
+
 	var req CreateRoleRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"code":    400,
-			"message": "invalid request: " + err.Error(),
-		})
+		middleware.RespondWithError(c, errors.NewValidationError("invalid request", map[string]interface{}{
+			"error": err.Error(),
+		}))
+		return
+	}
+
+	// Validate permissions
+	if invalidPerms := validatePermissions(req.Permissions); len(invalidPerms) > 0 {
+		middleware.RespondWithError(c, errors.NewValidationError("invalid permissions", map[string]interface{}{
+			"invalid_permissions": invalidPerms,
+		}))
 		return
 	}
 
 	// Check if role name already exists
-	for _, role := range h.roles {
-		if role.Name == req.Name {
-			c.JSON(http.StatusConflict, gin.H{
-				"code":    409,
-				"message": "role name already exists",
-			})
-			return
-		}
+	existing, err := h.roleRepo.GetByName(ctx, req.Name)
+	if err != nil {
+		h.logger.Error("Failed to check role name", logger.F("error", err))
+		middleware.RespondWithError(c, errors.NewDatabaseError("check role name", err))
+		return
+	}
+	if existing != nil {
+		middleware.RespondWithError(c, errors.NewConflictError("role", "name", req.Name))
+		return
 	}
 
-	// Generate new ID
-	var maxID int64
-	for id := range h.roles {
-		if id > maxID {
-			maxID = id
-		}
-	}
-
-	newRole := &Role{
-		ID:          maxID + 1,
+	role := &repository.Role{
 		Name:        req.Name,
 		Description: req.Description,
-		Permissions: req.Permissions,
-		UserCount:   0,
 		IsSystem:    false,
 	}
+	if err := role.SetPermissionsList(req.Permissions); err != nil {
+		h.logger.Error("Failed to set permissions", logger.F("error", err))
+		middleware.RespondWithError(c, errors.NewInternalError("failed to set permissions", err))
+		return
+	}
 
-	h.roles[newRole.ID] = newRole
+	if err := h.roleRepo.Create(ctx, role); err != nil {
+		h.logger.Error("Failed to create role", logger.F("error", err))
+		middleware.RespondWithError(c, errors.NewDatabaseError("create role", err))
+		return
+	}
+
+	resp, err := h.toRoleResponse(ctx, role)
+	if err != nil {
+		h.logger.Error("Failed to convert role", logger.F("error", err))
+		middleware.RespondWithError(c, errors.NewInternalError("failed to convert role", err))
+		return
+	}
 
 	c.JSON(http.StatusCreated, gin.H{
 		"code":    201,
 		"message": "role created",
-		"data":    newRole,
+		"data":    resp,
 	})
 }
 
@@ -168,101 +236,156 @@ type UpdateRoleRequest struct {
 
 // UpdateRole updates an existing role.
 func (h *RoleHandler) UpdateRole(c *gin.Context) {
+	ctx := c.Request.Context()
+
 	idStr := c.Param("id")
 	id, err := strconv.ParseInt(idStr, 10, 64)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"code":    400,
-			"message": "invalid role id",
-		})
+		middleware.RespondWithError(c, errors.NewValidationError("invalid role id", nil))
 		return
 	}
 
-	role, exists := h.roles[id]
-	if !exists {
-		c.JSON(http.StatusNotFound, gin.H{
-			"code":    404,
-			"message": "role not found",
-		})
+	role, err := h.roleRepo.GetByID(ctx, id)
+	if err != nil {
+		h.logger.Error("Failed to get role", logger.F("error", err))
+		middleware.RespondWithError(c, errors.NewDatabaseError("get role", err))
 		return
 	}
 
+	if role == nil {
+		middleware.RespondWithError(c, errors.NewNotFoundError("role", id))
+		return
+	}
+
+	// Prevent modification of system roles
 	if role.IsSystem {
-		c.JSON(http.StatusForbidden, gin.H{
-			"code":    403,
-			"message": "cannot modify system role",
-		})
+		middleware.RespondWithError(c, errors.NewForbiddenError("cannot modify system role"))
 		return
 	}
 
 	var req UpdateRoleRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"code":    400,
-			"message": "invalid request: " + err.Error(),
-		})
+		middleware.RespondWithError(c, errors.NewValidationError("invalid request", map[string]interface{}{
+			"error": err.Error(),
+		}))
 		return
 	}
 
-	if req.Name != "" {
+	// Validate permissions if provided
+	if req.Permissions != nil {
+		if invalidPerms := validatePermissions(req.Permissions); len(invalidPerms) > 0 {
+			middleware.RespondWithError(c, errors.NewValidationError("invalid permissions", map[string]interface{}{
+				"invalid_permissions": invalidPerms,
+			}))
+			return
+		}
+	}
+
+	// Check name uniqueness if changing
+	if req.Name != "" && req.Name != role.Name {
+		existing, err := h.roleRepo.GetByName(ctx, req.Name)
+		if err != nil {
+			h.logger.Error("Failed to check role name", logger.F("error", err))
+			middleware.RespondWithError(c, errors.NewDatabaseError("check role name", err))
+			return
+		}
+		if existing != nil {
+			middleware.RespondWithError(c, errors.NewConflictError("role", "name", req.Name))
+			return
+		}
 		role.Name = req.Name
 	}
+
 	if req.Description != "" {
 		role.Description = req.Description
 	}
+
 	if req.Permissions != nil {
-		role.Permissions = req.Permissions
+		if err := role.SetPermissionsList(req.Permissions); err != nil {
+			h.logger.Error("Failed to set permissions", logger.F("error", err))
+			middleware.RespondWithError(c, errors.NewInternalError("failed to set permissions", err))
+			return
+		}
+	}
+
+	if err := h.roleRepo.Update(ctx, role); err != nil {
+		h.logger.Error("Failed to update role", logger.F("error", err))
+		middleware.RespondWithError(c, errors.NewDatabaseError("update role", err))
+		return
+	}
+
+	resp, err := h.toRoleResponse(ctx, role)
+	if err != nil {
+		h.logger.Error("Failed to convert role", logger.F("error", err))
+		middleware.RespondWithError(c, errors.NewInternalError("failed to convert role", err))
+		return
 	}
 
 	c.JSON(http.StatusOK, gin.H{
 		"code":    200,
 		"message": "role updated",
-		"data":    role,
+		"data":    resp,
 	})
 }
 
 // DeleteRole deletes a role.
 func (h *RoleHandler) DeleteRole(c *gin.Context) {
+	ctx := c.Request.Context()
+
 	idStr := c.Param("id")
 	id, err := strconv.ParseInt(idStr, 10, 64)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"code":    400,
-			"message": "invalid role id",
-		})
+		middleware.RespondWithError(c, errors.NewValidationError("invalid role id", nil))
 		return
 	}
 
-	role, exists := h.roles[id]
-	if !exists {
-		c.JSON(http.StatusNotFound, gin.H{
-			"code":    404,
-			"message": "role not found",
-		})
+	role, err := h.roleRepo.GetByID(ctx, id)
+	if err != nil {
+		h.logger.Error("Failed to get role", logger.F("error", err))
+		middleware.RespondWithError(c, errors.NewDatabaseError("get role", err))
 		return
 	}
 
+	if role == nil {
+		middleware.RespondWithError(c, errors.NewNotFoundError("role", id))
+		return
+	}
+
+	// Prevent deletion of system roles
 	if role.IsSystem {
-		c.JSON(http.StatusForbidden, gin.H{
-			"code":    403,
-			"message": "cannot delete system role",
-		})
+		middleware.RespondWithError(c, errors.NewForbiddenError("cannot delete system role"))
 		return
 	}
 
-	if role.UserCount > 0 {
-		c.JSON(http.StatusConflict, gin.H{
-			"code":    409,
-			"message": "cannot delete role with assigned users",
-		})
+	// Reassign users to default role before deletion
+	userCount, err := h.roleRepo.GetUserCount(ctx, role.Name)
+	if err != nil {
+		h.logger.Error("Failed to get user count", logger.F("error", err))
+		middleware.RespondWithError(c, errors.NewDatabaseError("get user count", err))
 		return
 	}
 
-	delete(h.roles, id)
+	if userCount > 0 {
+		if err := h.roleRepo.ReassignUsersToDefaultRole(ctx, role.Name); err != nil {
+			h.logger.Error("Failed to reassign users", logger.F("error", err))
+			middleware.RespondWithError(c, errors.NewDatabaseError("reassign users", err))
+			return
+		}
+		h.logger.Info("Reassigned users to default role", logger.F("count", userCount), logger.F("from_role", role.Name))
+	}
+
+	if err := h.roleRepo.Delete(ctx, id); err != nil {
+		h.logger.Error("Failed to delete role", logger.F("error", err))
+		middleware.RespondWithError(c, errors.NewDatabaseError("delete role", err))
+		return
+	}
 
 	c.JSON(http.StatusOK, gin.H{
 		"code":    200,
 		"message": "role deleted",
+		"data": gin.H{
+			"reassigned_users": userCount,
+		},
 	})
 }
 
@@ -288,4 +411,29 @@ func (h *RoleHandler) GetPermissions(c *gin.Context) {
 		"message": "success",
 		"data":    permissions,
 	})
+}
+
+// HasPermission checks if a role has a specific permission.
+func (h *RoleHandler) HasPermission(ctx context.Context, roleName, permission string) (bool, error) {
+	role, err := h.roleRepo.GetByName(ctx, roleName)
+	if err != nil {
+		return false, err
+	}
+	if role == nil {
+		return false, nil
+	}
+
+	perms, err := role.GetPermissionsList()
+	if err != nil {
+		return false, err
+	}
+
+	// Admin role with "*" has all permissions
+	for _, p := range perms {
+		if p == "*" || p == permission {
+			return true, nil
+		}
+	}
+
+	return false, nil
 }

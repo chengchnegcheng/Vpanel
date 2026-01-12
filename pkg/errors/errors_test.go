@@ -5,11 +5,215 @@ import (
 	"fmt"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/leanovate/gopter"
 	"github.com/leanovate/gopter/gen"
 	"github.com/leanovate/gopter/prop"
 )
+
+// Property 1: Error Response Consistency
+// For any API error response, the response SHALL contain a valid JSON object with fields:
+// `code` (non-empty string), `message` (non-empty string), `timestamp` (valid ISO 8601 format),
+// and optionally `details` (object) and `request_id` (string).
+// **Validates: Requirements 2.1, 2.2, 2.3, 2.5**
+
+func TestErrorResponseConsistency(t *testing.T) {
+	properties := gopter.NewProperties(gopter.DefaultTestParameters())
+
+	// Generate all possible error codes
+	errorCodes := []ErrorCode{
+		ErrCodeValidation,
+		ErrCodeNotFound,
+		ErrCodeUnauthorized,
+		ErrCodeForbidden,
+		ErrCodeInternal,
+		ErrCodeDatabase,
+		ErrCodeConfig,
+		ErrCodeConflict,
+		ErrCodeBadRequest,
+		ErrCodeRateLimit,
+		ErrCodeCacheError,
+		ErrCodeXrayError,
+	}
+
+	properties.Property("error responses contain required fields", prop.ForAll(
+		func(codeIdx int, message, requestID string) bool {
+			code := errorCodes[codeIdx%len(errorCodes)]
+			if message == "" {
+				message = "test error"
+			}
+
+			appErr := New(code, message)
+			response := appErr.ToResponse(requestID)
+
+			// Check code is non-empty
+			if response.Code == "" {
+				t.Log("Response code is empty")
+				return false
+			}
+
+			// Check message is non-empty
+			if response.Message == "" {
+				t.Log("Response message is empty")
+				return false
+			}
+
+			// Check timestamp is valid ISO 8601 format
+			if response.Timestamp == "" {
+				t.Log("Response timestamp is empty")
+				return false
+			}
+			_, err := time.Parse(time.RFC3339, response.Timestamp)
+			if err != nil {
+				t.Logf("Response timestamp is not valid RFC3339: %s", response.Timestamp)
+				return false
+			}
+
+			// Check request_id matches input
+			if response.RequestID != requestID {
+				t.Logf("Request ID mismatch: expected %q, got %q", requestID, response.RequestID)
+				return false
+			}
+
+			return true
+		},
+		gen.IntRange(0, len(errorCodes)-1),
+		gen.AlphaString().SuchThat(func(s string) bool { return len(s) > 0 }),
+		gen.AlphaString(),
+	))
+
+	properties.TestingRun(t)
+}
+
+func TestErrorResponseWithValidationDetails(t *testing.T) {
+	properties := gopter.NewProperties(gopter.DefaultTestParameters())
+
+	properties.Property("validation errors contain field-specific details", prop.ForAll(
+		func(fieldName, fieldError, requestID string) bool {
+			if fieldName == "" || fieldError == "" {
+				return true
+			}
+
+			fields := map[string]string{fieldName: fieldError}
+			appErr := NewValidationErrorWithFields("Validation failed", fields)
+			response := appErr.ToResponse(requestID)
+
+			// Check that details contains the validation errors
+			if response.Details == nil {
+				t.Log("Response details is nil for validation error")
+				return false
+			}
+
+			validationErrs, ok := response.Details.(*ValidationErrors)
+			if !ok {
+				t.Logf("Response details is not ValidationErrors: %T", response.Details)
+				return false
+			}
+
+			if validationErrs.Fields[fieldName] != fieldError {
+				t.Logf("Field error mismatch: expected %q, got %q", fieldError, validationErrs.Fields[fieldName])
+				return false
+			}
+
+			return true
+		},
+		gen.AlphaString().SuchThat(func(s string) bool { return len(s) > 0 }),
+		gen.AlphaString().SuchThat(func(s string) bool { return len(s) > 0 }),
+		gen.AlphaString(),
+	))
+
+	properties.TestingRun(t)
+}
+
+func TestErrorCodeToHTTPStatusMapping(t *testing.T) {
+	properties := gopter.NewProperties(gopter.DefaultTestParameters())
+
+	// Define expected mappings
+	expectedMappings := map[ErrorCode]int{
+		ErrCodeValidation:   400,
+		ErrCodeBadRequest:   400,
+		ErrCodeNotFound:     404,
+		ErrCodeUnauthorized: 401,
+		ErrCodeForbidden:    403,
+		ErrCodeConflict:     409,
+		ErrCodeRateLimit:    429,
+		ErrCodeDatabase:     500,
+		ErrCodeInternal:     500,
+		ErrCodeConfig:       500,
+		ErrCodeCacheError:   500,
+		ErrCodeXrayError:    500,
+	}
+
+	properties.Property("error codes map to correct HTTP status codes", prop.ForAll(
+		func(message string) bool {
+			if message == "" {
+				message = "test"
+			}
+
+			for code, expectedStatus := range expectedMappings {
+				appErr := New(code, message)
+				actualStatus := appErr.HTTPStatus()
+				if actualStatus != expectedStatus {
+					t.Logf("Code %s: expected status %d, got %d", code, expectedStatus, actualStatus)
+					return false
+				}
+			}
+			return true
+		},
+		gen.AlphaString(),
+	))
+
+	properties.TestingRun(t)
+}
+
+func TestToErrorResponseForNonAppError(t *testing.T) {
+	properties := gopter.NewProperties(gopter.DefaultTestParameters())
+
+	properties.Property("non-AppError converts to sanitized internal error", prop.ForAll(
+		func(errorMsg, requestID string) bool {
+			if errorMsg == "" {
+				errorMsg = "some error"
+			}
+
+			// Create a regular error (not AppError)
+			regularErr := fmt.Errorf("%s", errorMsg)
+			response := ToErrorResponse(regularErr, requestID)
+
+			// Should return internal error code
+			if response.Code != string(ErrCodeInternal) {
+				t.Logf("Expected code %s, got %s", ErrCodeInternal, response.Code)
+				return false
+			}
+
+			// Message should be a generic sanitized message
+			expectedMsg := "An internal error occurred"
+			if response.Message != expectedMsg {
+				t.Logf("Expected message %q, got %q", expectedMsg, response.Message)
+				return false
+			}
+
+			// Should have valid timestamp
+			_, err := time.Parse(time.RFC3339, response.Timestamp)
+			if err != nil {
+				t.Logf("Invalid timestamp: %s", response.Timestamp)
+				return false
+			}
+
+			// Request ID should be preserved
+			if response.RequestID != requestID {
+				t.Logf("Request ID mismatch: expected %q, got %q", requestID, response.RequestID)
+				return false
+			}
+
+			return true
+		},
+		gen.AlphaString().SuchThat(func(s string) bool { return len(s) > 0 }),
+		gen.AlphaString(),
+	))
+
+	properties.TestingRun(t)
+}
 
 // Property 2: Database Error Context
 // For any database operation that fails, the returned error SHALL contain
@@ -104,7 +308,7 @@ func TestDatabaseErrorContext_PreservesCause(t *testing.T) {
 				return true
 			}
 
-			cause := fmt.Errorf(causeMsg)
+			cause := fmt.Errorf("%s", causeMsg)
 			err := NewDatabaseError(operation, cause)
 
 			// Check that cause is preserved
@@ -145,9 +349,12 @@ func TestAppError_HTTPStatus(t *testing.T) {
 		{ErrCodeUnauthorized, 401},
 		{ErrCodeForbidden, 403},
 		{ErrCodeConflict, 409},
+		{ErrCodeRateLimit, 429},
 		{ErrCodeDatabase, 500},
 		{ErrCodeInternal, 500},
 		{ErrCodeConfig, 500},
+		{ErrCodeCacheError, 500},
+		{ErrCodeXrayError, 500},
 	}
 
 	for _, tt := range tests {
@@ -157,6 +364,15 @@ func TestAppError_HTTPStatus(t *testing.T) {
 				t.Errorf("Expected status %d, got %d", tt.expected, status)
 			}
 		})
+	}
+}
+
+func TestAppError_HTTPStatusOverride(t *testing.T) {
+	err := New(ErrCodeInternal, "test error")
+	err.WithHTTPStatus(503)
+
+	if status := err.HTTPStatus(); status != 503 {
+		t.Errorf("Expected status 503, got %d", status)
 	}
 }
 
@@ -204,6 +420,31 @@ func TestErrorHelpers(t *testing.T) {
 	dbErr := NewDatabaseError("insert", fmt.Errorf("constraint violation"))
 	if !IsDatabase(dbErr) {
 		t.Error("Expected IsDatabase to return true")
+	}
+
+	rateLimitErr := NewRateLimitError("too many requests")
+	if !IsRateLimit(rateLimitErr) {
+		t.Error("Expected IsRateLimit to return true")
+	}
+
+	cacheErr := NewCacheError("get", fmt.Errorf("connection refused"))
+	if !IsCacheError(cacheErr) {
+		t.Error("Expected IsCacheError to return true")
+	}
+
+	xrayErr := NewXrayError("start", fmt.Errorf("process failed"))
+	if !IsXrayError(xrayErr) {
+		t.Error("Expected IsXrayError to return true")
+	}
+
+	forbiddenErr := NewForbiddenError("access denied")
+	if !IsForbidden(forbiddenErr) {
+		t.Error("Expected IsForbidden to return true")
+	}
+
+	conflictErr := NewConflictError("resource", "name", "test")
+	if !IsConflict(conflictErr) {
+		t.Error("Expected IsConflict to return true")
 	}
 }
 

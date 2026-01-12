@@ -1,5 +1,6 @@
 <template>
   <div class="dashboard-container">
+    <!-- 系统概览 -->
     <div class="panel-box">
       <div class="panel-header">
         <span class="panel-title">系统概览</span>
@@ -18,6 +19,10 @@
               <div class="stats-progress">
                 <el-progress type="dashboard" :percentage="systemStats.cpu" :color="getCpuColor"></el-progress>
               </div>
+              <div class="stats-details" v-if="cpuInfo.model">
+                <p>核心数: {{ cpuInfo.cores }}</p>
+                <p>型号: {{ cpuInfo.model }}</p>
+              </div>
             </el-card>
           </el-col>
           
@@ -31,6 +36,10 @@
               </template>
               <div class="stats-progress">
                 <el-progress type="dashboard" :percentage="systemStats.memory" :color="getMemoryColor"></el-progress>
+              </div>
+              <div class="stats-details" v-if="memoryInfo.total">
+                <p>已用: {{ formatBytes(memoryInfo.used) }}</p>
+                <p>总计: {{ formatBytes(memoryInfo.total) }}</p>
               </div>
             </el-card>
           </el-col>
@@ -46,12 +55,34 @@
               <div class="stats-progress">
                 <el-progress type="dashboard" :percentage="systemStats.disk" :color="getDiskColor"></el-progress>
               </div>
+              <div class="stats-details" v-if="diskInfo.total">
+                <p>已用: {{ formatBytes(diskInfo.used) }}</p>
+                <p>总计: {{ formatBytes(diskInfo.total) }}</p>
+              </div>
             </el-card>
           </el-col>
         </el-row>
       </div>
     </div>
     
+    <!-- 系统信息 -->
+    <div class="panel-box" v-if="systemInfo.os">
+      <div class="panel-header">
+        <span class="panel-title">系统信息</span>
+      </div>
+      <div class="system-info-content">
+        <el-descriptions border :column="3">
+          <el-descriptions-item label="操作系统">{{ systemInfo.os }}</el-descriptions-item>
+          <el-descriptions-item label="主机名">{{ systemInfo.hostname }}</el-descriptions-item>
+          <el-descriptions-item label="运行时间">{{ systemInfo.uptime }}</el-descriptions-item>
+          <el-descriptions-item label="内核版本">{{ systemInfo.kernel }}</el-descriptions-item>
+          <el-descriptions-item label="负载均衡">{{ systemInfo.load ? systemInfo.load.join(' / ') : '-' }}</el-descriptions-item>
+          <el-descriptions-item label="IP 地址">{{ systemInfo.ipAddress }}</el-descriptions-item>
+        </el-descriptions>
+      </div>
+    </div>
+    
+    <!-- 流量统计 -->
     <div class="panel-box">
       <div class="panel-header">
         <span class="panel-title">流量统计</span>
@@ -99,12 +130,9 @@
                   <span class="traffic-item-value">{{ formatTraffic(trafficStats.down) }}</span>
                 </div>
                 <div class="traffic-chart-small">
-                  <div class="chart-placeholder">
-                    <!-- 这里可以放实际的图表组件 -->
-                    <div class="up-down-ratio">
-                      <div class="up-bar" :style="{ width: getUpPercentage + '%' }"></div>
-                      <div class="down-bar" :style="{ width: getDownPercentage + '%' }"></div>
-                    </div>
+                  <div class="up-down-ratio">
+                    <div class="up-bar" :style="{ width: getUpPercentage + '%' }"></div>
+                    <div class="down-bar" :style="{ width: getDownPercentage + '%' }"></div>
                   </div>
                 </div>
               </div>
@@ -114,6 +142,7 @@
       </div>
     </div>
     
+    <!-- 协议概览 -->
     <div class="panel-box">
       <div class="panel-header">
         <span class="panel-title">协议概览</span>
@@ -143,6 +172,7 @@
                     </template>
                   </el-table-column>
                 </el-table>
+                <el-empty v-if="protocolStats.length === 0" description="暂无协议数据" />
               </div>
             </el-card>
           </el-col>
@@ -155,17 +185,16 @@
                 </div>
               </template>
               <div class="protocol-chart">
-                <div class="chart-placeholder text-center">
-                  <div class="traffic-distribution">
-                    <div v-for="(item, index) in protocolTraffic" :key="index" class="traffic-bar">
-                      <div class="bar-label">{{ item.protocol }}</div>
-                      <div class="bar-container">
-                        <div class="bar-fill" :style="{ width: item.percentage + '%', backgroundColor: getProtocolColor(item.protocol) }"></div>
-                      </div>
-                      <div class="bar-value">{{ formatTraffic(item.traffic) }}</div>
+                <div class="traffic-distribution" v-if="protocolTraffic.length > 0">
+                  <div v-for="(item, index) in protocolTraffic" :key="index" class="traffic-bar">
+                    <div class="bar-label">{{ item.protocol }}</div>
+                    <div class="bar-container">
+                      <div class="bar-fill" :style="{ width: item.percentage + '%', backgroundColor: getProtocolColor(item.protocol) }"></div>
                     </div>
+                    <div class="bar-value">{{ formatTraffic(item.traffic) }}</div>
                   </div>
                 </div>
+                <el-empty v-else description="暂无流量数据" />
               </div>
             </el-card>
           </el-col>
@@ -176,53 +205,57 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { ElMessage } from 'element-plus'
+import systemApi from '@/api/system'
 import api from '@/api/index'
 
 // 系统状态数据
 const systemStats = ref({
-  cpu: 35,
-  memory: 52,
-  disk: 68
+  cpu: 0,
+  memory: 0,
+  disk: 0
+})
+
+// 详细系统信息
+const cpuInfo = ref({ cores: 0, model: '' })
+const memoryInfo = ref({ used: 0, total: 0 })
+const diskInfo = ref({ used: 0, total: 0 })
+const systemInfo = ref({
+  os: '',
+  kernel: '',
+  hostname: '',
+  uptime: '',
+  load: null,
+  ipAddress: ''
 })
 
 // 流量统计数据
 const trafficPeriod = ref('today')
 const trafficStats = ref({
-  total: 1024 * 1024 * 1024 * 2.5, // 2.5 GB
-  up: 1024 * 1024 * 1024 * 0.8,    // 0.8 GB
-  down: 1024 * 1024 * 1024 * 1.7,  // 1.7 GB
-  limit: 1024 * 1024 * 1024 * 10,  // 10 GB
-  percentage: 25 // 25%
+  total: 0,
+  up: 0,
+  down: 0,
+  limit: 0,
+  percentage: 0
 })
 
 // 协议统计数据
-const protocolStats = ref([
-  { protocol: 'vmess', count: 3, status: 'active' },
-  { protocol: 'vless', count: 2, status: 'active' },
-  { protocol: 'trojan', count: 1, status: 'active' },
-  { protocol: 'shadowsocks', count: 4, status: 'active' }
-])
+const protocolStats = ref([])
 
 // 协议流量分布
-const protocolTraffic = ref([
-  { protocol: 'vmess', traffic: 1024 * 1024 * 1024 * 1.2, percentage: 45 },
-  { protocol: 'vless', traffic: 1024 * 1024 * 1024 * 0.8, percentage: 30 },
-  { protocol: 'trojan', traffic: 1024 * 1024 * 1024 * 0.4, percentage: 15 },
-  { protocol: 'shadowsocks', traffic: 1024 * 1024 * 1024 * 0.2, percentage: 10 }
-])
+const protocolTraffic = ref([])
 
 // 计算上传流量百分比
 const getUpPercentage = computed(() => {
   const total = trafficStats.value.up + trafficStats.value.down
-  return total > 0 ? Math.round((trafficStats.value.up / total) * 100) : 0
+  return total > 0 ? Math.round((trafficStats.value.up / total) * 100) : 50
 })
 
 // 计算下载流量百分比
 const getDownPercentage = computed(() => {
   const total = trafficStats.value.up + trafficStats.value.down
-  return total > 0 ? Math.round((trafficStats.value.down / total) * 100) : 0
+  return total > 0 ? Math.round((trafficStats.value.down / total) * 100) : 50
 })
 
 // CPU 颜色
@@ -251,13 +284,18 @@ const getDiskColor = computed(() => {
 
 // 格式化流量
 const formatTraffic = (bytes) => {
-  if (bytes === 0) return '0 B'
+  if (!bytes || bytes === 0) return '0 B'
   
   const k = 1024
   const sizes = ['B', 'KB', 'MB', 'GB', 'TB', 'PB']
   const i = Math.floor(Math.log(bytes) / Math.log(k))
   
   return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i]
+}
+
+// 格式化字节
+const formatBytes = (bytes) => {
+  return formatTraffic(bytes)
 }
 
 // 获取协议颜色
@@ -271,20 +309,70 @@ const getProtocolColor = (protocol) => {
   }
 }
 
-// 加载数据
-const loadData = async () => {
+// 加载系统状态
+const loadSystemStatus = async () => {
   try {
-    const response = await api.get('/api/dashboard')
-    if (response.data) {
-      systemStats.value = response.data.system || systemStats.value
-      trafficStats.value = response.data.traffic || trafficStats.value
-      protocolStats.value = response.data.protocols || protocolStats.value
-      protocolTraffic.value = response.data.protocolTraffic || protocolTraffic.value
+    const response = await systemApi.getSystemStatus()
+    if (response && response.code === 200 && response.data) {
+      const data = response.data
+      
+      // 更新系统信息
+      if (data.systemInfo) {
+        systemInfo.value = data.systemInfo
+        if (!systemInfo.value.load) {
+          systemInfo.value.load = [0, 0, 0]
+        }
+      }
+      
+      // 更新CPU信息
+      if (data.cpuInfo) {
+        cpuInfo.value = data.cpuInfo
+      }
+      systemStats.value.cpu = data.cpuUsage || 0
+      
+      // 更新内存信息
+      if (data.memoryInfo) {
+        memoryInfo.value = data.memoryInfo
+      }
+      systemStats.value.memory = data.memoryUsage || 0
+      
+      // 更新磁盘信息
+      if (data.diskInfo) {
+        diskInfo.value = data.diskInfo
+      }
+      systemStats.value.disk = data.diskUsage || 0
     }
   } catch (error) {
-    console.error('Failed to load dashboard data:', error)
-    ElMessage.error('加载数据失败')
+    console.error('Failed to load system status:', error)
   }
+}
+
+// 加载统计数据
+const loadStats = async () => {
+  try {
+    const response = await api.get('/api/stats/dashboard')
+    if (response.data) {
+      if (response.data.traffic) {
+        trafficStats.value = response.data.traffic
+      }
+      if (response.data.protocols) {
+        protocolStats.value = response.data.protocols
+      }
+      if (response.data.protocolTraffic) {
+        protocolTraffic.value = response.data.protocolTraffic
+      }
+    }
+  } catch (error) {
+    console.error('Failed to load stats:', error)
+  }
+}
+
+// 加载所有数据
+const loadData = async () => {
+  await Promise.all([
+    loadSystemStatus(),
+    loadStats()
+  ])
 }
 
 // 刷新统计数据
@@ -296,19 +384,29 @@ const refreshStats = () => {
 // 切换流量统计周期
 const changeTrafficPeriod = async (period) => {
   try {
-    const response = await api.get('/api/dashboard/traffic', { params: { period } })
+    const response = await api.get('/api/stats/traffic', { params: { period } })
     if (response.data) {
       trafficStats.value = response.data
     }
   } catch (error) {
     console.error('Failed to load traffic data:', error)
-    ElMessage.error('加载流量数据失败')
   }
 }
+
+// 定时刷新
+let refreshTimer = null
 
 // 初始化
 onMounted(() => {
   loadData()
+  // 每30秒自动刷新
+  refreshTimer = setInterval(loadData, 30000)
+})
+
+onUnmounted(() => {
+  if (refreshTimer) {
+    clearInterval(refreshTimer)
+  }
 })
 </script>
 
@@ -340,12 +438,14 @@ onMounted(() => {
 
 .stats-cards,
 .traffic-stats,
-.protocols-stats {
+.protocols-stats,
+.system-info-content {
   padding: 20px;
 }
 
 .stats-card {
-  height: 240px;
+  height: auto;
+  min-height: 240px;
   margin-bottom: 10px;
 }
 
@@ -359,6 +459,19 @@ onMounted(() => {
   display: flex;
   justify-content: center;
   padding: 20px 0;
+}
+
+.stats-details {
+  text-align: center;
+  padding: 10px 0;
+  border-top: 1px solid #eee;
+  margin-top: 10px;
+}
+
+.stats-details p {
+  margin: 5px 0;
+  color: #606266;
+  font-size: 12px;
 }
 
 .traffic-card {
@@ -464,10 +577,6 @@ onMounted(() => {
   background-color: #f56c6c;
 }
 
-.text-center {
-  text-align: center;
-}
-
 .traffic-distribution {
   padding: 10px 0;
 }
@@ -499,4 +608,4 @@ onMounted(() => {
   margin-top: 2px;
   color: #666;
 }
-</style> 
+</style>

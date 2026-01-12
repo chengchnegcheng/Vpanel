@@ -52,14 +52,13 @@ export const useUserStore = defineStore('user', () => {
       }
       
       // 检查响应是否包含必要的数据（api 拦截器已经返回 response.data）
-      const data = response.data || response
-      if (!data.token || !data.user) {
+      if (!response.token || !response.user) {
         console.error('Invalid login response format:', response)
         error.value = '服务器返回的数据格式不正确'
         throw new Error('服务器返回的数据格式不正确')
       }
       
-      const { token: newToken, user: userInfo } = data
+      const { token: newToken, user: userInfo } = response
       console.log('Login successful:', userInfo)
       
       setToken(newToken)
@@ -107,13 +106,13 @@ export const useUserStore = defineStore('user', () => {
         throw new Error(response.error)
       }
       
-      const data = response.data || response
-      if (!data.user && !data.id) {
+      // api 拦截器已经返回 response.data，直接使用 response
+      if (!response.id) {
         error.value = '服务器返回的数据格式不正确'
         throw new Error('服务器返回的数据格式不正确')  
       }
       
-      setUser(data.user || data)
+      setUser(response)
       return user.value
     } catch (err) {
       console.error('Get user error:', err)
@@ -143,23 +142,22 @@ export const useUserStore = defineStore('user', () => {
       const response = await api.get('/users', { params })
       console.log('Users response:', response)
       
-      // 适配不同的响应格式
+      // 适配不同的响应格式（api 拦截器已经返回 response.data）
       let users = [];
       let total = 0;
       
-      const data = response.data || response
-      if (Array.isArray(data)) {
+      if (Array.isArray(response)) {
         // 如果响应直接是数组
-        users = data;
-        total = data.length;
-      } else if (data && data.users) {
+        users = response;
+        total = response.length;
+      } else if (response && response.users) {
         // 如果响应中有users字段
-        users = data.users;
-        total = data.total || users.length;
-      } else if (data && data.data && Array.isArray(data.data)) {
+        users = response.users;
+        total = response.total || users.length;
+      } else if (response && response.data && Array.isArray(response.data)) {
         // 如果响应中有data字段
-        users = data.data;
-        total = data.total || users.length;
+        users = response.data;
+        total = response.total || users.length;
       } else {
         console.error('Unknown response format:', response);
         users = [];

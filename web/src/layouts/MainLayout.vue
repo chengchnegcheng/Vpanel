@@ -38,7 +38,6 @@
             <el-icon><DataAnalysis /></el-icon>
             <span>监控与统计</span>
           </template>
-          <el-menu-item index="/system-monitor">系统监控</el-menu-item>
           <el-menu-item index="/traffic-monitor">流量监控</el-menu-item>
           <el-menu-item index="/stats">统计数据</el-menu-item>
         </el-sub-menu>

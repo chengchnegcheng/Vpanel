@@ -293,6 +293,7 @@ import { ref, reactive, onMounted, computed } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, Document } from '@element-plus/icons-vue'
 import QRCode from 'qrcode'
+import api from '@/api/index'
 
 // 协议列表
 const protocols = ref([])
@@ -349,13 +350,9 @@ const loadProtocols = async () => {
   loading.value = true
   
   try {
-    const response = await fetch('/api/protocols')
-    if (!response.ok) {
-      throw new Error('加载协议列表失败')
-    }
-    
-    const data = await response.json()
-    protocols.value = data.list || []
+    const response = await api.get('/protocols')
+    const data = response.data || response
+    protocols.value = data.list || (Array.isArray(data) ? data : [])
   } catch (error) {
     console.error('加载协议列表失败:', error)
     ElMessage.error('加载协议列表失败')

@@ -57,6 +57,7 @@ import { ref, onMounted, onUnmounted } from 'vue'
 import * as echarts from 'echarts'
 
 import { ElMessage } from 'element-plus'
+import api from '@/api/index'
 
 // 图表引用
 const realtimeChartRef = ref(null)
@@ -187,11 +188,8 @@ const updateCharts = () => {
 const refreshData = async () => {
   loading.value = true
   try {
-    const response = await fetch('/api/traffic/monitor')
-    if (!response.ok) {
-      throw new Error('获取流量数据失败')
-    }
-    const data = await response.json()
+    const response = await api.get('/traffic/monitor')
+    const data = response.data || response
     trafficData.value = data.list || []
     
     // 更新图表

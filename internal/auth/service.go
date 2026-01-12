@@ -2,6 +2,8 @@
 package auth
 
 import (
+	"crypto/rand"
+	"math/big"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
@@ -133,4 +135,22 @@ func (s *Service) HashPassword(password string) (string, error) {
 func (s *Service) VerifyPassword(password, hash string) bool {
 	err := bcrypt.CompareHashAndPassword([]byte(hash), []byte(password))
 	return err == nil
+}
+
+// GenerateTemporaryPassword generates a random temporary password.
+func (s *Service) GenerateTemporaryPassword() string {
+	const charset = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*"
+	const length = 12
+
+	b := make([]byte, length)
+	for i := range b {
+		n, err := rand.Int(rand.Reader, big.NewInt(int64(len(charset))))
+		if err != nil {
+			// Fallback to time-based if crypto/rand fails
+			b[i] = charset[time.Now().UnixNano()%int64(len(charset))]
+		} else {
+			b[i] = charset[n.Int64()]
+		}
+	}
+	return string(b)
 }

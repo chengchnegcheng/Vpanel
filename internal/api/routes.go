@@ -2,6 +2,8 @@
 package api
 
 import (
+	"context"
+
 	"github.com/gin-gonic/gin"
 
 	"v/internal/api/handlers"
@@ -11,16 +13,18 @@ import (
 	"v/internal/database/repository"
 	"v/internal/logger"
 	"v/internal/proxy"
+	"v/internal/settings"
 )
 
 // Router manages API routes.
 type Router struct {
-	engine       *gin.Engine
-	config       *config.Config
-	logger       logger.Logger
-	authService  *auth.Service
-	proxyManager proxy.Manager
-	repos        *repository.Repositories
+	engine          *gin.Engine
+	config          *config.Config
+	logger          logger.Logger
+	authService     *auth.Service
+	proxyManager    proxy.Manager
+	repos           *repository.Repositories
+	settingsService *settings.Service
 }
 
 // NewRouter creates a new API router.
@@ -38,13 +42,17 @@ func NewRouter(
 
 	engine := gin.New()
 
+	// Create settings service
+	settingsService := settings.NewService(repos.Settings)
+
 	return &Router{
-		engine:       engine,
-		config:       cfg,
-		logger:       log,
-		authService:  authService,
-		proxyManager: proxyManager,
-		repos:        repos,
+		engine:          engine,
+		config:          cfg,
+		logger:          log,
+		authService:     authService,
+		proxyManager:    proxyManager,
+		repos:           repos,
+		settingsService: settingsService,
 	}
 }
 
@@ -57,15 +65,25 @@ func (r *Router) Setup() {
 	r.engine.Use(middleware.RequestID())
 
 	// Create handlers
-	authHandler := handlers.NewAuthHandler(r.authService, r.repos.User, r.logger)
+	authHandler := handlers.NewAuthHandler(r.authService, r.repos.User, r.repos.LoginHistory, r.logger)
 	proxyHandler := handlers.NewProxyHandler(r.proxyManager, r.repos.Proxy, r.logger)
 	systemHandler := handlers.NewSystemHandler(r.config, r.logger)
 	healthHandler := handlers.NewHealthHandler(r.repos, r.logger)
-	roleHandler := handlers.NewRoleHandler(r.logger)
+	roleHandler := handlers.NewRoleHandler(r.logger, r.repos.Role)
 	statsHandler := handlers.NewStatsHandler(r.logger, r.repos)
+	settingsHandler := handlers.NewSettingsHandler(r.logger, r.settingsService)
+
+	// Initialize system roles
+	ctx := context.Background()
+	if err := roleHandler.InitSystemRoles(ctx); err != nil {
+		r.logger.Error("Failed to initialize system roles", logger.F("error", err))
+	}
 
 	// Auth middleware
 	authMiddleware := middleware.NewAuthMiddleware(r.authService, r.logger)
+
+	// Access control middleware (checks traffic limits and expiration)
+	accessControlMiddleware := middleware.NewAccessControlMiddleware(r.repos.User, r.logger)
 
 	// Public routes
 	r.engine.GET("/health", healthHandler.Health)
@@ -95,8 +113,9 @@ func (r *Router) Setup() {
 			protected.GET("/auth/me", authHandler.GetCurrentUser)
 			protected.PUT("/auth/password", authHandler.ChangePassword)
 
-			// Proxy routes
+			// Proxy routes - with access control for traffic limits and expiration
 			proxies := protected.Group("/proxies")
+			proxies.Use(accessControlMiddleware.CheckProxyAccess())
 			{
 				proxies.GET("", proxyHandler.List)
 				proxies.POST("", proxyHandler.Create)
@@ -147,6 +166,21 @@ func (r *Router) Setup() {
 				users.GET("/:id", authHandler.GetUser)
 				users.PUT("/:id", authHandler.UpdateUser)
 				users.DELETE("/:id", authHandler.DeleteUser)
+				users.POST("/:id/enable", authHandler.EnableUser)
+				users.POST("/:id/disable", authHandler.DisableUser)
+				users.POST("/:id/reset-password", authHandler.ResetPassword)
+				users.GET("/:id/login-history", authHandler.GetLoginHistory)
+				users.DELETE("/:id/login-history", authHandler.ClearLoginHistory)
+			}
+
+			// Settings routes (admin only)
+			settingsRoutes := protected.Group("/settings")
+			settingsRoutes.Use(authMiddleware.RequireRole("admin"))
+			{
+				settingsRoutes.GET("", settingsHandler.GetSettings)
+				settingsRoutes.PUT("", settingsHandler.UpdateSettings)
+				settingsRoutes.POST("/backup", settingsHandler.BackupSettings)
+				settingsRoutes.POST("/restore", settingsHandler.RestoreSettings)
 			}
 		}
 	}

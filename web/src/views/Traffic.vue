@@ -174,6 +174,7 @@ import {
   DataZoomComponent
 } from 'echarts/components'
 import { CanvasRenderer } from 'echarts/renderers'
+import api from '@/api/index'
 
 // 注册必要的 ECharts 组件
 echarts.use([
@@ -277,12 +278,8 @@ export default {
           endTime: dateRange.value && dateRange.value[1] ? dateRange.value[1].toISOString() : undefined
         }
         
-        const response = await fetch('/api/traffic?' + new URLSearchParams(params))
-        if (!response.ok) {
-          throw new Error('获取流量数据失败')
-        }
-        
-        const data = await response.json()
+        const response = await api.get('/traffic', { params })
+        const data = response.data || response
         userTraffic.value = data.users || []
         
         // 计算总流量统计
