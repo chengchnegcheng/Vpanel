@@ -12,9 +12,15 @@ import router from './router'
 // 导入事件源客户端
 import xrayEventSource from './utils/eventSourceClient'
 
+// 导入全局错误处理器
+import { installGlobalErrorHandler } from './utils/globalErrorHandler'
+
 // 创建Vue实例和状态管理
 const app = createApp(App)
 const pinia = createPinia()
+
+// 安装全局错误处理器
+installGlobalErrorHandler(app)
 
 // 注册所有Element Plus图标
 for (const [key, component] of Object.entries(ElementPlusIconsVue)) {

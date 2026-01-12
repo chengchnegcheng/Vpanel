@@ -1,0 +1,213 @@
+/**
+ * API 基础配置和工具函数
+ * 提供统一的 HTTP 客户端配置、错误处理和请求拦截
+ */
+import axios from 'axios'
+import { ElMessage } from 'element-plus'
+import router from '@/router'
+import { cancelManager, deduplicator } from '@/utils/requestManager'
+
+// 错误码到本地化消息的映射
+const ERROR_MESSAGES = {
+  VALIDATION_ERROR: '输入数据验证失败',
+  UNAUTHORIZED: '未授权访问，请重新登录',
+  FORBIDDEN: '没有权限执行此操作',
+  NOT_FOUND: '请求的资源不存在',
+  CONFLICT: '资源冲突，请检查数据',
+  RATE_LIMIT_EXCEEDED: '请求过于频繁，请稍后再试',
+  INTERNAL_ERROR: '服务器内部错误',
+  DATABASE_ERROR: '数据库操作失败',
+  CACHE_ERROR: '缓存服务异常',
+  XRAY_ERROR: 'Xray 服务异常',
+  NETWORK_ERROR: '网络连接失败',
+  TIMEOUT_ERROR: '请求超时',
+  UNKNOWN_ERROR: '未知错误'
+}
+
+// HTTP 状态码到错误码的映射
+const STATUS_TO_ERROR_CODE = {
+  400: 'VALIDATION_ERROR',
+  401: 'UNAUTHORIZED',
+  403: 'FORBIDDEN',
+  404: 'NOT_FOUND',
+  409: 'CONFLICT',
+  429: 'RATE_LIMIT_EXCEEDED',
+  500: 'INTERNAL_ERROR',
+  502: 'INTERNAL_ERROR',
+  503: 'INTERNAL_ERROR',
+  504: 'TIMEOUT_ERROR'
+}
+
+/**
+ * 生成唯一的错误 ID
+ * @returns {string} 错误 ID
+ */
+export function generateErrorId() {
+  const timestamp = Date.now().toString(36)
+  const random = Math.random().toString(36).substring(2, 8)
+  return `ERR-${timestamp}-${random}`.toUpperCase()
+}
+
+/**
+ * 获取错误消息
+ * @param {string} code 错误码
+ * @param {string} defaultMessage 默认消息
+ * @returns {string} 本地化错误消息
+ */
+export function getErrorMessage(code, defaultMessage) {
+  return ERROR_MESSAGES[code] || defaultMessage || ERROR_MESSAGES.UNKNOWN_ERROR
+}
+
+/**
+ * 格式化 API 错误
+ * @param {Error} error Axios 错误对象
+ * @returns {Object} 格式化的错误对象
+ */
+export function formatApiError(error) {
+  const errorId = generateErrorId()
+  
+  if (error.response) {
+    const { status, data } = error.response
+    const code = data?.code || STATUS_TO_ERROR_CODE[status] || 'UNKNOWN_ERROR'
+    const message = data?.message || getErrorMessage(code)
+    
+    return {
+      errorId,
+      code,
+      message,
+      details: data?.details || {},
+      requestId: data?.request_id,
+      status,
+      timestamp: new Date().toISOString()
+    }
+  }
+  
+  if (error.request) {
+    return {
+      errorId,
+      code: 'NETWORK_ERROR',
+      message: getErrorMessage('NETWORK_ERROR'),
+      details: {},
+      status: 0,
+      timestamp: new Date().toISOString()
+    }
+  }
+  
+  return {
+    errorId,
+    code: 'UNKNOWN_ERROR',
+    message: error.message || getErrorMessage('UNKNOWN_ERROR'),
+    details: {},
+    status: 0,
+    timestamp: new Date().toISOString()
+  }
+}
+
+// 创建 axios 实例
+const api = axios.create({
+  baseURL: import.meta.env.VITE_APP_API_URL || '/api',
+  timeout: 30000,
+  headers: {
+    'Content-Type': 'application/json'
+  }
+})
+
+// 请求拦截器
+api.interceptors.request.use(
+  config => {
+    const token = localStorage.getItem('token')
+    if (token) {
+      config.headers['Authorization'] = `Bearer ${token}`
+    }
+    
+    // 支持请求取消
+    if (config.cancelKey) {
+      const controller = cancelManager.getController(config.cancelKey, config.cancelPrevious !== false)
+      config.signal = controller.signal
+    }
+    
+    return config
+  },
+  error => Promise.reject(error)
+)
+
+// 响应拦截器
+api.interceptors.response.use(
+  response => {
+    // 清理取消控制器
+    if (response.config.cancelKey) {
+      cancelManager.remove(response.config.cancelKey)
+    }
+    return response.data
+  },
+  error => {
+    // 清理取消控制器
+    if (error.config?.cancelKey) {
+      cancelManager.remove(error.config.cancelKey)
+    }
+    
+    // 如果是取消的请求，不显示错误
+    if (axios.isCancel(error) || error.name === 'AbortError') {
+      return Promise.reject({ cancelled: true })
+    }
+    
+    const formattedError = formatApiError(error)
+    
+    // 处理特定状态码
+    if (error.response?.status === 401) {
+      localStorage.removeItem('token')
+      router.push('/login')
+    }
+    
+    // 显示错误消息
+    const displayMessage = `${formattedError.message} (${formattedError.errorId})`
+    ElMessage.error(displayMessage)
+    
+    // 返回格式化的错误
+    return Promise.reject(formattedError)
+  }
+)
+
+/**
+ * 创建可取消的请求
+ * @param {string} cancelKey 取消标识
+ * @param {Object} config 请求配置
+ * @returns {Promise}
+ */
+export function cancellableRequest(cancelKey, config) {
+  return api({
+    ...config,
+    cancelKey
+  })
+}
+
+/**
+ * 创建去重请求
+ * @param {Object} config 请求配置
+ * @returns {Promise}
+ */
+export function deduplicatedRequest(config) {
+  const key = deduplicator.generateKey(
+    config.method || 'GET',
+    config.url,
+    config.params || config.data || {}
+  )
+  return deduplicator.execute(key, () => api(config))
+}
+
+/**
+ * 取消指定请求
+ * @param {string} cancelKey 取消标识
+ */
+export function cancelRequest(cancelKey) {
+  cancelManager.cancel(cancelKey)
+}
+
+/**
+ * 取消所有请求
+ */
+export function cancelAllRequests() {
+  cancelManager.cancelAll()
+}
+
+export default api

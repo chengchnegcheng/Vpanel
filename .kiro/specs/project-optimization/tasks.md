@@ -406,127 +406,130 @@
 - [x] 18. Checkpoint - 确保所有测试通过 ✅
   - 运行测试，如有问题请询问用户
 
-- [ ] 19. 前端 API 统一
-  - [ ] 19.1 重构 API 模块
+- [x] 19. 前端 API 统一
+  - [x] 19.1 重构 API 模块
     - 合并重复的 API 定义
     - 按领域组织端点
     - _Requirements: 14.1, 14.2_
 
-  - [ ] 19.2 添加 TypeScript 类型定义
+  - [x] 19.2 添加 TypeScript 类型定义
     - 创建 `web/src/types/api.ts`
     - 定义请求和响应类型
     - _Requirements: 14.4_
 
-  - [ ] 19.3 实现错误处理增强
+  - [x] 19.3 实现错误处理增强
     - 实现集中式错误处理
     - 实现错误码到本地化消息映射
     - _Requirements: 14.5, 13.7_
 
-  - [ ] 19.4 编写前端错误码映射属性测试
+  - [x] 19.4 编写前端错误码映射属性测试
     - **Property 30: Frontend Error Code Mapping**
     - **Validates: Requirements 13.7**
 
-  - [ ] 19.5 实现请求取消和去重
+  - [x] 19.5 实现请求取消和去重
     - 添加请求取消支持
     - 实现并发请求去重
     - _Requirements: 14.6, 14.7_
 
-  - [ ] 19.6 实现离线请求队列
+  - [x] 19.6 实现离线请求队列
     - 检测网络状态
     - 队列离线请求
     - 恢复后自动重试
     - _Requirements: 14.8_
 
-- [ ] 20. 前端状态管理完善
-  - [ ] 20.1 创建 Pinia Stores
+- [x] 20. 前端状态管理完善 ✅
+  - [x] 20.1 创建 Pinia Stores
     - 创建 `web/src/stores/proxy.ts`
     - 创建 `web/src/stores/system.ts`
     - 创建 `web/src/stores/settings.ts`
     - 创建 `web/src/stores/notification.ts`
     - _Requirements: 7.1_
 
-  - [ ] 20.2 实现加载和错误状态跟踪
+  - [x] 20.2 实现加载和错误状态跟踪
     - 每个 store 添加 loading 和 error 状态
     - _Requirements: 7.2_
 
-  - [ ] 20.3 实现状态持久化
+  - [x] 20.3 实现状态持久化
     - 关键状态持久化到 sessionStorage
     - _Requirements: 7.3_
 
-  - [ ] 20.4 实现重试逻辑
+  - [x] 20.4 实现重试逻辑
     - API 调用失败时指数退避重试
     - _Requirements: 7.4_
 
-  - [ ] 20.5 实现乐观更新
+  - [x] 20.5 实现乐观更新
     - 更新操作先更新 UI 再等待响应
     - _Requirements: 7.5_
 
-- [ ] 21. 前端性能优化
-  - [ ] 21.1 实现路由代码分割
+- [x] 21. 前端性能优化
+  - [x] 21.1 实现路由代码分割
     - 配置 Vue Router 懒加载
     - _Requirements: 8.1_
 
-  - [ ] 21.2 实现请求防抖
+  - [x] 21.2 实现请求防抖
     - 搜索输入防抖
     - _Requirements: 8.4_
 
-  - [ ] 21.3 编写请求防抖属性测试
+  - [x] 21.3 编写请求防抖属性测试
     - **Property 32: Request Debouncing**
     - **Validates: Requirements 8.4**
 
-  - [ ] 21.4 实现虚拟滚动
+  - [x] 21.4 实现虚拟滚动
     - 大列表使用虚拟滚动
     - _Requirements: 8.2_
 
-- [ ] 22. 前端显示优化
-  - [ ] 22.1 实现骨架屏加载
+- [x] 22. 前端显示优化 ✅
+  - [x] 22.1 实现骨架屏加载
     - 数据加载时显示骨架屏
     - _Requirements: 8.1.1_
 
-  - [ ] 22.2 实现空状态显示
+  - [x] 22.2 实现空状态显示
     - 无数据时显示有意义的空状态
     - _Requirements: 8.1.2_
 
-  - [ ] 22.3 实现表格增强
+  - [x] 22.3 实现表格增强
     - 可排序列
     - 可筛选行
     - _Requirements: 8.1.5_
 
-  - [ ] 22.4 实现表单验证反馈
+  - [x] 22.4 实现表单验证反馈 ✅
     - 提交前内联验证
+    - 创建 `web/src/components/FormValidation.vue` 表单验证组件
+    - 创建 `web/src/components/FormField.vue` 增强表单字段组件
+    - 创建 `web/src/utils/validators.js` 验证规则工具
     - _Requirements: 8.1.8_
 
-  - [ ] 22.5 实现状态颜色指示器
+  - [x] 22.5 实现状态颜色指示器
     - 代理状态颜色编码
     - _Requirements: 8.1.10_
 
-- [ ] 23. 前端错误处理
-  - [ ] 23.1 实现全局错误捕获
+- [x] 23. 前端错误处理
+  - [x] 23.1 实现全局错误捕获
     - 捕获未处理的 JavaScript 错误
     - _Requirements: 13.5_
 
-  - [ ] 23.2 实现错误 ID 显示
+  - [x] 23.2 实现错误 ID 显示
     - 错误消息包含唯一 ID
     - _Requirements: 13.10_
 
-  - [ ] 23.3 编写错误 ID 属性测试
+  - [x] 23.3 编写错误 ID 属性测试
     - **Property 31: Frontend Error ID**
     - **Validates: Requirements 13.10**
 
-  - [ ] 23.4 实现错误队列
+  - [x] 23.4 实现错误队列
     - 多错误队列显示
     - _Requirements: 13.11_
 
-  - [ ] 23.5 实现客户端错误日志上报
+  - [x] 23.5 实现客户端错误日志上报
     - 错误发送到后端
     - _Requirements: 13.9_
 
-- [ ] 24. 数据序列化测试
-  - [ ] 24.1 编写序列化往返属性测试
+- [x] 24. 数据序列化测试
+  - [x] 24.1 编写序列化往返属性测试
     - **Property 33: Data Serialization Round-Trip**
     - **Validates: Requirements 9.5**
 
-- [ ] 25. Final Checkpoint - 确保所有测试通过
+- [x] 25. Final Checkpoint - 确保所有测试通过
   - 运行所有测试
   - 验证所有功能正常工作
   - 如有问题请询问用户

@@ -1,134 +1,263 @@
 import { createRouter, createWebHistory } from 'vue-router'
 
-// 使用懒加载方式导入组件
-const MainLayout = () => import('../layouts/MainLayout.vue')
-const Login = () => import('../views/Login.vue')
-const Dashboard = () => import('../views/Dashboard.vue')
-const Settings = () => import('../views/Settings.vue')
-const Inbounds = () => import('../views/Inbounds.vue')
-const NotFound = () => import('../views/NotFound.vue')
-const Profile = () => import('../views/Profile.vue')
-const ChangePassword = () => import('../views/ChangePassword.vue')
+/**
+ * 路由配置
+ * 使用动态导入实现代码分割和懒加载
+ * 按功能模块分组，优化加载性能
+ */
+
+// 布局组件 - 预加载
+const MainLayout = () => import(/* webpackChunkName: "layout" */ '../layouts/MainLayout.vue')
+
+// 认证相关 - 独立 chunk
+const Login = () => import(/* webpackChunkName: "auth" */ '../views/Login.vue')
+const Register = () => import(/* webpackChunkName: "auth" */ '../views/Register.vue')
+
+// 核心页面 - 优先加载
+const Dashboard = () => import(/* webpackChunkName: "core" */ '../views/Dashboard.vue')
+const Profile = () => import(/* webpackChunkName: "core" */ '../views/Profile.vue')
+const ChangePassword = () => import(/* webpackChunkName: "core" */ '../views/ChangePassword.vue')
+
+// 代理管理 - 按需加载
+const Inbounds = () => import(/* webpackChunkName: "proxy" */ '../views/Inbounds.vue')
+
+// 用户管理 - 按需加载
+const Users = () => import(/* webpackChunkName: "users" */ '../views/Users.vue')
+const Roles = () => import(/* webpackChunkName: "users" */ '../views/Roles.vue')
+
+// 监控统计 - 按需加载
+const SystemMonitor = () => import(/* webpackChunkName: "monitor" */ '../views/SystemMonitor.vue')
+const TrafficMonitor = () => import(/* webpackChunkName: "monitor" */ '../views/TrafficMonitor.vue')
+const Stats = () => import(/* webpackChunkName: "monitor" */ '../views/Stats.vue')
+
+// 系统管理 - 按需加载
+const Settings = () => import(/* webpackChunkName: "system" */ '../views/Settings.vue')
+const Logs = () => import(/* webpackChunkName: "system" */ '../views/Logs.vue')
+const Certificates = () => import(/* webpackChunkName: "system" */ '../views/Certificates.vue')
+const Backups = () => import(/* webpackChunkName: "system" */ '../views/Backups.vue')
+
+// 错误页面
+const NotFound = () => import(/* webpackChunkName: "error" */ '../views/NotFound.vue')
 
 const routes = [
   {
     path: '/',
     component: MainLayout,
     children: [
+      // 核心页面
       {
         path: '',
         name: 'Dashboard',
         component: Dashboard,
-        meta: { requiresAuth: true }
-      },
-      {
-        path: 'settings',
-        name: 'Settings',
-        component: Settings,
-        meta: { requiresAuth: true }
-      },
-      {
-        path: 'inbounds',
-        name: 'Inbounds',
-        component: Inbounds,
-        meta: { requiresAuth: true }
-      },
-      {
-        path: 'users',
-        name: 'Users',
-        component: () => import('../views/Users.vue'),
-        meta: { requiresAuth: true }
-      },
-      {
-        path: 'roles',
-        name: 'Roles',
-        component: () => import('../views/Roles.vue'),
-        meta: { requiresAuth: true }
-      },
-      {
-        path: 'system-monitor',
-        name: 'SystemMonitor',
-        component: () => import('../views/SystemMonitor.vue'),
-        meta: { requiresAuth: true }
-      },
-      {
-        path: 'traffic-monitor',
-        name: 'TrafficMonitor',
-        component: () => import('../views/TrafficMonitor.vue'),
-        meta: { requiresAuth: true }
-      },
-      {
-        path: 'stats',
-        name: 'Stats',
-        component: () => import('../views/Stats.vue'),
-        meta: { requiresAuth: true }
-      },
-      {
-        path: 'logs',
-        name: 'Logs',
-        component: () => import('../views/Logs.vue'),
-        meta: { requiresAuth: true }
-      },
-      {
-        path: 'certificates',
-        name: 'Certificates',
-        component: () => import('../views/Certificates.vue'),
-        meta: { requiresAuth: true }
-      },
-      {
-        path: 'backups',
-        name: 'Backups',
-        component: () => import('../views/Backups.vue'),
-        meta: { requiresAuth: true }
+        meta: { 
+          requiresAuth: true,
+          title: '仪表盘'
+        }
       },
       {
         path: 'profile',
         name: 'Profile',
         component: Profile,
-        meta: { requiresAuth: true }
+        meta: { 
+          requiresAuth: true,
+          title: '个人资料'
+        }
       },
       {
         path: 'change-password',
         name: 'ChangePassword',
         component: ChangePassword,
-        meta: { requiresAuth: true }
+        meta: { 
+          requiresAuth: true,
+          title: '修改密码'
+        }
+      },
+      
+      // 代理管理
+      {
+        path: 'inbounds',
+        name: 'Inbounds',
+        component: Inbounds,
+        meta: { 
+          requiresAuth: true,
+          title: '入站管理'
+        }
+      },
+      
+      // 用户管理
+      {
+        path: 'users',
+        name: 'Users',
+        component: Users,
+        meta: { 
+          requiresAuth: true,
+          title: '用户管理',
+          roles: ['admin']
+        }
+      },
+      {
+        path: 'roles',
+        name: 'Roles',
+        component: Roles,
+        meta: { 
+          requiresAuth: true,
+          title: '角色管理',
+          roles: ['admin']
+        }
+      },
+      
+      // 监控统计
+      {
+        path: 'system-monitor',
+        name: 'SystemMonitor',
+        component: SystemMonitor,
+        meta: { 
+          requiresAuth: true,
+          title: '系统监控'
+        }
+      },
+      {
+        path: 'traffic-monitor',
+        name: 'TrafficMonitor',
+        component: TrafficMonitor,
+        meta: { 
+          requiresAuth: true,
+          title: '流量监控'
+        }
+      },
+      {
+        path: 'stats',
+        name: 'Stats',
+        component: Stats,
+        meta: { 
+          requiresAuth: true,
+          title: '统计数据'
+        }
+      },
+      
+      // 系统管理
+      {
+        path: 'settings',
+        name: 'Settings',
+        component: Settings,
+        meta: { 
+          requiresAuth: true,
+          title: '系统设置',
+          roles: ['admin']
+        }
+      },
+      {
+        path: 'logs',
+        name: 'Logs',
+        component: Logs,
+        meta: { 
+          requiresAuth: true,
+          title: '系统日志'
+        }
+      },
+      {
+        path: 'certificates',
+        name: 'Certificates',
+        component: Certificates,
+        meta: { 
+          requiresAuth: true,
+          title: '证书管理',
+          roles: ['admin']
+        }
+      },
+      {
+        path: 'backups',
+        name: 'Backups',
+        component: Backups,
+        meta: { 
+          requiresAuth: true,
+          title: '备份管理',
+          roles: ['admin']
+        }
       }
     ]
   },
+  
+  // 认证页面
   {
     path: '/login',
     name: 'Login',
-    component: Login
+    component: Login,
+    meta: { 
+      title: '登录',
+      guest: true
+    }
   },
   {
     path: '/register',
     name: 'Register',
-    component: () => import('../views/Register.vue')
+    component: Register,
+    meta: { 
+      title: '注册',
+      guest: true
+    }
   },
+  
+  // 404 页面
   {
     path: '/:pathMatch(.*)*',
     name: 'NotFound',
-    component: NotFound
+    component: NotFound,
+    meta: { title: '页面未找到' }
   }
 ]
 
-// 添加路由守卫
+// 创建路由实例
 const router = createRouter({
   history: createWebHistory(),
-  routes
+  routes,
+  scrollBehavior(to, from, savedPosition) {
+    if (savedPosition) {
+      return savedPosition
+    }
+    return { top: 0 }
+  }
 })
 
 // 全局前置守卫
 router.beforeEach((to, from, next) => {
   const isAuthenticated = localStorage.getItem('token')
+  const userRole = localStorage.getItem('userRole') || 'user'
   
+  // 更新页面标题
+  if (to.meta.title) {
+    document.title = `${to.meta.title} - V Panel`
+  }
+  
+  // 需要认证的页面
   if (to.meta.requiresAuth && !isAuthenticated) {
-    next('/login')
-  } else if (to.path === '/login' && isAuthenticated) {
+    next({ name: 'Login', query: { redirect: to.fullPath } })
+    return
+  }
+  
+  // 已登录用户访问登录/注册页面
+  if (to.meta.guest && isAuthenticated) {
     next('/')
-  } else {
-    next()
+    return
+  }
+  
+  // 角色权限检查
+  if (to.meta.roles && !to.meta.roles.includes(userRole)) {
+    next({ name: 'Dashboard' })
+    return
+  }
+  
+  next()
+})
+
+// 全局后置钩子 - 用于预加载
+router.afterEach((to) => {
+  // 预加载可能访问的下一个页面
+  if (to.name === 'Dashboard') {
+    // 预加载常用页面
+    import(/* webpackChunkName: "proxy" */ '../views/Inbounds.vue')
+    import(/* webpackChunkName: "monitor" */ '../views/SystemMonitor.vue')
   }
 })
 
-export default router 
+export default router

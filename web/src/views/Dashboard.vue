@@ -207,8 +207,8 @@
 <script setup>
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { ElMessage } from 'element-plus'
-import systemApi from '@/api/system'
-import api from '@/api/index'
+import { systemApi } from '@/api'
+import api from '@/api'
 
 // 系统状态数据
 const systemStats = ref({

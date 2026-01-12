@@ -136,7 +136,7 @@
 <script setup>
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import * as echarts from 'echarts'
-import systemApi from '@/api/system'
+import { systemApi } from '@/api'
 import { ElMessage } from 'element-plus'
 
 // 图表引用
