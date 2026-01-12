@@ -136,6 +136,16 @@ func (r *CachedUserRepository) List(ctx context.Context, limit, offset int) ([]*
 	return r.repo.List(ctx, limit, offset)
 }
 
+// Count returns the total number of users (not cached).
+func (r *CachedUserRepository) Count(ctx context.Context) (int64, error) {
+	return r.repo.Count(ctx)
+}
+
+// CountActive returns the number of active users (not cached).
+func (r *CachedUserRepository) CountActive(ctx context.Context) (int64, error) {
+	return r.repo.CountActive(ctx)
+}
+
 // cacheUser caches a user by both ID and username.
 func (r *CachedUserRepository) cacheUser(ctx context.Context, user *User) {
 	data, err := json.Marshal(user)

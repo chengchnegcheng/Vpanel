@@ -61,8 +61,10 @@ type AuthConfig struct {
 
 // XrayConfig contains Xray-core settings.
 type XrayConfig struct {
+	BinaryPath string `yaml:"binary_path" env:"V_XRAY_BINARY_PATH" default:"xray"`
 	BinPath    string `yaml:"bin_path" env:"V_XRAY_BIN_PATH" default:"./xray/bin"`
 	ConfigPath string `yaml:"config_path" env:"V_XRAY_CONFIG_PATH" default:"./xray/config.json"`
+	BackupDir  string `yaml:"backup_dir" env:"V_XRAY_BACKUP_DIR" default:"/tmp/xray-backups"`
 	Version    string `yaml:"version" env:"V_XRAY_VERSION" default:"latest"`
 }
 

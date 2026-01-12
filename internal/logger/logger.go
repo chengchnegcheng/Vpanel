@@ -75,6 +75,99 @@ func F(key string, value any) Field {
 	return Field{Key: key, Value: value}
 }
 
+// Standard field keys for consistent logging across the application.
+const (
+	// Request-related fields
+	FieldRequestID    = "request_id"
+	FieldCorrelationID = "correlation_id"
+	FieldMethod       = "method"
+	FieldPath         = "path"
+	FieldStatusCode   = "status_code"
+	FieldDuration     = "duration_ms"
+	FieldClientIP     = "client_ip"
+	FieldUserAgent    = "user_agent"
+
+	// User-related fields
+	FieldUserID   = "user_id"
+	FieldUsername = "username"
+	FieldRole     = "role"
+
+	// Resource-related fields
+	FieldResourceType = "resource_type"
+	FieldResourceID   = "resource_id"
+	FieldAction       = "action"
+
+	// Error-related fields
+	FieldError     = "error"
+	FieldErrorCode = "error_code"
+	FieldStack     = "stack"
+
+	// System-related fields
+	FieldComponent = "component"
+	FieldService   = "service"
+	FieldVersion   = "version"
+)
+
+// Helper functions for common fields
+
+// RequestID creates a request_id field.
+func RequestID(id string) Field {
+	return Field{Key: FieldRequestID, Value: id}
+}
+
+// CorrelationID creates a correlation_id field.
+func CorrelationID(id string) Field {
+	return Field{Key: FieldCorrelationID, Value: id}
+}
+
+// UserID creates a user_id field.
+func UserID(id int64) Field {
+	return Field{Key: FieldUserID, Value: id}
+}
+
+// Username creates a username field.
+func Username(name string) Field {
+	return Field{Key: FieldUsername, Value: name}
+}
+
+// Err creates an error field.
+func Err(err error) Field {
+	if err == nil {
+		return Field{Key: FieldError, Value: nil}
+	}
+	return Field{Key: FieldError, Value: err.Error()}
+}
+
+// Component creates a component field.
+func Component(name string) Field {
+	return Field{Key: FieldComponent, Value: name}
+}
+
+// Duration creates a duration_ms field.
+func Duration(d time.Duration) Field {
+	return Field{Key: FieldDuration, Value: d.Milliseconds()}
+}
+
+// StatusCode creates a status_code field.
+func StatusCode(code int) Field {
+	return Field{Key: FieldStatusCode, Value: code}
+}
+
+// Action creates an action field.
+func Action(action string) Field {
+	return Field{Key: FieldAction, Value: action}
+}
+
+// ResourceType creates a resource_type field.
+func ResourceType(t string) Field {
+	return Field{Key: FieldResourceType, Value: t}
+}
+
+// ResourceID creates a resource_id field.
+func ResourceID(id any) Field {
+	return Field{Key: FieldResourceID, Value: id}
+}
+
 // Logger is the interface for logging.
 type Logger interface {
 	Debug(msg string, fields ...Field)

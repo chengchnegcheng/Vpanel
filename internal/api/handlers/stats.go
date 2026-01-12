@@ -2,26 +2,52 @@
 package handlers
 
 import (
+	"encoding/json"
+	"fmt"
 	"net/http"
+	"time"
 
 	"github.com/gin-gonic/gin"
 
+	"v/internal/cache"
 	"v/internal/database/repository"
 	"v/internal/logger"
+	"v/pkg/errors"
 )
 
 // StatsHandler handles statistics-related requests.
 type StatsHandler struct {
 	logger logger.Logger
 	repos  *repository.Repositories
+	cache  cache.Cache
 }
 
+// Cache keys and TTLs for statistics
+const (
+	statsCacheTTL           = 30 * time.Second // Short TTL for real-time stats
+	dashboardStatsCacheKey  = "stats:dashboard"
+	protocolStatsCacheKey   = "stats:protocol"
+	trafficStatsCachePrefix = "stats:traffic:"
+	userStatsCachePrefix    = "stats:user:"
+)
+
 // NewStatsHandler creates a new StatsHandler.
-func NewStatsHandler(log logger.Logger, repos *repository.Repositories) *StatsHandler {
+func NewStatsHandler(log logger.Logger, repos *repository.Repositories, c cache.Cache) *StatsHandler {
 	return &StatsHandler{
 		logger: log,
 		repos:  repos,
+		cache:  c,
 	}
+}
+
+// getRequestID extracts request ID from context.
+func getRequestID(c *gin.Context) string {
+	if id, exists := c.Get("request_id"); exists {
+		if s, ok := id.(string); ok {
+			return s
+		}
+	}
+	return ""
 }
 
 // DashboardStats represents dashboard statistics.
@@ -38,15 +64,77 @@ type DashboardStats struct {
 
 // GetDashboardStats returns dashboard statistics.
 func (h *StatsHandler) GetDashboardStats(c *gin.Context) {
-	stats := DashboardStats{
-		TotalUsers:      0,
-		ActiveUsers:     0,
-		TotalProxies:    0,
-		ActiveProxies:   0,
-		TotalTraffic:    0,
-		UploadTraffic:   0,
-		DownloadTraffic: 0,
-		OnlineCount:     0,
+	ctx := c.Request.Context()
+
+	// Try to get from cache first
+	if h.cache != nil {
+		if cached, err := h.cache.Get(ctx, dashboardStatsCacheKey); err == nil && cached != nil {
+			var stats DashboardStats
+			if err := json.Unmarshal(cached, &stats); err == nil {
+				c.JSON(http.StatusOK, gin.H{
+					"code":    200,
+					"message": "success",
+					"data":    stats,
+				})
+				return
+			}
+		}
+	}
+
+	stats := DashboardStats{}
+
+	// Get total users
+	totalUsers, err := h.repos.User.Count(ctx)
+	if err != nil {
+		h.logger.Error("failed to count users", logger.F("error", err))
+	} else {
+		stats.TotalUsers = totalUsers
+	}
+
+	// Get active users
+	activeUsers, err := h.repos.User.CountActive(ctx)
+	if err != nil {
+		h.logger.Error("failed to count active users", logger.F("error", err))
+	} else {
+		stats.ActiveUsers = activeUsers
+	}
+
+	// Get total proxies
+	totalProxies, err := h.repos.Proxy.Count(ctx)
+	if err != nil {
+		h.logger.Error("failed to count proxies", logger.F("error", err))
+	} else {
+		stats.TotalProxies = totalProxies
+	}
+
+	// Get active proxies
+	activeProxies, err := h.repos.Proxy.CountEnabled(ctx)
+	if err != nil {
+		h.logger.Error("failed to count enabled proxies", logger.F("error", err))
+	} else {
+		stats.ActiveProxies = activeProxies
+	}
+
+	// Get total traffic
+	upload, download, err := h.repos.Traffic.GetTotalTraffic(ctx)
+	if err != nil {
+		h.logger.Error("failed to get total traffic", logger.F("error", err))
+	} else {
+		stats.UploadTraffic = upload
+		stats.DownloadTraffic = download
+		stats.TotalTraffic = upload + download
+	}
+
+	// Online count is based on recent activity (placeholder for now)
+	stats.OnlineCount = 0
+
+	// Cache the result
+	if h.cache != nil {
+		if data, err := json.Marshal(stats); err == nil {
+			if err := h.cache.Set(ctx, dashboardStatsCacheKey, data, statsCacheTTL); err != nil {
+				h.logger.Warn("failed to cache dashboard stats", logger.F("error", err))
+			}
+		}
 	}
 
 	c.JSON(http.StatusOK, gin.H{
@@ -59,18 +147,92 @@ func (h *StatsHandler) GetDashboardStats(c *gin.Context) {
 // ProtocolStats represents protocol statistics.
 type ProtocolStats struct {
 	Protocol string `json:"protocol"`
-	Count    int    `json:"count"`
+	Count    int64  `json:"count"`
 	Traffic  int64  `json:"traffic"`
 	Status   string `json:"status"`
 }
 
 // GetProtocolStats returns protocol statistics.
 func (h *StatsHandler) GetProtocolStats(c *gin.Context) {
-	stats := []ProtocolStats{
-		{Protocol: "vmess", Count: 0, Traffic: 0, Status: "active"},
-		{Protocol: "vless", Count: 0, Traffic: 0, Status: "active"},
-		{Protocol: "trojan", Count: 0, Traffic: 0, Status: "active"},
-		{Protocol: "shadowsocks", Count: 0, Traffic: 0, Status: "active"},
+	ctx := c.Request.Context()
+	period := c.DefaultQuery("period", "today")
+
+	// Try to get from cache first
+	cacheKey := fmt.Sprintf("%s:%s", protocolStatsCacheKey, period)
+	if h.cache != nil {
+		if cached, err := h.cache.Get(ctx, cacheKey); err == nil && cached != nil {
+			var stats []ProtocolStats
+			if err := json.Unmarshal(cached, &stats); err == nil {
+				c.JSON(http.StatusOK, gin.H{
+					"code":    200,
+					"message": "success",
+					"data":    stats,
+				})
+				return
+			}
+		}
+	}
+
+	start, end := getPeriodRange(period)
+
+	// Get proxy counts by protocol
+	protocolCounts, err := h.repos.Proxy.CountByProtocol(ctx)
+	if err != nil {
+		h.logger.Error("failed to get protocol counts", logger.F("error", err))
+		c.JSON(http.StatusInternalServerError, errors.NewInternalError("failed to get protocol stats", err).ToResponse(getRequestID(c)))
+		return
+	}
+
+	// Get traffic by protocol
+	trafficStats, err := h.repos.Traffic.GetTrafficByProtocol(ctx, start, end)
+	if err != nil {
+		h.logger.Error("failed to get traffic by protocol", logger.F("error", err))
+	}
+
+	// Build traffic map for quick lookup
+	trafficMap := make(map[string]*repository.ProtocolTrafficStats)
+	for _, ts := range trafficStats {
+		trafficMap[ts.Protocol] = ts
+	}
+
+	// Combine counts and traffic
+	stats := make([]ProtocolStats, 0, len(protocolCounts))
+	for _, pc := range protocolCounts {
+		ps := ProtocolStats{
+			Protocol: pc.Protocol,
+			Count:    pc.Count,
+			Status:   "active",
+		}
+		if ts, ok := trafficMap[pc.Protocol]; ok {
+			ps.Traffic = ts.Upload + ts.Download
+		}
+		stats = append(stats, ps)
+	}
+
+	// Add default protocols if not present
+	defaultProtocols := []string{"vmess", "vless", "trojan", "shadowsocks"}
+	existingProtocols := make(map[string]bool)
+	for _, s := range stats {
+		existingProtocols[s.Protocol] = true
+	}
+	for _, p := range defaultProtocols {
+		if !existingProtocols[p] {
+			stats = append(stats, ProtocolStats{
+				Protocol: p,
+				Count:    0,
+				Traffic:  0,
+				Status:   "active",
+			})
+		}
+	}
+
+	// Cache the result
+	if h.cache != nil {
+		if data, err := json.Marshal(stats); err == nil {
+			if err := h.cache.Set(ctx, cacheKey, data, statsCacheTTL); err != nil {
+				h.logger.Warn("failed to cache protocol stats", logger.F("error", err))
+			}
+		}
 	}
 
 	c.JSON(http.StatusOK, gin.H{
@@ -91,18 +253,78 @@ type TrafficStats struct {
 
 // GetTrafficStats returns traffic statistics.
 func (h *StatsHandler) GetTrafficStats(c *gin.Context) {
+	ctx := c.Request.Context()
 	period := c.DefaultQuery("period", "today")
 
-	stats := TrafficStats{
-		Total:      0,
-		Upload:     0,
-		Download:   0,
-		Limit:      10 * 1024 * 1024 * 1024, // 10GB default limit
-		Percentage: 0,
+	var start, end time.Time
+	var cacheKey string
+
+	if period == "custom" {
+		startStr := c.Query("start")
+		endStr := c.Query("end")
+		var err error
+		start, err = time.Parse(time.RFC3339, startStr)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, errors.NewValidationError("invalid start date", err).ToResponse(getRequestID(c)))
+			return
+		}
+		end, err = time.Parse(time.RFC3339, endStr)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, errors.NewValidationError("invalid end date", err).ToResponse(getRequestID(c)))
+			return
+		}
+		// Don't cache custom ranges as they vary too much
+		cacheKey = ""
+	} else {
+		start, end = getPeriodRange(period)
+		cacheKey = fmt.Sprintf("%s%s", trafficStatsCachePrefix, period)
 	}
 
-	// In a real implementation, query from database based on period
-	_ = period
+	// Try to get from cache first (only for non-custom periods)
+	if cacheKey != "" && h.cache != nil {
+		if cached, err := h.cache.Get(ctx, cacheKey); err == nil && cached != nil {
+			var stats TrafficStats
+			if err := json.Unmarshal(cached, &stats); err == nil {
+				c.JSON(http.StatusOK, gin.H{
+					"code":    200,
+					"message": "success",
+					"data":    stats,
+				})
+				return
+			}
+		}
+	}
+
+	upload, download, err := h.repos.Traffic.GetTotalTrafficByPeriod(ctx, start, end)
+	if err != nil {
+		h.logger.Error("failed to get traffic stats", logger.F("error", err))
+		c.JSON(http.StatusInternalServerError, errors.NewInternalError("failed to get traffic stats", err).ToResponse(getRequestID(c)))
+		return
+	}
+
+	total := upload + download
+	limit := int64(10 * 1024 * 1024 * 1024) // 10GB default limit
+	percentage := float64(0)
+	if limit > 0 {
+		percentage = float64(total) / float64(limit) * 100
+	}
+
+	stats := TrafficStats{
+		Total:      total,
+		Upload:     upload,
+		Download:   download,
+		Limit:      limit,
+		Percentage: percentage,
+	}
+
+	// Cache the result (only for non-custom periods)
+	if cacheKey != "" && h.cache != nil {
+		if data, err := json.Marshal(stats); err == nil {
+			if err := h.cache.Set(ctx, cacheKey, data, statsCacheTTL); err != nil {
+				h.logger.Warn("failed to cache traffic stats", logger.F("error", err))
+			}
+		}
+	}
 
 	c.JSON(http.StatusOK, gin.H{
 		"code":    200,
@@ -118,13 +340,62 @@ type UserStats struct {
 	Upload     int64  `json:"upload"`
 	Download   int64  `json:"download"`
 	Total      int64  `json:"total"`
-	ProxyCount int    `json:"proxy_count"`
+	ProxyCount int64  `json:"proxy_count"`
 	LastActive string `json:"last_active"`
 }
 
 // GetUserStats returns user statistics.
 func (h *StatsHandler) GetUserStats(c *gin.Context) {
-	stats := []UserStats{}
+	ctx := c.Request.Context()
+	period := c.DefaultQuery("period", "today")
+	limit := 10 // Default limit
+
+	// Try to get from cache first
+	cacheKey := fmt.Sprintf("%s%s", userStatsCachePrefix, period)
+	if h.cache != nil {
+		if cached, err := h.cache.Get(ctx, cacheKey); err == nil && cached != nil {
+			var stats []UserStats
+			if err := json.Unmarshal(cached, &stats); err == nil {
+				c.JSON(http.StatusOK, gin.H{
+					"code":    200,
+					"message": "success",
+					"data":    stats,
+				})
+				return
+			}
+		}
+	}
+
+	start, end := getPeriodRange(period)
+
+	trafficStats, err := h.repos.Traffic.GetTrafficByUser(ctx, start, end, limit)
+	if err != nil {
+		h.logger.Error("failed to get user stats", logger.F("error", err))
+		c.JSON(http.StatusInternalServerError, errors.NewInternalError("failed to get user stats", err).ToResponse(getRequestID(c)))
+		return
+	}
+
+	stats := make([]UserStats, 0, len(trafficStats))
+	for _, ts := range trafficStats {
+		stats = append(stats, UserStats{
+			UserID:     ts.UserID,
+			Username:   ts.Username,
+			Upload:     ts.Upload,
+			Download:   ts.Download,
+			Total:      ts.Upload + ts.Download,
+			ProxyCount: ts.ProxyCount,
+			LastActive: "",
+		})
+	}
+
+	// Cache the result
+	if h.cache != nil {
+		if data, err := json.Marshal(stats); err == nil {
+			if err := h.cache.Set(ctx, cacheKey, data, statsCacheTTL); err != nil {
+				h.logger.Warn("failed to cache user stats", logger.F("error", err))
+			}
+		}
+	}
 
 	c.JSON(http.StatusOK, gin.H{
 		"code":    200,
@@ -153,16 +424,70 @@ type DetailedStats struct {
 
 // GetDetailedStats returns detailed statistics.
 func (h *StatsHandler) GetDetailedStats(c *gin.Context) {
+	ctx := c.Request.Context()
 	period := c.DefaultQuery("period", "today")
+
+	start, end := getPeriodRange(period)
+
+	// Get total traffic
+	upload, download, err := h.repos.Traffic.GetTotalTrafficByPeriod(ctx, start, end)
+	if err != nil {
+		h.logger.Error("failed to get total traffic", logger.F("error", err))
+	}
 
 	stats := DetailedStats{
 		Period:       period,
-		TotalTraffic: 0,
-		Upload:       0,
-		Download:     0,
+		TotalTraffic: upload + download,
+		Upload:       upload,
+		Download:     download,
 		ByProtocol:   []ProtocolStats{},
 		ByUser:       []UserStats{},
 		Timeline:     []TimelinePoint{},
+	}
+
+	// Get protocol stats
+	protocolCounts, _ := h.repos.Proxy.CountByProtocol(ctx)
+	trafficByProtocol, _ := h.repos.Traffic.GetTrafficByProtocol(ctx, start, end)
+
+	trafficMap := make(map[string]*repository.ProtocolTrafficStats)
+	for _, ts := range trafficByProtocol {
+		trafficMap[ts.Protocol] = ts
+	}
+
+	for _, pc := range protocolCounts {
+		ps := ProtocolStats{
+			Protocol: pc.Protocol,
+			Count:    pc.Count,
+			Status:   "active",
+		}
+		if ts, ok := trafficMap[pc.Protocol]; ok {
+			ps.Traffic = ts.Upload + ts.Download
+		}
+		stats.ByProtocol = append(stats.ByProtocol, ps)
+	}
+
+	// Get user stats
+	userTraffic, _ := h.repos.Traffic.GetTrafficByUser(ctx, start, end, 10)
+	for _, ut := range userTraffic {
+		stats.ByUser = append(stats.ByUser, UserStats{
+			UserID:     ut.UserID,
+			Username:   ut.Username,
+			Upload:     ut.Upload,
+			Download:   ut.Download,
+			Total:      ut.Upload + ut.Download,
+			ProxyCount: ut.ProxyCount,
+		})
+	}
+
+	// Get timeline data
+	interval := getIntervalForPeriod(period)
+	timeline, _ := h.repos.Traffic.GetTrafficTimeline(ctx, start, end, interval)
+	for _, tp := range timeline {
+		stats.Timeline = append(stats.Timeline, TimelinePoint{
+			Time:     tp.Time.Format(time.RFC3339),
+			Upload:   tp.Upload,
+			Download: tp.Download,
+		})
 	}
 
 	c.JSON(http.StatusOK, gin.H{
@@ -170,4 +495,41 @@ func (h *StatsHandler) GetDetailedStats(c *gin.Context) {
 		"message": "success",
 		"data":    stats,
 	})
+}
+
+// getPeriodRange returns the start and end time for a given period.
+func getPeriodRange(period string) (start, end time.Time) {
+	now := time.Now()
+	end = now
+
+	switch period {
+	case "today":
+		start = time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
+	case "week":
+		start = now.AddDate(0, 0, -7)
+	case "month":
+		start = now.AddDate(0, -1, 0)
+	case "year":
+		start = now.AddDate(-1, 0, 0)
+	default:
+		start = time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
+	}
+
+	return start, end
+}
+
+// getIntervalForPeriod returns the appropriate interval for timeline data.
+func getIntervalForPeriod(period string) string {
+	switch period {
+	case "today":
+		return "hour"
+	case "week":
+		return "day"
+	case "month":
+		return "day"
+	case "year":
+		return "month"
+	default:
+		return "hour"
+	}
 }

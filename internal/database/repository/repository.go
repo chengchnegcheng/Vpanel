@@ -53,9 +53,10 @@ func (User) TableName() string {
 // Proxy represents a proxy configuration in the database.
 type Proxy struct {
 	ID        int64          `gorm:"primaryKey;autoIncrement"`
+	UserID    int64          `gorm:"index;not null"`
 	Name      string         `gorm:"size:100;not null"`
 	Protocol  string         `gorm:"size:20;not null"`
-	Port      int            `gorm:"not null"`
+	Port      int            `gorm:"not null;index"`
 	Host      string         `gorm:"size:255"`
 	Settings  map[string]any `gorm:"serializer:json"`
 	Enabled   bool           `gorm:"default:true"`
@@ -108,6 +109,9 @@ type UserRepository interface {
 	Update(ctx context.Context, user *User) error
 	Delete(ctx context.Context, id int64) error
 	List(ctx context.Context, limit, offset int) ([]*User, error)
+	// Statistics methods
+	Count(ctx context.Context) (int64, error)
+	CountActive(ctx context.Context) (int64, error)
 }
 
 // ProxyRepository defines the interface for proxy data access.
@@ -119,6 +123,24 @@ type ProxyRepository interface {
 	List(ctx context.Context, limit, offset int) ([]*Proxy, error)
 	GetByProtocol(ctx context.Context, protocol string) ([]*Proxy, error)
 	GetEnabled(ctx context.Context) ([]*Proxy, error)
+	// User-related methods
+	GetByUserID(ctx context.Context, userID int64, limit, offset int) ([]*Proxy, error)
+	CountByUserID(ctx context.Context, userID int64) (int64, error)
+	GetByPort(ctx context.Context, port int) (*Proxy, error)
+	// Batch operations
+	EnableByUserID(ctx context.Context, userID int64) error
+	DisableByUserID(ctx context.Context, userID int64) error
+	DeleteByIDs(ctx context.Context, ids []int64) error
+	// Statistics methods
+	Count(ctx context.Context) (int64, error)
+	CountEnabled(ctx context.Context) (int64, error)
+	CountByProtocol(ctx context.Context) ([]*ProtocolCount, error)
+}
+
+// ProtocolCount represents proxy count by protocol.
+type ProtocolCount struct {
+	Protocol string
+	Count    int64
 }
 
 // TrafficRepository defines the interface for traffic data access.
@@ -128,6 +150,37 @@ type TrafficRepository interface {
 	GetByProxyID(ctx context.Context, proxyID int64, limit, offset int) ([]*Traffic, error)
 	GetByDateRange(ctx context.Context, start, end time.Time) ([]*Traffic, error)
 	GetTotalByUser(ctx context.Context, userID int64) (upload, download int64, err error)
+	GetTotalByProxy(ctx context.Context, proxyID int64) (upload, download int64, err error)
+	// Statistics methods
+	GetTotalTraffic(ctx context.Context) (upload, download int64, err error)
+	GetTotalTrafficByPeriod(ctx context.Context, start, end time.Time) (upload, download int64, err error)
+	GetTrafficByProtocol(ctx context.Context, start, end time.Time) ([]*ProtocolTrafficStats, error)
+	GetTrafficByUser(ctx context.Context, start, end time.Time, limit int) ([]*UserTrafficStats, error)
+	GetTrafficTimeline(ctx context.Context, start, end time.Time, interval string) ([]*TrafficTimelinePoint, error)
+}
+
+// ProtocolTrafficStats represents traffic statistics by protocol.
+type ProtocolTrafficStats struct {
+	Protocol string
+	Count    int64
+	Upload   int64
+	Download int64
+}
+
+// UserTrafficStats represents traffic statistics by user.
+type UserTrafficStats struct {
+	UserID     int64
+	Username   string
+	Upload     int64
+	Download   int64
+	ProxyCount int64
+}
+
+// TrafficTimelinePoint represents a point in the traffic timeline.
+type TrafficTimelinePoint struct {
+	Time     time.Time
+	Upload   int64
+	Download int64
 }
 
 // LoginHistoryRepository defines the interface for login history data access.
@@ -138,6 +191,39 @@ type LoginHistoryRepository interface {
 	Count(ctx context.Context, userID int64) (int64, error)
 }
 
+// AuditLog represents an audit log entry in the database.
+type AuditLog struct {
+	ID           int64     `gorm:"primaryKey;autoIncrement"`
+	UserID       *int64    `gorm:"index"`
+	Username     string    `gorm:"size:50"`
+	Action       string    `gorm:"size:50;not null;index"`
+	ResourceType string    `gorm:"size:50;not null;index"`
+	ResourceID   string    `gorm:"size:100"`
+	Details      string    `gorm:"type:text"`
+	IPAddress    string    `gorm:"size:50"`
+	UserAgent    string    `gorm:"size:255"`
+	RequestID    string    `gorm:"size:100;index"`
+	Status       string    `gorm:"size:20;default:success"`
+	CreatedAt    time.Time `gorm:"autoCreateTime;index"`
+}
+
+// TableName returns the table name for AuditLog.
+func (AuditLog) TableName() string {
+	return "audit_logs"
+}
+
+// AuditLogRepository defines the interface for audit log data access.
+type AuditLogRepository interface {
+	Create(ctx context.Context, log *AuditLog) error
+	List(ctx context.Context, limit, offset int) ([]*AuditLog, error)
+	GetByUserID(ctx context.Context, userID int64, limit, offset int) ([]*AuditLog, error)
+	GetByAction(ctx context.Context, action string, limit, offset int) ([]*AuditLog, error)
+	GetByResourceType(ctx context.Context, resourceType string, limit, offset int) ([]*AuditLog, error)
+	GetByDateRange(ctx context.Context, start, end time.Time, limit, offset int) ([]*AuditLog, error)
+	Count(ctx context.Context) (int64, error)
+	DeleteOlderThan(ctx context.Context, before time.Time) (int64, error)
+}
+
 // Repositories holds all repository instances.
 type Repositories struct {
 	User         UserRepository
@@ -146,6 +232,7 @@ type Repositories struct {
 	LoginHistory LoginHistoryRepository
 	Role         RoleRepository
 	Settings     SettingsRepository
+	AuditLog     AuditLogRepository
 }
 
 // NewRepositories creates all repository instances.
@@ -157,5 +244,6 @@ func NewRepositories(db *gorm.DB) *Repositories {
 		LoginHistory: NewLoginHistoryRepository(db),
 		Role:         NewRoleRepository(db),
 		Settings:     NewSettingsRepository(db),
+		AuditLog:     NewAuditLogRepository(db),
 	}
 }

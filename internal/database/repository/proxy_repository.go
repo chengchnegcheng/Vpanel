@@ -91,3 +91,99 @@ func (r *proxyRepository) GetEnabled(ctx context.Context) ([]*Proxy, error) {
 	}
 	return proxies, nil
 }
+
+// GetByUserID retrieves proxies by user ID with pagination.
+func (r *proxyRepository) GetByUserID(ctx context.Context, userID int64, limit, offset int) ([]*Proxy, error) {
+	var proxies []*Proxy
+	result := r.db.WithContext(ctx).Where("user_id = ?", userID).Limit(limit).Offset(offset).Find(&proxies)
+	if result.Error != nil {
+		return nil, errors.NewDatabaseError("failed to get proxies by user ID", result.Error)
+	}
+	return proxies, nil
+}
+
+// CountByUserID counts proxies by user ID.
+func (r *proxyRepository) CountByUserID(ctx context.Context, userID int64) (int64, error) {
+	var count int64
+	result := r.db.WithContext(ctx).Model(&Proxy{}).Where("user_id = ?", userID).Count(&count)
+	if result.Error != nil {
+		return 0, errors.NewDatabaseError("failed to count proxies by user ID", result.Error)
+	}
+	return count, nil
+}
+
+// GetByPort retrieves a proxy by port.
+func (r *proxyRepository) GetByPort(ctx context.Context, port int) (*Proxy, error) {
+	var proxy Proxy
+	result := r.db.WithContext(ctx).Where("port = ?", port).First(&proxy)
+	if result.Error != nil {
+		if result.Error == gorm.ErrRecordNotFound {
+			return nil, nil // No conflict
+		}
+		return nil, errors.NewDatabaseError("failed to get proxy by port", result.Error)
+	}
+	return &proxy, nil
+}
+
+// EnableByUserID enables all proxies for a user.
+func (r *proxyRepository) EnableByUserID(ctx context.Context, userID int64) error {
+	result := r.db.WithContext(ctx).Model(&Proxy{}).Where("user_id = ?", userID).Update("enabled", true)
+	if result.Error != nil {
+		return errors.NewDatabaseError("failed to enable proxies by user ID", result.Error)
+	}
+	return nil
+}
+
+// DisableByUserID disables all proxies for a user.
+func (r *proxyRepository) DisableByUserID(ctx context.Context, userID int64) error {
+	result := r.db.WithContext(ctx).Model(&Proxy{}).Where("user_id = ?", userID).Update("enabled", false)
+	if result.Error != nil {
+		return errors.NewDatabaseError("failed to disable proxies by user ID", result.Error)
+	}
+	return nil
+}
+
+// DeleteByIDs deletes proxies by IDs.
+func (r *proxyRepository) DeleteByIDs(ctx context.Context, ids []int64) error {
+	if len(ids) == 0 {
+		return nil
+	}
+	result := r.db.WithContext(ctx).Delete(&Proxy{}, ids)
+	if result.Error != nil {
+		return errors.NewDatabaseError("failed to delete proxies by IDs", result.Error)
+	}
+	return nil
+}
+
+// Count returns the total number of proxies.
+func (r *proxyRepository) Count(ctx context.Context) (int64, error) {
+	var count int64
+	result := r.db.WithContext(ctx).Model(&Proxy{}).Count(&count)
+	if result.Error != nil {
+		return 0, errors.NewDatabaseError("failed to count proxies", result.Error)
+	}
+	return count, nil
+}
+
+// CountEnabled returns the number of enabled proxies.
+func (r *proxyRepository) CountEnabled(ctx context.Context) (int64, error) {
+	var count int64
+	result := r.db.WithContext(ctx).Model(&Proxy{}).Where("enabled = ?", true).Count(&count)
+	if result.Error != nil {
+		return 0, errors.NewDatabaseError("failed to count enabled proxies", result.Error)
+	}
+	return count, nil
+}
+
+// CountByProtocol returns proxy counts grouped by protocol.
+func (r *proxyRepository) CountByProtocol(ctx context.Context) ([]*ProtocolCount, error) {
+	var results []*ProtocolCount
+	err := r.db.WithContext(ctx).Model(&Proxy{}).
+		Select("protocol, COUNT(*) as count").
+		Group("protocol").
+		Scan(&results).Error
+	if err != nil {
+		return nil, errors.NewDatabaseError("failed to count proxies by protocol", err)
+	}
+	return results, nil
+}

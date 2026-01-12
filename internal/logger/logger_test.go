@@ -3,8 +3,10 @@ package logger
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/leanovate/gopter"
 	"github.com/leanovate/gopter/gen"
@@ -302,4 +304,170 @@ func TestTextFormat(t *testing.T) {
 	if !strings.Contains(output, "key=value") {
 		t.Errorf("Expected 'key=value' in output, got: %s", output)
 	}
+}
+
+
+// Feature: project-optimization, Property 29: Structured Logging Consistency
+// *For any* log entry, the field names SHALL follow a consistent naming convention
+// (snake_case) and standard fields SHALL use predefined constants.
+// **Validates: Requirements 10.4**
+
+func TestStructuredLoggingConsistency_StandardFields(t *testing.T) {
+	var buf bytes.Buffer
+	logger := New(Config{
+		Level:  "debug",
+		Format: "json",
+		Output: "stdout",
+	})
+	dl := logger.(*defaultLogger)
+	dl.SetOutput(&buf)
+
+	// Test standard field helpers
+	logger.Info("test request",
+		RequestID("req-123"),
+		CorrelationID("corr-456"),
+		UserID(789),
+		Username("testuser"),
+		Component("api"),
+		StatusCode(200),
+		Duration(100*time.Millisecond),
+		Action("create"),
+		ResourceType("user"),
+		ResourceID(123),
+	)
+
+	output := strings.TrimSpace(buf.String())
+	var entry JSONLogEntry
+	if err := json.Unmarshal([]byte(output), &entry); err != nil {
+		t.Fatalf("Failed to parse JSON: %v", err)
+	}
+
+	// Verify standard field names are used
+	expectedFields := map[string]any{
+		"request_id":     "req-123",
+		"correlation_id": "corr-456",
+		"user_id":        float64(789), // JSON numbers are float64
+		"username":       "testuser",
+		"component":      "api",
+		"status_code":    float64(200),
+		"duration_ms":    float64(100),
+		"action":         "create",
+		"resource_type":  "user",
+		"resource_id":    float64(123),
+	}
+
+	for key, expected := range expectedFields {
+		actual, ok := entry.Fields[key]
+		if !ok {
+			t.Errorf("Missing field %q", key)
+			continue
+		}
+		if actual != expected {
+			t.Errorf("Field %q: expected %v, got %v", key, expected, actual)
+		}
+	}
+}
+
+func TestStructuredLoggingConsistency_ErrorField(t *testing.T) {
+	var buf bytes.Buffer
+	logger := New(Config{
+		Level:  "debug",
+		Format: "json",
+		Output: "stdout",
+	})
+	dl := logger.(*defaultLogger)
+	dl.SetOutput(&buf)
+
+	testErr := fmt.Errorf("test error message")
+	logger.Error("operation failed", Err(testErr))
+
+	output := strings.TrimSpace(buf.String())
+	var entry JSONLogEntry
+	if err := json.Unmarshal([]byte(output), &entry); err != nil {
+		t.Fatalf("Failed to parse JSON: %v", err)
+	}
+
+	// Verify error field
+	errField, ok := entry.Fields["error"]
+	if !ok {
+		t.Error("Missing error field")
+	}
+	if errField != "test error message" {
+		t.Errorf("Expected error='test error message', got %v", errField)
+	}
+}
+
+func TestStructuredLoggingConsistency_NilError(t *testing.T) {
+	var buf bytes.Buffer
+	logger := New(Config{
+		Level:  "debug",
+		Format: "json",
+		Output: "stdout",
+	})
+	dl := logger.(*defaultLogger)
+	dl.SetOutput(&buf)
+
+	logger.Info("operation succeeded", Err(nil))
+
+	output := strings.TrimSpace(buf.String())
+	var entry JSONLogEntry
+	if err := json.Unmarshal([]byte(output), &entry); err != nil {
+		t.Fatalf("Failed to parse JSON: %v", err)
+	}
+
+	// Verify error field is nil
+	errField, ok := entry.Fields["error"]
+	if !ok {
+		t.Error("Missing error field")
+	}
+	if errField != nil {
+		t.Errorf("Expected error=nil, got %v", errField)
+	}
+}
+
+func TestStructuredLoggingConsistency_FieldNaming(t *testing.T) {
+	properties := gopter.NewProperties(gopter.DefaultTestParameters())
+
+	// All standard field constants should be snake_case
+	standardFields := []string{
+		FieldRequestID,
+		FieldCorrelationID,
+		FieldMethod,
+		FieldPath,
+		FieldStatusCode,
+		FieldDuration,
+		FieldClientIP,
+		FieldUserAgent,
+		FieldUserID,
+		FieldUsername,
+		FieldRole,
+		FieldResourceType,
+		FieldResourceID,
+		FieldAction,
+		FieldError,
+		FieldErrorCode,
+		FieldStack,
+		FieldComponent,
+		FieldService,
+		FieldVersion,
+	}
+
+	properties.Property("all standard field names are snake_case", prop.ForAll(
+		func(idx int) bool {
+			if idx < 0 || idx >= len(standardFields) {
+				return true
+			}
+			fieldName := standardFields[idx]
+			// Check snake_case: lowercase letters, numbers, and underscores only
+			for _, c := range fieldName {
+				if !((c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '_') {
+					return false
+				}
+			}
+			return true
+		},
+		gen.IntRange(0, len(standardFields)-1),
+	))
+
+	properties.TestingRun(t)
 }

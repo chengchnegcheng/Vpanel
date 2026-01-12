@@ -138,7 +138,7 @@
 - [x] 7. Checkpoint - 确保所有测试通过
   - 运行测试，如有问题请询问用户
 
-- [-] 8. 用户管理功能完善
+- [x] 8. 用户管理功能完善
   - [x] 8.1 更新用户模型
     - 添加 traffic_limit, traffic_used, expires_at, force_password_change 字段
     - 创建数据库迁移
@@ -256,56 +256,56 @@
 - [x] 12. Checkpoint - 确保所有测试通过
   - 运行测试，如有问题请询问用户
 
-- [ ] 13. 代理服务功能完善
-  - [ ] 13.1 更新代理模型
+- [x] 13. 代理服务功能完善
+  - [x] 13.1 更新代理模型
     - 添加 user_id 字段
     - 创建数据库迁移
     - _Requirements: 21.1_
 
-  - [ ] 13.2 实现代理用户关联
+  - [x] 13.2 实现代理用户关联
     - 创建代理时设置 user_id
     - 非管理员用户只能查看自己的代理
     - _Requirements: 21.2, 21.3_
 
-  - [ ] 13.3 编写代理用户关联属性测试
+  - [x] 13.3 编写代理用户关联属性测试
     - **Property 13: Proxy User Association**
     - **Validates: Requirements 21.2, 21.3**
 
-  - [ ] 13.4 实现端口冲突检测
+  - [x] 13.4 实现端口冲突检测
     - 创建代理前检查端口是否被占用
     - 返回冲突代理信息
     - _Requirements: 21.8, 21.9_
 
-  - [ ] 13.5 编写端口冲突检测属性测试
+  - [x] 13.5 编写端口冲突检测属性测试
     - **Property 12: Port Conflict Detection**
     - **Validates: Requirements 21.8, 21.9**
 
-  - [ ] 13.6 实现代理启动/停止 API
+  - [x] 13.6 实现代理启动/停止 API
     - 添加 `POST /api/proxies/:id/start` 端点
     - 添加 `POST /api/proxies/:id/stop` 端点
     - _Requirements: 21.4, 21.5_
 
-  - [ ] 13.7 实现代理统计 API
+  - [x] 13.7 实现代理统计 API
     - 添加 `GET /api/proxies/:id/stats` 端点
     - 返回流量、连接数、最后活跃时间
     - _Requirements: 21.10, 21.11_
 
-  - [ ] 13.8 实现代理批量操作
+  - [x] 13.8 实现代理批量操作
     - 添加批量启用/禁用/删除功能
     - _Requirements: 21.14_
 
-  - [ ] 13.9 增强代理验证
+  - [x] 13.9 增强代理验证
     - 验证协议特定设置
     - _Requirements: 21.12_
 
-- [ ] 14. Xray 集成完善
-  - [ ] 14.1 实现 Xray 管理器
+- [x] 14. Xray 集成完善
+  - [x] 14.1 实现 Xray 管理器
     - 创建 `internal/xray/manager.go`
     - 实现进程启动、停止、重启
     - 实现状态监控
     - _Requirements: 22.1, 22.2_
 
-  - [ ] 14.2 实现 Xray API 端点
+  - [x] 14.2 实现 Xray API 端点
     - 添加 `GET /api/xray/status` 端点
     - 添加 `POST /api/xray/restart` 端点
     - 添加 `GET /api/xray/config` 端点
@@ -314,96 +314,96 @@
     - 添加 `POST /api/xray/update` 端点
     - _Requirements: 22.3, 22.4, 22.5, 22.6, 22.9, 22.10_
 
-  - [ ] 14.3 实现配置同步
+  - [x] 14.3 实现配置同步
     - 代理创建/更新/删除时同步 Xray 配置
     - _Requirements: 22.7_
 
-  - [ ] 14.4 编写 Xray 配置同步属性测试
+  - [x] 14.4 编写 Xray 配置同步属性测试
     - **Property 14: Xray Configuration Sync**
     - **Validates: Requirements 21.6, 21.7, 21.13**
 
-  - [ ] 14.5 实现配置验证和回滚
+  - [x] 14.5 实现配置验证和回滚
     - 应用配置前验证
     - 失败时自动回滚
     - _Requirements: 22.8, 22.11, 22.12_
 
-  - [ ] 14.6 编写 Xray 配置验证属性测试
+  - [x] 14.6 编写 Xray 配置验证属性测试
     - **Property 15: Xray Configuration Validation**
     - **Property 16: Xray Configuration Rollback**
     - **Validates: Requirements 22.8, 22.11, 22.12**
 
-- [ ] 15. Checkpoint - 确保所有测试通过
+- [x] 15. Checkpoint - 确保所有测试通过
   - 运行测试，如有问题请询问用户
 
-- [ ] 16. 统计数据实时查询
-  - [ ] 16.1 重构统计 Handler
+- [x] 16. 统计数据实时查询 ✅
+  - [x] 16.1 重构统计 Handler
     - 更新 `internal/api/handlers/stats.go`
     - 从数据库查询实际数据
     - _Requirements: 20.1_
 
-  - [ ] 16.2 实现仪表盘统计
+  - [x] 16.2 实现仪表盘统计
     - 查询用户总数、活跃用户数
     - 查询代理总数、活跃代理数
     - 查询流量统计
     - _Requirements: 20.2, 20.3, 20.4_
 
-  - [ ] 16.3 编写统计准确性属性测试
+  - [x] 16.3 编写统计准确性属性测试 ✅
     - **Property 20: Statistics Accuracy**
     - **Validates: Requirements 20.1, 20.2, 20.3, 20.4**
 
-  - [ ] 16.4 实现协议和用户统计
+  - [x] 16.4 实现协议和用户统计 ✅
     - 按协议聚合流量
     - 按用户聚合流量
     - _Requirements: 20.5, 20.6_
 
-  - [ ] 16.5 实现时间段过滤
+  - [x] 16.5 实现时间段过滤 ✅
     - 支持 today, week, month, year, custom
     - _Requirements: 20.7_
 
-  - [ ] 16.6 编写时间段过滤属性测试
+  - [x] 16.6 编写时间段过滤属性测试 ✅
     - **Property 21: Traffic Period Filtering**
     - **Validates: Requirements 20.7**
 
-  - [ ] 16.7 实现统计缓存
+  - [x] 16.7 实现统计缓存 ✅
     - 缓存昂贵的聚合查询
     - _Requirements: 20.8_
 
-  - [ ] 16.8 实现时间线数据
+  - [x] 16.8 实现时间线数据 ✅
     - 返回小时/天级别的流量数据点
     - _Requirements: 20.9_
 
-- [ ] 17. 监控与可观测性
-  - [ ] 17.1 实现 Prometheus 指标
+- [x] 17. 监控与可观测性 ✅
+  - [x] 17.1 实现 Prometheus 指标 ✅
     - 创建 `internal/monitor/metrics.go`
     - 添加 `/metrics` 端点
     - 记录请求延迟、计数、错误率
     - _Requirements: 10.1, 10.2_
 
-  - [ ] 17.2 实现结构化日志
+  - [x] 17.2 实现结构化日志 ✅
     - 更新 `internal/logger/logger.go`
     - 确保一致的字段名
     - _Requirements: 10.4_
 
-  - [ ] 17.3 编写结构化日志属性测试
+  - [x] 17.3 编写结构化日志属性测试 ✅
     - **Property 29: Structured Logging Consistency**
     - **Validates: Requirements 10.4**
 
-  - [ ] 17.4 增强健康检查
+  - [x] 17.4 增强健康检查 ✅
     - 检查数据库连接
     - 检查 Xray 进程状态
     - 检查磁盘空间
     - _Requirements: 10.5_
 
-  - [ ] 17.5 实现审计日志
+  - [x] 17.5 实现审计日志 ✅
     - 创建 audit_logs 表
     - 记录敏感操作
     - _Requirements: 1.5_
 
-  - [ ] 17.6 编写审计日志属性测试
+  - [x] 17.6 编写审计日志属性测试 ✅
     - **Property 25: Audit Logging**
     - **Validates: Requirements 1.5**
 
-- [ ] 18. Checkpoint - 确保所有测试通过
+- [x] 18. Checkpoint - 确保所有测试通过 ✅
   - 运行测试，如有问题请询问用户
 
 - [ ] 19. 前端 API 统一

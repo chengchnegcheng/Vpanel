@@ -3,6 +3,7 @@ package repository
 
 import (
 	"context"
+	"time"
 
 	"gorm.io/gorm"
 
@@ -83,4 +84,28 @@ func (r *userRepository) List(ctx context.Context, limit, offset int) ([]*User, 
 		return nil, errors.NewDatabaseError("failed to list users", result.Error)
 	}
 	return users, nil
+}
+
+// Count returns the total number of users.
+func (r *userRepository) Count(ctx context.Context) (int64, error) {
+	var count int64
+	result := r.db.WithContext(ctx).Model(&User{}).Count(&count)
+	if result.Error != nil {
+		return 0, errors.NewDatabaseError("failed to count users", result.Error)
+	}
+	return count, nil
+}
+
+// CountActive returns the number of active users (enabled and not expired).
+func (r *userRepository) CountActive(ctx context.Context) (int64, error) {
+	var count int64
+	now := time.Now()
+	result := r.db.WithContext(ctx).Model(&User{}).
+		Where("enabled = ?", true).
+		Where("expires_at IS NULL OR expires_at > ?", now).
+		Count(&count)
+	if result.Error != nil {
+		return 0, errors.NewDatabaseError("failed to count active users", result.Error)
+	}
+	return count, nil
 }

@@ -14,6 +14,7 @@ import (
 	"v/internal/logger"
 	"v/internal/proxy"
 	"v/internal/settings"
+	"v/internal/xray"
 )
 
 // Router manages API routes.
@@ -25,6 +26,7 @@ type Router struct {
 	proxyManager    proxy.Manager
 	repos           *repository.Repositories
 	settingsService *settings.Service
+	xrayManager     xray.Manager
 }
 
 // NewRouter creates a new API router.
@@ -45,6 +47,13 @@ func NewRouter(
 	// Create settings service
 	settingsService := settings.NewService(repos.Settings)
 
+	// Create Xray manager
+	xrayManager := xray.NewManager(xray.Config{
+		BinaryPath: cfg.Xray.BinaryPath,
+		ConfigPath: cfg.Xray.ConfigPath,
+		BackupDir:  cfg.Xray.BackupDir,
+	}, log)
+
 	return &Router{
 		engine:          engine,
 		config:          cfg,
@@ -53,6 +62,7 @@ func NewRouter(
 		proxyManager:    proxyManager,
 		repos:           repos,
 		settingsService: settingsService,
+		xrayManager:     xrayManager,
 	}
 }
 
@@ -66,12 +76,13 @@ func (r *Router) Setup() {
 
 	// Create handlers
 	authHandler := handlers.NewAuthHandler(r.authService, r.repos.User, r.repos.LoginHistory, r.logger)
-	proxyHandler := handlers.NewProxyHandler(r.proxyManager, r.repos.Proxy, r.logger)
+	proxyHandler := handlers.NewProxyHandlerWithTraffic(r.proxyManager, r.repos.Proxy, r.repos.Traffic, r.logger)
 	systemHandler := handlers.NewSystemHandler(r.config, r.logger)
-	healthHandler := handlers.NewHealthHandler(r.repos, r.logger)
+	healthHandler := handlers.NewHealthHandler(r.repos, r.logger, r.xrayManager, nil)
 	roleHandler := handlers.NewRoleHandler(r.logger, r.repos.Role)
-	statsHandler := handlers.NewStatsHandler(r.logger, r.repos)
+	statsHandler := handlers.NewStatsHandler(r.logger, r.repos, nil)
 	settingsHandler := handlers.NewSettingsHandler(r.logger, r.settingsService)
+	xrayHandler := handlers.NewXrayHandler(r.xrayManager, r.logger)
 
 	// Initialize system roles
 	ctx := context.Background()
@@ -119,11 +130,15 @@ func (r *Router) Setup() {
 			{
 				proxies.GET("", proxyHandler.List)
 				proxies.POST("", proxyHandler.Create)
+				proxies.POST("/batch", proxyHandler.BatchOperation)
 				proxies.GET("/:id", proxyHandler.Get)
 				proxies.PUT("/:id", proxyHandler.Update)
 				proxies.DELETE("/:id", proxyHandler.Delete)
 				proxies.GET("/:id/link", proxyHandler.GetShareLink)
 				proxies.POST("/:id/toggle", proxyHandler.Toggle)
+				proxies.POST("/:id/start", proxyHandler.Start)
+				proxies.POST("/:id/stop", proxyHandler.Stop)
+				proxies.GET("/:id/stats", proxyHandler.GetStats)
 			}
 
 			// System routes
@@ -181,6 +196,21 @@ func (r *Router) Setup() {
 				settingsRoutes.PUT("", settingsHandler.UpdateSettings)
 				settingsRoutes.POST("/backup", settingsHandler.BackupSettings)
 				settingsRoutes.POST("/restore", settingsHandler.RestoreSettings)
+			}
+
+			// Xray routes (admin only)
+			xrayRoutes := protected.Group("/xray")
+			xrayRoutes.Use(authMiddleware.RequireRole("admin"))
+			{
+				xrayRoutes.GET("/status", xrayHandler.GetStatus)
+				xrayRoutes.POST("/start", xrayHandler.Start)
+				xrayRoutes.POST("/stop", xrayHandler.Stop)
+				xrayRoutes.POST("/restart", xrayHandler.Restart)
+				xrayRoutes.GET("/config", xrayHandler.GetConfig)
+				xrayRoutes.PUT("/config", xrayHandler.UpdateConfig)
+				xrayRoutes.POST("/validate", xrayHandler.ValidateConfig)
+				xrayRoutes.GET("/version", xrayHandler.GetVersion)
+				xrayRoutes.POST("/update", xrayHandler.Update)
 			}
 		}
 	}

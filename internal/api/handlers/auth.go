@@ -273,8 +273,7 @@ func (h *AuthHandler) ChangePassword(c *gin.Context) {
 		return
 	}
 
-	h.logger.Info("password changed"
-, logger.F("user_id", userID))
+	h.logger.Info("password changed", logger.F("user_id", userID))
 	c.JSON(http.StatusOK, gin.H{"message": "Password changed successfully"})
 }
 

@@ -15,6 +15,7 @@ import (
 type ProxyHandler struct {
 	proxyManager proxy.Manager
 	proxyRepo    repository.ProxyRepository
+	trafficRepo  repository.TrafficRepository
 	logger       logger.Logger
 }
 
@@ -26,8 +27,19 @@ func NewProxyHandler(proxyManager proxy.Manager, proxyRepo repository.ProxyRepos
 	}
 }
 
+// NewProxyHandlerWithTraffic creates a new proxy handler with traffic repository.
+func NewProxyHandlerWithTraffic(proxyManager proxy.Manager, proxyRepo repository.ProxyRepository, trafficRepo repository.TrafficRepository, log logger.Logger) *ProxyHandler {
+	return &ProxyHandler{
+		proxyManager: proxyManager,
+		proxyRepo:    proxyRepo,
+		trafficRepo:  trafficRepo,
+		logger:       log,
+	}
+}
+
 type ProxyResponse struct {
 	ID        int64          `json:"id"`
+	UserID    int64          `json:"user_id"`
 	Name      string         `json:"name"`
 	Protocol  string         `json:"protocol"`
 	Port      int            `json:"port"`
@@ -39,11 +51,44 @@ type ProxyResponse struct {
 	UpdatedAt string         `json:"updated_at"`
 }
 
+// getUserFromContext extracts user information from the gin context.
+func getUserFromContext(c *gin.Context) (userID int64, role string, isAdmin bool) {
+	if id, exists := c.Get("user_id"); exists {
+		userID = id.(int64)
+	}
+	if r, exists := c.Get("role"); exists {
+		role = r.(string)
+	}
+	isAdmin = role == "admin"
+	return
+}
+
+// canAccessProxy checks if the current user can access the given proxy.
+func (h *ProxyHandler) canAccessProxy(c *gin.Context, proxy *repository.Proxy) bool {
+	userID, _, isAdmin := getUserFromContext(c)
+	return isAdmin || proxy.UserID == userID
+}
+
+
+// List returns proxies based on user role.
+// Admin users can see all proxies, regular users can only see their own.
 func (h *ProxyHandler) List(c *gin.Context) {
 	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "100"))
 	offset, _ := strconv.Atoi(c.DefaultQuery("offset", "0"))
 
-	proxies, err := h.proxyRepo.List(c.Request.Context(), limit, offset)
+	userID, _, isAdmin := getUserFromContext(c)
+
+	var proxies []*repository.Proxy
+	var err error
+
+	if isAdmin {
+		// Admin can see all proxies
+		proxies, err = h.proxyRepo.List(c.Request.Context(), limit, offset)
+	} else {
+		// Regular users can only see their own proxies
+		proxies, err = h.proxyRepo.GetByUserID(c.Request.Context(), userID, limit, offset)
+	}
+
 	if err != nil {
 		h.logger.Error("failed to list proxies", logger.F("error", err))
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to list proxies"})
@@ -54,6 +99,7 @@ func (h *ProxyHandler) List(c *gin.Context) {
 	for i, p := range proxies {
 		response[i] = ProxyResponse{
 			ID:        p.ID,
+			UserID:    p.UserID,
 			Name:      p.Name,
 			Protocol:  p.Protocol,
 			Port:      p.Port,
@@ -79,12 +125,15 @@ type CreateProxyRequest struct {
 	Remark   string         `json:"remark"`
 }
 
+// Create creates a new proxy for the authenticated user.
 func (h *ProxyHandler) Create(c *gin.Context) {
 	var req CreateProxyRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request body"})
 		return
 	}
+
+	userID, _, _ := getUserFromContext(c)
 
 	protocol, ok := h.proxyManager.GetProtocol(req.Protocol)
 	if !ok {
@@ -111,7 +160,27 @@ func (h *ProxyHandler) Create(c *gin.Context) {
 		return
 	}
 
+	// Check for port conflict
+	existingProxy, err := h.proxyRepo.GetByPort(c.Request.Context(), req.Port)
+	if err != nil {
+		h.logger.Error("failed to check port conflict", logger.F("error", err))
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to check port availability"})
+		return
+	}
+	if existingProxy != nil {
+		c.JSON(http.StatusConflict, gin.H{
+			"error": "Port is already in use",
+			"details": gin.H{
+				"conflicting_proxy_id":   existingProxy.ID,
+				"conflicting_proxy_name": existingProxy.Name,
+				"port":                   req.Port,
+			},
+		})
+		return
+	}
+
 	proxyModel := &repository.Proxy{
+		UserID:   userID,
 		Name:     req.Name,
 		Protocol: req.Protocol,
 		Port:     req.Port,
@@ -127,8 +196,11 @@ func (h *ProxyHandler) Create(c *gin.Context) {
 		return
 	}
 
+	h.logger.Info("proxy created", logger.F("proxy_id", proxyModel.ID), logger.F("user_id", userID))
+
 	c.JSON(http.StatusCreated, ProxyResponse{
 		ID:        proxyModel.ID,
+		UserID:    proxyModel.UserID,
 		Name:      proxyModel.Name,
 		Protocol:  proxyModel.Protocol,
 		Port:      proxyModel.Port,
@@ -141,6 +213,9 @@ func (h *ProxyHandler) Create(c *gin.Context) {
 	})
 }
 
+
+// Get retrieves a proxy by ID.
+// Users can only access their own proxies unless they are admin.
 func (h *ProxyHandler) Get(c *gin.Context) {
 	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
 	if err != nil {
@@ -158,8 +233,15 @@ func (h *ProxyHandler) Get(c *gin.Context) {
 		return
 	}
 
+	// Check access permission
+	if !h.canAccessProxy(c, p) {
+		c.JSON(http.StatusForbidden, gin.H{"error": "Access denied"})
+		return
+	}
+
 	c.JSON(http.StatusOK, ProxyResponse{
 		ID:        p.ID,
+		UserID:    p.UserID,
 		Name:      p.Name,
 		Protocol:  p.Protocol,
 		Port:      p.Port,
@@ -181,6 +263,8 @@ type UpdateProxyRequest struct {
 	Remark   string         `json:"remark"`
 }
 
+// Update updates a proxy.
+// Users can only update their own proxies unless they are admin.
 func (h *ProxyHandler) Update(c *gin.Context) {
 	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
 	if err != nil {
@@ -202,6 +286,33 @@ func (h *ProxyHandler) Update(c *gin.Context) {
 		}
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get proxy"})
 		return
+	}
+
+	// Check access permission
+	if !h.canAccessProxy(c, p) {
+		c.JSON(http.StatusForbidden, gin.H{"error": "Access denied"})
+		return
+	}
+
+	// Check for port conflict if port is being changed
+	if req.Port > 0 && req.Port != p.Port {
+		existingProxy, err := h.proxyRepo.GetByPort(c.Request.Context(), req.Port)
+		if err != nil {
+			h.logger.Error("failed to check port conflict", logger.F("error", err))
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to check port availability"})
+			return
+		}
+		if existingProxy != nil && existingProxy.ID != id {
+			c.JSON(http.StatusConflict, gin.H{
+				"error": "Port is already in use",
+				"details": gin.H{
+					"conflicting_proxy_id":   existingProxy.ID,
+					"conflicting_proxy_name": existingProxy.Name,
+					"port":                   req.Port,
+				},
+			})
+			return
+		}
 	}
 
 	if req.Name != "" {
@@ -230,6 +341,7 @@ func (h *ProxyHandler) Update(c *gin.Context) {
 
 	c.JSON(http.StatusOK, ProxyResponse{
 		ID:        p.ID,
+		UserID:    p.UserID,
 		Name:      p.Name,
 		Protocol:  p.Protocol,
 		Port:      p.Port,
@@ -242,6 +354,8 @@ func (h *ProxyHandler) Update(c *gin.Context) {
 	})
 }
 
+// Delete deletes a proxy.
+// Users can only delete their own proxies unless they are admin.
 func (h *ProxyHandler) Delete(c *gin.Context) {
 	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
 	if err != nil {
@@ -249,18 +363,35 @@ func (h *ProxyHandler) Delete(c *gin.Context) {
 		return
 	}
 
-	if err := h.proxyRepo.Delete(c.Request.Context(), id); err != nil {
+	p, err := h.proxyRepo.GetByID(c.Request.Context(), id)
+	if err != nil {
 		if errors.IsNotFound(err) {
 			c.JSON(http.StatusNotFound, gin.H{"error": "Proxy not found"})
 			return
 		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get proxy"})
+		return
+	}
+
+	// Check access permission
+	if !h.canAccessProxy(c, p) {
+		c.JSON(http.StatusForbidden, gin.H{"error": "Access denied"})
+		return
+	}
+
+	if err := h.proxyRepo.Delete(c.Request.Context(), id); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to delete proxy"})
 		return
 	}
 
+	userID, _, _ := getUserFromContext(c)
+	h.logger.Info("proxy deleted", logger.F("proxy_id", id), logger.F("user_id", userID))
+
 	c.JSON(http.StatusOK, gin.H{"message": "Proxy deleted successfully"})
 }
 
+
+// GetShareLink generates a share link for a proxy.
 func (h *ProxyHandler) GetShareLink(c *gin.Context) {
 	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
 	if err != nil {
@@ -275,6 +406,12 @@ func (h *ProxyHandler) GetShareLink(c *gin.Context) {
 			return
 		}
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get proxy"})
+		return
+	}
+
+	// Check access permission
+	if !h.canAccessProxy(c, p) {
+		c.JSON(http.StatusForbidden, gin.H{"error": "Access denied"})
 		return
 	}
 
@@ -304,6 +441,7 @@ func (h *ProxyHandler) GetShareLink(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"link": link})
 }
 
+// Toggle toggles the enabled status of a proxy.
 func (h *ProxyHandler) Toggle(c *gin.Context) {
 	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
 	if err != nil {
@@ -321,6 +459,12 @@ func (h *ProxyHandler) Toggle(c *gin.Context) {
 		return
 	}
 
+	// Check access permission
+	if !h.canAccessProxy(c, p) {
+		c.JSON(http.StatusForbidden, gin.H{"error": "Access denied"})
+		return
+	}
+
 	p.Enabled = !p.Enabled
 
 	if err := h.proxyRepo.Update(c.Request.Context(), p); err != nil {
@@ -329,4 +473,201 @@ func (h *ProxyHandler) Toggle(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{"enabled": p.Enabled})
+}
+
+// Start starts a proxy (enables it).
+func (h *ProxyHandler) Start(c *gin.Context) {
+	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid proxy ID"})
+		return
+	}
+
+	p, err := h.proxyRepo.GetByID(c.Request.Context(), id)
+	if err != nil {
+		if errors.IsNotFound(err) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "Proxy not found"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get proxy"})
+		return
+	}
+
+	// Check access permission
+	if !h.canAccessProxy(c, p) {
+		c.JSON(http.StatusForbidden, gin.H{"error": "Access denied"})
+		return
+	}
+
+	if p.Enabled {
+		c.JSON(http.StatusOK, gin.H{"message": "Proxy is already running"})
+		return
+	}
+
+	p.Enabled = true
+	if err := h.proxyRepo.Update(c.Request.Context(), p); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to start proxy"})
+		return
+	}
+
+	userID, _, _ := getUserFromContext(c)
+	h.logger.Info("proxy started", logger.F("proxy_id", id), logger.F("user_id", userID))
+
+	c.JSON(http.StatusOK, gin.H{"message": "Proxy started successfully"})
+}
+
+// Stop stops a proxy (disables it).
+func (h *ProxyHandler) Stop(c *gin.Context) {
+	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid proxy ID"})
+		return
+	}
+
+	p, err := h.proxyRepo.GetByID(c.Request.Context(), id)
+	if err != nil {
+		if errors.IsNotFound(err) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "Proxy not found"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get proxy"})
+		return
+	}
+
+	// Check access permission
+	if !h.canAccessProxy(c, p) {
+		c.JSON(http.StatusForbidden, gin.H{"error": "Access denied"})
+		return
+	}
+
+	if !p.Enabled {
+		c.JSON(http.StatusOK, gin.H{"message": "Proxy is already stopped"})
+		return
+	}
+
+	p.Enabled = false
+	if err := h.proxyRepo.Update(c.Request.Context(), p); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to stop proxy"})
+		return
+	}
+
+	userID, _, _ := getUserFromContext(c)
+	h.logger.Info("proxy stopped", logger.F("proxy_id", id), logger.F("user_id", userID))
+
+	c.JSON(http.StatusOK, gin.H{"message": "Proxy stopped successfully"})
+}
+
+// GetStats returns statistics for a proxy.
+func (h *ProxyHandler) GetStats(c *gin.Context) {
+	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid proxy ID"})
+		return
+	}
+
+	p, err := h.proxyRepo.GetByID(c.Request.Context(), id)
+	if err != nil {
+		if errors.IsNotFound(err) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "Proxy not found"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get proxy"})
+		return
+	}
+
+	// Check access permission
+	if !h.canAccessProxy(c, p) {
+		c.JSON(http.StatusForbidden, gin.H{"error": "Access denied"})
+		return
+	}
+
+	// Get traffic statistics from traffic repository
+	var upload, download int64
+	if h.trafficRepo != nil {
+		upload, download, err = h.trafficRepo.GetTotalByProxy(c.Request.Context(), id)
+		if err != nil {
+			h.logger.Error("failed to get proxy traffic stats", logger.F("error", err), logger.F("proxy_id", id))
+			// Continue with zero values instead of failing
+		}
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"upload":           upload,
+		"download":         download,
+		"total":            upload + download,
+		"connection_count": 0, // TODO: Implement connection tracking
+		"last_active":      p.UpdatedAt.Format("2006-01-02T15:04:05Z"),
+	})
+}
+
+// BatchOperation represents a batch operation request.
+type BatchOperationRequest struct {
+	IDs       []int64 `json:"ids" binding:"required"`
+	Operation string  `json:"operation" binding:"required,oneof=enable disable delete"`
+}
+
+// BatchOperation performs batch operations on proxies.
+func (h *ProxyHandler) BatchOperation(c *gin.Context) {
+	var req BatchOperationRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request body"})
+		return
+	}
+
+	userID, _, isAdmin := getUserFromContext(c)
+
+	// Verify access to all proxies
+	for _, id := range req.IDs {
+		p, err := h.proxyRepo.GetByID(c.Request.Context(), id)
+		if err != nil {
+			if errors.IsNotFound(err) {
+				c.JSON(http.StatusNotFound, gin.H{"error": "Proxy not found", "proxy_id": id})
+				return
+			}
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get proxy"})
+			return
+		}
+		if !isAdmin && p.UserID != userID {
+			c.JSON(http.StatusForbidden, gin.H{"error": "Access denied", "proxy_id": id})
+			return
+		}
+	}
+
+	var err error
+	switch req.Operation {
+	case "enable":
+		for _, id := range req.IDs {
+			p, _ := h.proxyRepo.GetByID(c.Request.Context(), id)
+			p.Enabled = true
+			if err = h.proxyRepo.Update(c.Request.Context(), p); err != nil {
+				break
+			}
+		}
+	case "disable":
+		for _, id := range req.IDs {
+			p, _ := h.proxyRepo.GetByID(c.Request.Context(), id)
+			p.Enabled = false
+			if err = h.proxyRepo.Update(c.Request.Context(), p); err != nil {
+				break
+			}
+		}
+	case "delete":
+		err = h.proxyRepo.DeleteByIDs(c.Request.Context(), req.IDs)
+	}
+
+	if err != nil {
+		h.logger.Error("batch operation failed", logger.F("error", err), logger.F("operation", req.Operation))
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Batch operation failed"})
+		return
+	}
+
+	h.logger.Info("batch operation completed",
+		logger.F("operation", req.Operation),
+		logger.F("count", len(req.IDs)),
+		logger.F("user_id", userID))
+
+	c.JSON(http.StatusOK, gin.H{
+		"message": "Batch operation completed successfully",
+		"count":   len(req.IDs),
+	})
 }
