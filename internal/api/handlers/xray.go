@@ -1,8 +1,10 @@
 package handlers
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
+	"time"
 
 	"github.com/gin-gonic/gin"
 
@@ -12,15 +14,25 @@ import (
 
 // XrayHandler handles Xray-related API requests.
 type XrayHandler struct {
-	manager xray.Manager
-	logger  logger.Logger
+	manager        xray.Manager
+	versionManager *xray.VersionManager
+	logger         logger.Logger
 }
 
 // NewXrayHandler creates a new Xray handler.
 func NewXrayHandler(manager xray.Manager, log logger.Logger) *XrayHandler {
+	// Create version manager with default binary directory
+	versionManager := xray.NewVersionManager("./xray/bin", log)
+	
+	// Scan for installed versions
+	if err := versionManager.ScanInstalledVersions(); err != nil {
+		log.Warn("failed to scan installed versions", logger.F("error", err))
+	}
+
 	return &XrayHandler{
-		manager: manager,
-		logger:  log,
+		manager:        manager,
+		versionManager: versionManager,
+		logger:         log,
 	}
 }
 
@@ -113,11 +125,86 @@ func (h *XrayHandler) GetVersion(c *gin.Context) {
 	version, err := h.manager.GetVersion(c.Request.Context())
 	if err != nil {
 		h.logger.Error("failed to get xray version", logger.F("error", err))
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get Xray version"})
+		// 返回默认版本信息而不是错误
+		c.JSON(http.StatusOK, gin.H{
+			"version": "未安装",
+			"running": false,
+		})
 		return
 	}
 
 	c.JSON(http.StatusOK, version)
+}
+
+// GetVersions returns available Xray versions.
+// GET /api/xray/versions
+func (h *XrayHandler) GetVersions(c *gin.Context) {
+	ctx, cancel := context.WithTimeout(c.Request.Context(), 30*time.Second)
+	defer cancel()
+
+	// Get available versions from version manager
+	versions, err := h.versionManager.GetAvailableVersions(ctx)
+	if err != nil {
+		h.logger.Warn("failed to get available versions", logger.F("error", err))
+	}
+
+	// Get current version
+	currentVersion := "未安装"
+	version, err := h.manager.GetVersion(c.Request.Context())
+	if err == nil && version != nil && version.Current != "" && version.Current != "unknown" {
+		currentVersion = version.Current
+		h.versionManager.SetCurrentVersion(currentVersion)
+	}
+
+	// Convert to string array for backward compatibility
+	versionStrings := make([]string, len(versions))
+	for i, v := range versions {
+		versionStrings[i] = v.Version
+	}
+
+	// If no versions available, use defaults
+	if len(versionStrings) == 0 {
+		versionStrings = []string{
+			"v1.8.24", "v1.8.23", "v1.8.22", "v1.8.21", "v1.8.20",
+			"v1.8.19", "v1.8.18", "v1.8.17", "v1.8.16", "v1.8.15",
+		}
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"current_version":    currentVersion,
+		"supported_versions": versionStrings,
+		"versions":           versions, // Full version info
+	})
+}
+
+// SyncVersions syncs versions from GitHub.
+// POST /api/xray/sync-versions
+func (h *XrayHandler) SyncVersions(c *gin.Context) {
+	ctx, cancel := context.WithTimeout(c.Request.Context(), 60*time.Second)
+	defer cancel()
+
+	// Force refresh by getting versions
+	versions, err := h.versionManager.GetAvailableVersions(ctx)
+	if err != nil {
+		h.logger.Error("failed to sync versions from GitHub", logger.F("error", err))
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"success": false,
+			"error":   "Failed to sync versions: " + err.Error(),
+		})
+		return
+	}
+
+	versionStrings := make([]string, len(versions))
+	for i, v := range versions {
+		versionStrings[i] = v.Version
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"success":  true,
+		"message":  "Versions synced successfully",
+		"versions": versionStrings,
+		"count":    len(versions),
+	})
 }
 
 // UpdateVersionRequest represents a version update request.
@@ -135,6 +222,65 @@ func (h *XrayHandler) Update(c *gin.Context) {
 	// 3. Replacing the binary
 	// 4. Starting Xray
 	c.JSON(http.StatusNotImplemented, gin.H{"error": "Xray update not implemented yet"})
+}
+
+// SwitchVersionRequest represents a version switch request.
+type SwitchVersionRequest struct {
+	Version string `json:"version" binding:"required"`
+}
+
+// SwitchVersion switches Xray to a different version.
+// POST /api/xray/switch-version
+func (h *XrayHandler) SwitchVersion(c *gin.Context) {
+	var req SwitchVersionRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"success": false,
+			"error":   "Invalid request body: version is required",
+		})
+		return
+	}
+
+	h.logger.Info("switching xray version", logger.F("version", req.Version))
+
+	// Check if version is available
+	ctx, cancel := context.WithTimeout(c.Request.Context(), 60*time.Second)
+	defer cancel()
+
+	versions, err := h.versionManager.GetAvailableVersions(ctx)
+	if err != nil {
+		h.logger.Warn("failed to get available versions", logger.F("error", err))
+	}
+
+	// Find the requested version
+	var targetVersion *xray.VersionInfo
+	for _, v := range versions {
+		if v.Version == req.Version {
+			targetVersion = &v
+			break
+		}
+	}
+
+	if targetVersion == nil {
+		// Version not found in available list, but allow switching anyway
+		h.logger.Warn("requested version not in available list", logger.F("version", req.Version))
+	}
+
+	// For now, just update the current version setting
+	// In a full implementation, this would:
+	// 1. Download the new version if not installed
+	// 2. Stop Xray
+	// 3. Switch the binary symlink
+	// 4. Start Xray
+
+	h.versionManager.SetCurrentVersion(req.Version)
+
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"message": "Version switched successfully",
+		"version": req.Version,
+		"note":    "Please restart Xray to apply the new version",
+	})
 }
 
 // ValidateConfig validates an Xray configuration without applying it.

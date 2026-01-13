@@ -61,6 +61,7 @@ type UserResponse struct {
 	Username  string `json:"username"`
 	Email     string `json:"email,omitempty"`
 	Role      string `json:"role"`
+	Status    bool   `json:"status"`
 	CreatedAt string `json:"created_at"`
 }
 
@@ -143,6 +144,7 @@ func (h *AuthHandler) Login(c *gin.Context) {
 			Username:  user.Username,
 			Email:     user.Email,
 			Role:      user.Role,
+			Status:    user.Enabled,
 			CreatedAt: user.CreatedAt.Format("2006-01-02T15:04:05Z"),
 		},
 	})
@@ -197,6 +199,7 @@ func (h *AuthHandler) RefreshToken(c *gin.Context) {
 			Username:  user.Username,
 			Email:     user.Email,
 			Role:      user.Role,
+			Status:    user.Enabled,
 			CreatedAt: user.CreatedAt.Format("2006-01-02T15:04:05Z"),
 		},
 	})
@@ -228,6 +231,7 @@ func (h *AuthHandler) GetCurrentUser(c *gin.Context) {
 		Username:  user.Username,
 		Email:     user.Email,
 		Role:      user.Role,
+		Status:    user.Enabled,
 		CreatedAt: user.CreatedAt.Format("2006-01-02T15:04:05Z"),
 	})
 }
@@ -292,6 +296,7 @@ func (h *AuthHandler) ListUsers(c *gin.Context) {
 			Username:  user.Username,
 			Email:     user.Email,
 			Role:      user.Role,
+			Status:    user.Enabled,
 			CreatedAt: user.CreatedAt.Format("2006-01-02T15:04:05Z"),
 		}
 	}
@@ -361,6 +366,7 @@ func (h *AuthHandler) CreateUser(c *gin.Context) {
 		Username:  user.Username,
 		Email:     user.Email,
 		Role:      user.Role,
+		Status:    user.Enabled,
 		CreatedAt: user.CreatedAt.Format("2006-01-02T15:04:05Z"),
 	})
 }
@@ -388,6 +394,7 @@ func (h *AuthHandler) GetUser(c *gin.Context) {
 		Username:  user.Username,
 		Email:     user.Email,
 		Role:      user.Role,
+		Status:    user.Enabled,
 		CreatedAt: user.CreatedAt.Format("2006-01-02T15:04:05Z"),
 	})
 }
@@ -465,6 +472,7 @@ func (h *AuthHandler) UpdateUser(c *gin.Context) {
 		Username:  user.Username,
 		Email:     user.Email,
 		Role:      user.Role,
+		Status:    user.Enabled,
 		CreatedAt: user.CreatedAt.Format("2006-01-02T15:04:05Z"),
 	})
 }

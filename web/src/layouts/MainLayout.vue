@@ -16,7 +16,7 @@
       >
         <el-menu-item index="/">
           <el-icon><Monitor /></el-icon>
-          <span>控制面板</span>
+          <span>仪表盘</span>
         </el-menu-item>
         
         <el-menu-item index="/inbounds">

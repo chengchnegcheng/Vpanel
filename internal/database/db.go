@@ -7,7 +7,7 @@ import (
 	"sync"
 	"time"
 
-	"gorm.io/driver/sqlite"
+	"github.com/glebarez/sqlite"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
 
@@ -148,6 +148,9 @@ func (d *Database) AutoMigrate() error {
 		&repository.Proxy{},
 		&repository.Traffic{},
 		&repository.LoginHistory{},
+		&repository.Role{},
+		&repository.AuditLog{},
+		&repository.Setting{},
 	)
 }
 

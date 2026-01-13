@@ -275,9 +275,17 @@ const validateResult = ref(null)
 onMounted(async () => {
   loading.value = true
   try {
-    const response = await certificatesApi.getCertificates()
-    certificates.value = response.data || []
+    const response = await certificatesApi.list()
+    // 处理响应格式
+    if (response && response.data) {
+      certificates.value = response.data
+    } else if (Array.isArray(response)) {
+      certificates.value = response
+    } else {
+      certificates.value = []
+    }
   } catch (error) {
+    console.error('Failed to fetch certificates:', error)
     ElMessage.error('获取证书列表失败')
     certificates.value = []
   } finally {
@@ -289,8 +297,15 @@ onMounted(async () => {
 const fetchCertificates = async () => {
   loading.value = true
   try {
-    const response = await certificatesApi.getCertificates()
-    certificates.value = response.data || []
+    const response = await certificatesApi.list()
+    // 处理响应格式
+    if (response && response.data) {
+      certificates.value = response.data
+    } else if (Array.isArray(response)) {
+      certificates.value = response
+    } else {
+      certificates.value = []
+    }
   } catch (error) {
     console.error('Failed to fetch certificates:', error)
     ElMessage.error('获取证书列表失败')

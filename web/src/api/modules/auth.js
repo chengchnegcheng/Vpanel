@@ -30,14 +30,14 @@ export const authApi = {
    * 获取当前用户信息
    * @returns {Promise<Object>} 用户信息
    */
-  getProfile: () => api.get('/auth/profile'),
+  getProfile: () => api.get('/auth/me'),
 
   /**
    * 更新当前用户信息
    * @param {Object} data - 用户信息
    * @returns {Promise<Object>} 更新后的用户信息
    */
-  updateProfile: (data) => api.put('/auth/profile', data),
+  updateProfile: (data) => api.put('/auth/me', data),
 
   /**
    * 修改密码

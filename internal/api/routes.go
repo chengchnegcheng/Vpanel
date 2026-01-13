@@ -83,6 +83,7 @@ func (r *Router) Setup() {
 	statsHandler := handlers.NewStatsHandler(r.logger, r.repos, nil)
 	settingsHandler := handlers.NewSettingsHandler(r.logger, r.settingsService)
 	xrayHandler := handlers.NewXrayHandler(r.xrayManager, r.logger)
+	certificatesHandler := handlers.NewCertificatesHandler(r.logger)
 
 	// Initialize system roles
 	ctx := context.Background()
@@ -210,7 +211,23 @@ func (r *Router) Setup() {
 				xrayRoutes.PUT("/config", xrayHandler.UpdateConfig)
 				xrayRoutes.POST("/validate", xrayHandler.ValidateConfig)
 				xrayRoutes.GET("/version", xrayHandler.GetVersion)
+				xrayRoutes.GET("/versions", xrayHandler.GetVersions)
+				xrayRoutes.POST("/sync-versions", xrayHandler.SyncVersions)
 				xrayRoutes.POST("/update", xrayHandler.Update)
+				xrayRoutes.POST("/switch-version", xrayHandler.SwitchVersion)
+			}
+
+			// Certificates routes (admin only)
+			certificatesRoutes := protected.Group("/certificates")
+			certificatesRoutes.Use(authMiddleware.RequireRole("admin"))
+			{
+				certificatesRoutes.GET("", certificatesHandler.List)
+				certificatesRoutes.POST("/apply", certificatesHandler.Apply)
+				certificatesRoutes.POST("/upload", certificatesHandler.Upload)
+				certificatesRoutes.POST("/:id/renew", certificatesHandler.Renew)
+				certificatesRoutes.GET("/:id/validate", certificatesHandler.Validate)
+				certificatesRoutes.DELETE("/:id", certificatesHandler.Delete)
+				certificatesRoutes.PUT("/:id/auto-renew", certificatesHandler.UpdateAutoRenew)
 			}
 		}
 	}

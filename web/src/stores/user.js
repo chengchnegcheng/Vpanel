@@ -23,12 +23,17 @@ export const useUserStore = defineStore('user', () => {
 
   const setUser = (userInfo) => {
     user.value = userInfo
+    // 同步角色到 localStorage，供路由守卫使用
+    if (userInfo?.role) {
+      localStorage.setItem('userRole', userInfo.role)
+    }
   }
 
   const clearAuth = () => {
     token.value = ''
     user.value = null
     localStorage.removeItem('token')
+    localStorage.removeItem('userRole')
   }
 
   // API方法

@@ -12,6 +12,12 @@ export const systemApi = {
   getStatus: () => api.get('/system/status'),
 
   /**
+   * 获取系统状态（别名，兼容旧代码）
+   * @returns {Promise<Object>} 系统状态信息
+   */
+  getSystemStatus: () => api.get('/system/status'),
+
+  /**
    * 获取系统信息
    * @returns {Promise<Object>} 系统信息
    */

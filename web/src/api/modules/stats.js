@@ -36,13 +36,13 @@ export const statsApi = {
   getDetailedStats: (params) => api.get('/stats/detailed', { params }),
 
   /**
-   * 获取流量时间线
+   * 获取流量统计
    * @param {Object} params - 查询参数
    * @param {string} params.period - 时间段
    * @param {string} params.granularity - 粒度 (hourly, daily)
-   * @returns {Promise<Array>} 流量时间线数据
+   * @returns {Promise<Object>} 流量统计数据
    */
-  getTrafficTimeline: (params) => api.get('/stats/traffic/timeline', { params })
+  getTrafficStats: (params) => api.get('/stats/traffic', { params })
 }
 
 export default statsApi

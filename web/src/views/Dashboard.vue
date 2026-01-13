@@ -13,11 +13,11 @@
               <template #header>
                 <div class="card-header">
                   <span>CPU 使用率</span>
-                  <el-tag>{{ systemStats.cpu }}%</el-tag>
+                  <el-tag>{{ systemStats.cpu.toFixed(1) }}%</el-tag>
                 </div>
               </template>
               <div class="stats-progress">
-                <el-progress type="dashboard" :percentage="systemStats.cpu" :color="getCpuColor"></el-progress>
+                <el-progress type="dashboard" :percentage="Math.min(Math.round(systemStats.cpu), 100)" :color="getCpuColor"></el-progress>
               </div>
               <div class="stats-details" v-if="cpuInfo.model">
                 <p>核心数: {{ cpuInfo.cores }}</p>
@@ -31,11 +31,11 @@
               <template #header>
                 <div class="card-header">
                   <span>内存使用率</span>
-                  <el-tag>{{ systemStats.memory }}%</el-tag>
+                  <el-tag>{{ systemStats.memory.toFixed(1) }}%</el-tag>
                 </div>
               </template>
               <div class="stats-progress">
-                <el-progress type="dashboard" :percentage="systemStats.memory" :color="getMemoryColor"></el-progress>
+                <el-progress type="dashboard" :percentage="Math.min(Math.round(systemStats.memory), 100)" :color="getMemoryColor"></el-progress>
               </div>
               <div class="stats-details" v-if="memoryInfo.total">
                 <p>已用: {{ formatBytes(memoryInfo.used) }}</p>
@@ -49,11 +49,11 @@
               <template #header>
                 <div class="card-header">
                   <span>磁盘使用率</span>
-                  <el-tag>{{ systemStats.disk }}%</el-tag>
+                  <el-tag>{{ systemStats.disk.toFixed(1) }}%</el-tag>
                 </div>
               </template>
               <div class="stats-progress">
-                <el-progress type="dashboard" :percentage="systemStats.disk" :color="getDiskColor"></el-progress>
+                <el-progress type="dashboard" :percentage="Math.min(Math.round(systemStats.disk), 100)" :color="getDiskColor"></el-progress>
               </div>
               <div class="stats-details" v-if="diskInfo.total">
                 <p>已用: {{ formatBytes(diskInfo.used) }}</p>
@@ -217,6 +217,12 @@ const systemStats = ref({
   disk: 0
 })
 
+// 格式化百分比，保留1位小数
+const formatPercent = (value) => {
+  if (typeof value !== 'number' || isNaN(value)) return 0
+  return Math.round(value * 10) / 10
+}
+
 // 详细系统信息
 const cpuInfo = ref({ cores: 0, model: '' })
 const memoryInfo = ref({ used: 0, total: 0 })
@@ -313,9 +319,16 @@ const getProtocolColor = (protocol) => {
 const loadSystemStatus = async () => {
   try {
     const response = await systemApi.getSystemStatus()
+    console.log('System status response:', response)
+    
+    // 后端直接返回数据，不是 {code, data} 格式
+    // 检查响应格式
+    let data = response
     if (response && response.code === 200 && response.data) {
-      const data = response.data
-      
+      data = response.data
+    }
+    
+    if (data) {
       // 更新系统信息
       if (data.systemInfo) {
         systemInfo.value = data.systemInfo
@@ -328,19 +341,19 @@ const loadSystemStatus = async () => {
       if (data.cpuInfo) {
         cpuInfo.value = data.cpuInfo
       }
-      systemStats.value.cpu = data.cpuUsage || 0
+      systemStats.value.cpu = formatPercent(data.cpuUsage || data.CPU?.usage || 0)
       
       // 更新内存信息
       if (data.memoryInfo) {
         memoryInfo.value = data.memoryInfo
       }
-      systemStats.value.memory = data.memoryUsage || 0
+      systemStats.value.memory = formatPercent(data.memoryUsage || data.Memory?.usage_percent || 0)
       
       // 更新磁盘信息
       if (data.diskInfo) {
         diskInfo.value = data.diskInfo
       }
-      systemStats.value.disk = data.diskUsage || 0
+      systemStats.value.disk = formatPercent(data.diskUsage || 0)
     }
   } catch (error) {
     console.error('Failed to load system status:', error)
@@ -350,16 +363,17 @@ const loadSystemStatus = async () => {
 // 加载统计数据
 const loadStats = async () => {
   try {
-    const response = await api.get('/api/stats/dashboard')
-    if (response.data) {
-      if (response.data.traffic) {
-        trafficStats.value = response.data.traffic
+    const response = await api.get('/stats/dashboard')
+    console.log('Stats response:', response)
+    if (response) {
+      if (response.traffic) {
+        trafficStats.value = response.traffic
       }
-      if (response.data.protocols) {
-        protocolStats.value = response.data.protocols
+      if (response.protocols) {
+        protocolStats.value = response.protocols
       }
-      if (response.data.protocolTraffic) {
-        protocolTraffic.value = response.data.protocolTraffic
+      if (response.protocolTraffic) {
+        protocolTraffic.value = response.protocolTraffic
       }
     }
   } catch (error) {
@@ -384,9 +398,9 @@ const refreshStats = () => {
 // 切换流量统计周期
 const changeTrafficPeriod = async (period) => {
   try {
-    const response = await api.get('/api/stats/traffic', { params: { period } })
-    if (response.data) {
-      trafficStats.value = response.data
+    const response = await api.get('/stats/traffic', { params: { period } })
+    if (response) {
+      trafficStats.value = response
     }
   } catch (error) {
     console.error('Failed to load traffic data:', error)

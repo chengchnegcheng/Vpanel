@@ -128,80 +128,52 @@
         <el-form label-width="120px" class="settings-form">
           <el-form-item label="当前版本">
             <div class="version-info">
-              <el-tag size="large" type="success">{{ xraySettings.currentVersion || '未知' }}</el-tag>
-              <div class="version-actions">
-                <el-button 
-                  type="primary" 
-                  size="small" 
-                  @click="refreshXrayVersions"
-                  :loading="xraySettings.loading"
-                >
-                  <el-icon><Refresh /></el-icon> 刷新
-                </el-button>
-                <el-button 
-                  type="primary" 
-                  size="small" 
-                  @click="syncVersionsFromGitHub"
-                  :loading="xraySettings.syncing"
-                >
-                  <el-icon><Connection /></el-icon> 
-                  <span>{{ xraySettings.syncing ? '同步中...' : '同步GitHub' }}</span>
-                </el-button>
-                <div class="sync-status" v-if="xraySettings.syncing">
-                  <el-progress :percentage="50" :indeterminate="true" />
-                </div>
-                <el-button 
-                  type="warning" 
-                  size="small" 
-                  @click="checkXrayUpdates"
-                  :loading="xraySettings.checkingForUpdates"
-                >
-                  <el-icon><Download /></el-icon> 检查更新
-                </el-button>
-                <el-button 
-                  type="info" 
-                  size="small" 
-                  @click="loadVersionDetails(xraySettings.currentVersion)"
-                  :disabled="xraySettings.currentVersion === '未知'"
-                >
-                  <el-icon><InfoFilled /></el-icon> 版本详情
-                </el-button>
-                <el-button 
-                  type="success" 
-                  size="small" 
-                  plain
-                  @click="openXrayReleasePage"
-                >
-                  <el-icon><Link /></el-icon> GitHub发布页
-                </el-button>
-              </div>
-            </div>
-            <div class="version-sync-info" v-if="xraySettings.versions.length > 0">
-              <el-alert
-                type="info"
-                :closable="false"
-                show-icon
+              <el-tag size="large" type="success">{{ xraySettings.currentVersion || '未安装' }}</el-tag>
+              <el-button 
+                type="primary" 
+                size="small" 
+                @click="refreshXrayVersions"
+                :loading="xraySettings.loading"
+                style="margin-left: 10px;"
               >
-                <template #title>
-                  <div class="sync-info-title">
-                    <span>版本同步状态</span>
-                    <el-tag size="small" type="success" v-if="xraySettings.versions.length > 10">已同步</el-tag>
-                    <el-tag size="small" type="warning" v-else>使用本地备份</el-tag>
-                  </div>
-                </template>
-                <div class="sync-info-content">
-                  <p>可用版本数量: <strong>{{ xraySettings.versions.length }}</strong> 个</p>
-                  <p>推荐版本: <el-tag size="small" effect="dark" type="success">{{ xraySettings.versions[0] }}</el-tag></p>
-                  <p>最近同步: <el-tag size="small" type="info">{{ getTimeAgo() }}</el-tag></p>
-                  <p>
-                    <el-link type="primary" :underline="false" @click="syncVersionsFromGitHub" :disabled="xraySettings.syncing">
-                      <el-icon class="is-loading" v-if="xraySettings.syncing"><Loading /></el-icon>
-                      <span>{{ xraySettings.syncing ? '正在同步...' : '立即同步' }}</span>
-                    </el-link>
-                  </p>
-                </div>
-              </el-alert>
+                刷新
+              </el-button>
+              <el-button 
+                type="warning" 
+                size="small" 
+                @click="syncVersionsFromGitHub"
+                :loading="xraySettings.syncing"
+                style="margin-left: 10px;"
+              >
+                从GitHub同步
+              </el-button>
             </div>
+          </el-form-item>
+          
+          <el-form-item label="运行状态">
+            <el-tag :type="xraySettings.running ? 'success' : 'danger'">
+              {{ xraySettings.running ? '运行中' : '已停止' }}
+            </el-tag>
+            <el-button 
+              v-if="!xraySettings.running"
+              type="success" 
+              size="small" 
+              @click="startXray"
+              :loading="xraySettings.starting"
+              style="margin-left: 10px;"
+            >
+              启动
+            </el-button>
+            <el-button 
+              v-else
+              type="danger" 
+              size="small" 
+              @click="stopXray"
+              :loading="xraySettings.stopping"
+              style="margin-left: 10px;"
+            >
+              停止
+            </el-button>
           </el-form-item>
           
           <el-form-item label="切换版本">
@@ -211,104 +183,43 @@
                 placeholder="选择版本" 
                 style="width: 180px;"
                 :loading="xraySettings.loading"
-                :disabled="xraySettings.switching || xraySettings.loading"
-                filterable
+                :disabled="xraySettings.switching"
               >
-                <el-option-group label="稳定版本">
-                  <el-option 
-                    v-for="version in stableVersions" 
-                    :key="version" 
-                    :label="version" 
-                    :value="version"
-                  >
-                    <span style="float: left">{{ version }}</span>
-                    <span 
-                      v-if="version === xraySettings.currentVersion" 
-                      style="float: right; color: #67C23A; font-size: 13px"
-                    >当前版本</span>
-                    <span 
-                      v-else-if="version === xraySettings.versions[0]" 
-                      style="float: right; color: #409EFF; font-size: 13px"
-                    >推荐版本</span>
-                  </el-option>
-                </el-option-group>
-                <el-option-group label="测试版本">
-                  <el-option 
-                    v-for="version in betaVersions" 
-                    :key="version" 
-                    :label="version" 
-                    :value="version"
-                  >
-                    <span style="float: left">{{ version }}</span>
-                    <span 
-                      v-if="version === xraySettings.currentVersion" 
-                      style="float: right; color: #67C23A; font-size: 13px"
-                    >当前版本</span>
-                  </el-option>
-                </el-option-group>
+                <el-option 
+                  v-for="version in xraySettings.versions" 
+                  :key="version" 
+                  :label="version" 
+                  :value="version"
+                >
+                  <span>{{ version }}</span>
+                  <span 
+                    v-if="version === xraySettings.currentVersion" 
+                    style="float: right; color: #67C23A; font-size: 12px"
+                  >当前</span>
+                </el-option>
               </el-select>
               <el-button 
                 type="primary" 
                 @click="handleSwitchVersion" 
                 :loading="xraySettings.switching"
-                :disabled="!xraySettings.selectedVersion || xraySettings.selectedVersion === xraySettings.currentVersion || xraySettings.loading"
+                :disabled="!xraySettings.selectedVersion || xraySettings.selectedVersion === xraySettings.currentVersion"
+                style="margin-left: 10px;"
               >
                 切换版本
               </el-button>
             </div>
-            <div class="version-tips" v-if="xraySettings.versions.length > 0">
-              <p>可用版本: {{ xraySettings.versions.length }} 个</p>
-              <p>推荐版本: <el-tag size="small" type="success">{{ xraySettings.versions[0] }}</el-tag></p>
-              <p v-if="xraySettings.currentVersion && xraySettings.versions.includes(xraySettings.currentVersion)">
-                当前版本: 
-                <el-tag size="small" type="primary">{{ xraySettings.currentVersion }}</el-tag>
-                <span v-if="isNewVersion(xraySettings.versions[0], xraySettings.currentVersion)" style="color: #E6A23C; margin-left: 5px;">
-                  (有新版本可用)
-                </span>
-              </p>
-            </div>
+            <div class="form-tips">选择要切换的 Xray 版本，切换后需要重启服务</div>
           </el-form-item>
           
           <el-form-item label="自动更新">
-            <el-switch 
-              v-model="xraySettings.autoUpdate" 
-              @change="toggleAutoUpdate"
-            />
+            <el-switch v-model="xraySettings.autoUpdate" />
             <div class="form-tips">启用后，系统将自动更新到最新的稳定版</div>
-          </el-form-item>
-          
-          <el-form-item label="检查更新间隔">
-            <el-select v-model="xraySettings.checkInterval" style="width: 200px;">
-              <el-option label="从不" :value="0" />
-              <el-option label="每天" :value="24" />
-              <el-option label="每周" :value="168" />
-              <el-option label="每月" :value="720" />
-            </el-select>
-            <div class="form-tips">自动检查Xray更新的时间间隔</div>
-          </el-form-item>
-          
-          <el-form-item label="使用自定义配置">
-            <el-switch 
-              v-model="xraySettings.customConfig"
-              @change="console.log('customConfig changed:', xraySettings.customConfig)"
-            />
-            <div class="form-tips">启用后，将使用自定义的Xray配置文件，而不是由系统生成</div>
-          </el-form-item>
-          
-          <el-form-item label="配置文件路径" v-if="xraySettings.customConfig">
-            <el-input v-model="xraySettings.configPath" placeholder="/path/to/config.json">
-              <template #append>
-                <el-button @click="testCustomConfig">测试配置</el-button>
-              </template>
-            </el-input>
-            <div class="form-tips">自定义配置文件的绝对路径，请确保格式正确且有权限访问</div>
           </el-form-item>
           
           <el-divider></el-divider>
           <el-form-item>
             <el-button type="primary" @click="saveXraySettings">保存设置</el-button>
             <el-button type="success" @click="restartXray" :loading="xraySettings.restarting">重启Xray</el-button>
-            <el-button @click="refreshXraySettings" :loading="xraySettings.loading">刷新设置</el-button>
           </el-form-item>
         </el-form>
       </el-tab-pane>
@@ -779,6 +690,8 @@ const xraySettings = reactive({
   running: false,  // 运行状态
   restarting: false,
   syncing: false,  // 同步状态
+  starting: false, // 启动状态
+  stopping: false, // 停止状态
   showVersionDetails: false,
   versionDetails: {
     version: '',
@@ -898,6 +811,65 @@ const handleTabClick = (tab) => {
   if (tab.props.name === 'xray') {
     // 当切换到Xray标签页时，刷新数据
     refreshXraySettings()
+  }
+}
+
+// 启动Xray
+const startXray = async () => {
+  try {
+    xraySettings.starting = true
+    ElMessage.info('正在启动 Xray 服务...')
+    
+    const response = await api.post('/xray/start')
+    
+    if (response.data) {
+      ElMessage.success('Xray 服务已启动')
+      xraySettings.running = true
+      
+      // 刷新状态
+      await refreshXrayStatus()
+    }
+  } catch (error) {
+    console.error('Failed to start Xray:', error)
+    ElMessage.error('启动 Xray 失败: ' + (error.response?.data?.error || error.message || '未知错误'))
+  } finally {
+    xraySettings.starting = false
+  }
+}
+
+// 停止Xray
+const stopXray = async () => {
+  try {
+    await ElMessageBox.confirm(
+      '确定要停止 Xray 服务吗？这将中断所有正在连接的用户。',
+      '停止 Xray',
+      {
+        confirmButtonText: '确认停止',
+        cancelButtonText: '取消',
+        type: 'warning'
+      }
+    )
+    
+    xraySettings.stopping = true
+    ElMessage.info('正在停止 Xray 服务...')
+    
+    const response = await api.post('/xray/stop')
+    
+    if (response.data) {
+      ElMessage.success('Xray 服务已停止')
+      xraySettings.running = false
+      
+      // 刷新状态
+      await refreshXrayStatus()
+    }
+  } catch (error) {
+    if (error === 'cancel') {
+      return
+    }
+    console.error('Failed to stop Xray:', error)
+    ElMessage.error('停止 Xray 失败: ' + (error.response?.data?.error || error.message || '未知错误'))
+  } finally {
+    xraySettings.stopping = false
   }
 }
 
@@ -1029,21 +1001,21 @@ const restartXray = async () => {
                             errorMsg.includes('download')
       
       if (isVersionError) {
-        // 可能是版本问题，尝试同步和重新下载
-        ElMessage.warning('可能是Xray版本问题，正在尝试同步和重新下载...')
+        // 可能是版本问题，尝试重新获取版本列表
+        ElMessage.warning('可能是Xray版本问题，正在尝试刷新版本列表...')
         try {
-          await syncVersionsFromGitHub()
+          await refreshXrayVersions()
           // 再次尝试启动
           const retryResponse = await api.post('/xray/start', {}, { timeout: startTimeout })
           if (retryResponse.data && retryResponse.data.success) {
-            ElMessage.success('Xray服务已在同步版本后成功启动')
+            ElMessage.success('Xray服务已在刷新版本后成功启动')
             setTimeout(() => {
               refreshXrayVersions()
             }, 1000)
             return
           }
-        } catch (syncError) {
-          console.error('Failed to sync and retry:', syncError)
+        } catch (refreshError) {
+          console.error('Failed to refresh and retry:', refreshError)
           // 继续到错误处理
         }
       }
@@ -1247,8 +1219,7 @@ const loadXrayVersions = async () => {
     // 显示正在刷新的提示
     ElMessage.info('正在刷新Xray版本信息...')
     
-    // 尝试从API获取Xray版本信息
-    let versionsUpdated = false
+    // 从API获取Xray版本信息
     try {
       const response = await api.get('/xray/versions')
       if (response.data && response.data.current_version) {
@@ -1257,15 +1228,14 @@ const loadXrayVersions = async () => {
       
       if (response.data && Array.isArray(response.data.supported_versions) && response.data.supported_versions.length > 0) {
         xraySettings.versions = response.data.supported_versions
-        versionsUpdated = true
       }
     } catch (error) {
-      console.warn('Failed to get versions from API, will try to sync from GitHub:', error)
-    }
-    
-    // 如果从API获取版本失败，尝试从GitHub同步
-    if (!versionsUpdated) {
-      await syncVersionsFromGitHub()
+      console.warn('Failed to get versions from API:', error)
+      // 使用默认版本列表
+      xraySettings.versions = [
+        'v1.8.24', 'v1.8.23', 'v1.8.22', 'v1.8.21', 'v1.8.20',
+        'v25.3.6', 'v25.3.3', 'v25.2.21', 'v25.2.18', 'v25.1.30'
+      ]
     }
     
     // 确保selectedVersion有值，默认为当前版本
@@ -1296,15 +1266,6 @@ const loadXrayVersions = async () => {
     if (!xraySettings.selectedVersion || xraySettings.selectedVersion === '') {
       xraySettings.selectedVersion = xraySettings.versions[0]
     }
-    
-    // 显示错误详情
-    showErrorDetails(
-      '刷新Xray版本信息失败',
-      error.response?.data?.message || error.message || '未知错误',
-      '请检查网络连接或服务器状态，或者稍后再试。',
-      true,
-      'refreshVersions'
-    )
   } finally {
     xraySettings.loading = false
   }
@@ -1316,117 +1277,73 @@ const syncVersionsFromGitHub = async () => {
   xraySettings.syncing = true
   
   try {
-    ElMessage.info({
-      message: '正在从GitHub同步Xray版本信息...',
-      duration: 0
-    })
+    ElMessage.info('正在从 GitHub 同步版本列表...')
     
     // 调用后端API同步版本
-    const response = await api.post('/xray/sync-versions-from-github', {}, {
-      timeout: 30000 // 增加超时时间到30秒，GitHub访问可能较慢
-    })
-    
-    // 清除之前的消息
-    ElMessage.closeAll()
+    const response = await api.post('/xray/sync-versions', {}, { timeout: 60000 })
     
     if (response.data && response.data.success) {
-      // 同步成功，获取同步到的版本列表
-      try {
-        const syncResponse = await api.get('/xray/versions')
-        if (syncResponse.data && Array.isArray(syncResponse.data.supported_versions) && syncResponse.data.supported_versions.length > 0) {
-          xraySettings.versions = syncResponse.data.supported_versions
-          
-          // 更新同步时间
-          lastSyncTime.value = Date.now().toString()
-          localStorage.setItem('xray_last_sync_time', lastSyncTime.value)
-          
-          ElMessage.success({
-            message: `已从GitHub同步最新Xray版本信息，共 ${xraySettings.versions.length} 个版本`,
-            duration: 3000
-          })
-          
-          // 更新当前选择的版本
-          if (!xraySettings.selectedVersion || !xraySettings.versions.includes(xraySettings.selectedVersion)) {
-            if (xraySettings.versions.includes(xraySettings.currentVersion)) {
-              xraySettings.selectedVersion = xraySettings.currentVersion
-            } else if (xraySettings.versions.length > 0) {
-              xraySettings.selectedVersion = xraySettings.versions[0]
-            }
+      // 同步成功，更新版本列表
+      if (Array.isArray(response.data.versions) && response.data.versions.length > 0) {
+        xraySettings.versions = response.data.versions
+        
+        // 更新同步时间
+        lastSyncTime.value = Date.now().toString()
+        localStorage.setItem('xray_last_sync_time', lastSyncTime.value)
+        
+        ElMessage.success(`已从 GitHub 同步 ${response.data.count || response.data.versions.length} 个版本`)
+        
+        // 更新当前选择的版本
+        if (!xraySettings.selectedVersion || !xraySettings.versions.includes(xraySettings.selectedVersion)) {
+          if (xraySettings.versions.includes(xraySettings.currentVersion)) {
+            xraySettings.selectedVersion = xraySettings.currentVersion
+          } else if (xraySettings.versions.length > 0) {
+            xraySettings.selectedVersion = xraySettings.versions[0]
           }
-          
-          return true
-        } else {
-          throw new Error('同步成功但未返回有效版本列表')
         }
-      } catch (syncError) {
-        console.error('Sync succeeded but failed to get versions:', syncError)
-        throw new Error('同步成功但获取版本列表失败: ' + (syncError.message || '未知错误'))
+        
+        return true
+      } else {
+        // 同步成功但没有版本，重新获取
+        await refreshXrayVersions()
+        return true
       }
     } else {
-      throw new Error(response.data?.message || '服务器同步失败，未返回成功状态')
+      throw new Error(response.data?.error || '同步失败')
     }
   } catch (error) {
-    // 清除之前的消息
-    ElMessage.closeAll()
-    
     console.error('Failed to sync versions from GitHub:', error)
     
-    // 错误处理逻辑
-    if (error.code === 'ECONNABORTED' || error.message.includes('timeout')) {
-      ElMessage.error('从GitHub同步版本超时，请检查网络连接或GitHub的可访问性')
+    // 错误处理
+    let errorMsg = '同步版本失败'
+    if (error.code === 'ECONNABORTED' || error.message?.includes('timeout')) {
+      errorMsg = '同步超时，请检查网络连接'
     } else if (error.response?.status === 403) {
-      ElMessage.error('GitHub API访问受限，可能是请求频率超出限制，请稍后再试')
-    } else if (error.response?.status === 404) {
-      ElMessage.error('GitHub版本资源不存在，请联系管理员')
-    } else if (error.response?.status >= 500) {
-      ElMessage.error('GitHub服务器或本地服务器内部错误，请稍后重试')
-    } else {
-      ElMessage.error('从GitHub同步版本失败: ' + (error.message || '未知错误'))
+      errorMsg = 'GitHub API 访问受限，请稍后再试'
+    } else if (error.response?.data?.error) {
+      errorMsg = error.response.data.error
+    } else if (error.message) {
+      errorMsg = error.message
     }
     
-    // 显示详细错误信息对话框
-    showErrorDetails(
-      '从GitHub同步Xray版本失败',
-      error.response?.data?.message || error.message || '未知错误',
-      '可能的原因:\n1. 网络连接问题或无法访问GitHub\n2. GitHub API访问限制(每小时60次)\n3. 服务器权限不足\n4. 暂时性服务中断',
-      true,
-      'syncVersions'
-    )
+    ElMessage.error(errorMsg)
     
     // 使用本地备用版本列表
     if (!xraySettings.versions.length) {
-      console.info('Using fallback version list since sync failed')
-      
-      // 使用本地备用版本列表
-      const fallbackVersions = [
-        'v1.8.25', 'v1.8.24', 'v1.8.23', 'v1.8.22', 'v1.8.21',
-        'v1.8.20', 'v1.8.19', 'v1.8.18', 'v1.8.17', 'v1.8.16'
+      xraySettings.versions = [
+        'v1.8.24', 'v1.8.23', 'v1.8.22', 'v1.8.21', 'v1.8.20',
+        'v1.8.19', 'v1.8.18', 'v1.8.17', 'v1.8.16', 'v1.8.15'
       ]
       
-      // 如果当前没有版本列表，则使用备用列表
-      xraySettings.versions = fallbackVersions
-      
-      // 更新选择的版本
       if (!xraySettings.selectedVersion || !xraySettings.versions.includes(xraySettings.selectedVersion)) {
         xraySettings.selectedVersion = xraySettings.versions[0]
       }
       
       ElMessage.warning('已使用本地版本列表作为备用')
-      
-      // 尝试更新服务器版本列表
-      try {
-        await api.post('/xray/update-versions', {
-          versions: xraySettings.versions
-        })
-        console.log('Updated server versions with fallback list')
-      } catch (updateError) {
-        console.error('Failed to update server versions with fallback list:', updateError)
-      }
     }
     
     return false
   } finally {
-    // 清除同步状态
     xraySettings.syncing = false
   }
 }

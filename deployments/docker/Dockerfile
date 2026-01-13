@@ -17,10 +17,10 @@ COPY web/ ./
 RUN npm run build
 
 # Stage 2: Build backend
-FROM golang:1.23-alpine AS backend-builder
+FROM golang:1.24-alpine AS backend-builder
 
-# Install build dependencies (including gcc for CGO)
-RUN apk add --no-cache git ca-certificates tzdata gcc musl-dev
+# Install minimal build dependencies (no gcc needed - using pure Go SQLite)
+RUN apk add --no-cache git ca-certificates tzdata
 
 # Set Go proxy for faster downloads
 ENV GOPROXY=https://goproxy.cn,direct
@@ -34,12 +34,12 @@ RUN go mod download
 # Copy source code
 COPY . .
 
-# Build the application
+# Build the application (CGO disabled - using pure Go SQLite driver)
 ARG VERSION=dev
 ARG BUILD_TIME
 ARG GIT_COMMIT
 
-RUN CGO_ENABLED=1 GOOS=linux go build \
+RUN CGO_ENABLED=0 GOOS=linux go build \
     -ldflags="-s -w -X main.version=${VERSION} -X main.buildTime=${BUILD_TIME} -X main.gitCommit=${GIT_COMMIT}" \
     -o /app/v-panel ./cmd/v/main.go
 

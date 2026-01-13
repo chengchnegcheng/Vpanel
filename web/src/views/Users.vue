@@ -243,7 +243,11 @@ const handleToggleStatus = async (row) => {
     const action = row.status ? '禁用' : '启用'
     
     // 调用 API 更新用户状态
-    await api.put(`/users/${row.id}`, { status: !row.status })
+    if (row.status) {
+      await api.post(`/users/${row.id}/disable`)
+    } else {
+      await api.post(`/users/${row.id}/enable`)
+    }
     
     row.status = !row.status
     ElMessage.success(`已${action}用户：${row.username}`)
