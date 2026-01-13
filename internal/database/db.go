@@ -151,6 +151,7 @@ func (d *Database) AutoMigrate() error {
 		&repository.Role{},
 		&repository.AuditLog{},
 		&repository.Setting{},
+		&repository.Log{},
 	)
 }
 

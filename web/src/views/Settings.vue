@@ -1222,12 +1222,13 @@ const loadXrayVersions = async () => {
     // 从API获取Xray版本信息
     try {
       const response = await api.get('/xray/versions')
-      if (response.data && response.data.current_version) {
-        xraySettings.currentVersion = response.data.current_version
+      // 注意：axios拦截器已经返回了response.data
+      if (response && response.current_version) {
+        xraySettings.currentVersion = response.current_version
       }
       
-      if (response.data && Array.isArray(response.data.supported_versions) && response.data.supported_versions.length > 0) {
-        xraySettings.versions = response.data.supported_versions
+      if (response && Array.isArray(response.supported_versions) && response.supported_versions.length > 0) {
+        xraySettings.versions = response.supported_versions
       }
     } catch (error) {
       console.warn('Failed to get versions from API:', error)
@@ -1282,16 +1283,17 @@ const syncVersionsFromGitHub = async () => {
     // 调用后端API同步版本
     const response = await api.post('/xray/sync-versions', {}, { timeout: 60000 })
     
-    if (response.data && response.data.success) {
+    // 注意：axios拦截器已经返回了response.data，所以直接使用response
+    if (response && response.success) {
       // 同步成功，更新版本列表
-      if (Array.isArray(response.data.versions) && response.data.versions.length > 0) {
-        xraySettings.versions = response.data.versions
+      if (Array.isArray(response.versions) && response.versions.length > 0) {
+        xraySettings.versions = response.versions
         
         // 更新同步时间
         lastSyncTime.value = Date.now().toString()
         localStorage.setItem('xray_last_sync_time', lastSyncTime.value)
         
-        ElMessage.success(`已从 GitHub 同步 ${response.data.count || response.data.versions.length} 个版本`)
+        ElMessage.success(`已从 GitHub 同步 ${response.count || response.versions.length} 个版本`)
         
         // 更新当前选择的版本
         if (!xraySettings.selectedVersion || !xraySettings.versions.includes(xraySettings.selectedVersion)) {
@@ -1309,7 +1311,7 @@ const syncVersionsFromGitHub = async () => {
         return true
       }
     } else {
-      throw new Error(response.data?.error || '同步失败')
+      throw new Error(response?.error || '同步失败')
     }
   } catch (error) {
     console.error('Failed to sync versions from GitHub:', error)
@@ -1318,10 +1320,10 @@ const syncVersionsFromGitHub = async () => {
     let errorMsg = '同步版本失败'
     if (error.code === 'ECONNABORTED' || error.message?.includes('timeout')) {
       errorMsg = '同步超时，请检查网络连接'
-    } else if (error.response?.status === 403) {
+    } else if (error.status === 403) {
       errorMsg = 'GitHub API 访问受限，请稍后再试'
-    } else if (error.response?.data?.error) {
-      errorMsg = error.response.data.error
+    } else if (error.error) {
+      errorMsg = error.error
     } else if (error.message) {
       errorMsg = error.message
     }
@@ -1391,10 +1393,11 @@ const refreshXrayVersions = async () => {
     
     // 获取版本列表
     const response = await api.get('/xray/versions');
-    if (response && response.data) {
+    // 注意：axios拦截器已经返回了response.data
+    if (response) {
       // 确保数据有效
-      if (Array.isArray(response.data.supported_versions) && response.data.supported_versions.length > 0) {
-        xraySettings.versions = response.data.supported_versions;
+      if (Array.isArray(response.supported_versions) && response.supported_versions.length > 0) {
+        xraySettings.versions = response.supported_versions;
         console.log('获取到的版本列表:', xraySettings.versions);
       } else {
         console.warn('API返回的版本列表为空，使用默认版本');
@@ -1405,7 +1408,7 @@ const refreshXrayVersions = async () => {
         ];
       }
       
-      xraySettings.currentVersion = response.data.current_version || '未知';
+      xraySettings.currentVersion = response.current_version || '未知';
       
       // 如果当前没有选择版本，默认选择当前版本
       if (!xraySettings.selectedVersion) {
@@ -1441,12 +1444,13 @@ const refreshXrayVersions = async () => {
 const refreshXrayStatus = async () => {
   try {
     const response = await api.get('/xray/status');
-    if (response && response.data) {
-      xraySettings.running = response.data.running || false;
+    // 注意：axios拦截器已经返回了response.data
+    if (response) {
+      xraySettings.running = response.running || false;
       
       // 如果API返回了当前版本，更新版本信息
-      if (response.data.current_version) {
-        xraySettings.currentVersion = response.data.current_version;
+      if (response.current_version) {
+        xraySettings.currentVersion = response.current_version;
       }
       
       console.log('Xray status refreshed:', {

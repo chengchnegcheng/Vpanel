@@ -1,0 +1,501 @@
+<template>
+  <div class="logs-container">
+    <div class="header">
+      <h1>日志管理</h1>
+      <div class="actions">
+        <el-button type="primary" @click="refreshLogs">
+          <el-icon><Refresh /></el-icon>
+          刷新
+        </el-button>
+        <el-button type="success" @click="handleExport">
+          <el-icon><Download /></el-icon>
+          导出
+        </el-button>
+        <el-button type="warning" @click="showCleanupDialog">
+          <el-icon><Delete /></el-icon>
+          清理
+        </el-button>
+      </div>
+    </div>
+
+    <!-- 过滤控件 -->
+    <el-card class="filter-card">
+      <el-form :inline="true" :model="filterForm" class="filter-form">
+        <el-form-item label="日志级别">
+          <el-select v-model="filterForm.level" placeholder="全部级别" clearable style="width: 120px">
+            <el-option label="Debug" value="debug" />
+            <el-option label="Info" value="info" />
+            <el-option label="Warn" value="warn" />
+            <el-option label="Error" value="error" />
+            <el-option label="Fatal" value="fatal" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="日志来源">
+          <el-input v-model="filterForm.source" placeholder="来源" clearable style="width: 150px" />
+        </el-form-item>
+        <el-form-item label="关键词">
+          <el-input v-model="filterForm.keyword" placeholder="搜索关键词" clearable style="width: 200px">
+            <template #prefix>
+              <el-icon><Search /></el-icon>
+            </template>
+          </el-input>
+        </el-form-item>
+        <el-form-item label="时间范围">
+          <el-date-picker
+            v-model="filterForm.dateRange"
+            type="datetimerange"
+            range-separator="至"
+            start-placeholder="开始时间"
+            end-placeholder="结束时间"
+            value-format="YYYY-MM-DDTHH:mm:ssZ"
+            style="width: 360px"
+          />
+        </el-form-item>
+        <el-form-item>
+          <el-button type="primary" @click="handleFilter">查询</el-button>
+          <el-button @click="resetFilter">重置</el-button>
+        </el-form-item>
+      </el-form>
+    </el-card>
+
+    <!-- 日志列表 -->
+    <el-table
+      :data="logs"
+      border
+      v-loading="loading"
+      style="width: 100%"
+      :row-class-name="getRowClassName"
+      @row-click="handleRowClick"
+    >
+      <el-table-column prop="id" label="ID" width="80" />
+      <el-table-column prop="level" label="级别" width="100">
+        <template #default="scope">
+          <el-tag :type="getLevelTagType(scope.row.level)" size="small">
+            {{ (scope.row.level || '').toUpperCase() }}
+          </el-tag>
+        </template>
+      </el-table-column>
+      <el-table-column prop="source" label="来源" width="150" />
+      <el-table-column prop="message" label="消息" min-width="300" show-overflow-tooltip />
+      <el-table-column prop="created_at" label="时间" width="180">
+        <template #default="scope">
+          {{ formatDateTime(scope.row.created_at) }}
+        </template>
+      </el-table-column>
+      <el-table-column label="操作" width="100" fixed="right">
+        <template #default="scope">
+          <el-button type="primary" link size="small" @click.stop="showLogDetail(scope.row)">
+            详情
+          </el-button>
+        </template>
+      </el-table-column>
+    </el-table>
+
+    <!-- 分页控件 -->
+    <div class="pagination-container">
+      <el-pagination
+        v-model:current-page="currentPage"
+        v-model:page-size="pageSize"
+        :page-sizes="[20, 50, 100, 200]"
+        layout="total, sizes, prev, pager, next, jumper"
+        :total="total"
+        @size-change="handleSizeChange"
+        @current-change="handleCurrentChange"
+      />
+    </div>
+
+    <!-- 日志详情弹窗 -->
+    <el-dialog v-model="detailDialogVisible" title="日志详情" width="700px">
+      <el-descriptions :column="2" border v-if="selectedLog">
+        <el-descriptions-item label="ID">{{ selectedLog.id }}</el-descriptions-item>
+        <el-descriptions-item label="级别">
+          <el-tag :type="getLevelTagType(selectedLog.level)" size="small">
+            {{ (selectedLog.level || '').toUpperCase() }}
+          </el-tag>
+        </el-descriptions-item>
+        <el-descriptions-item label="来源">{{ selectedLog.source }}</el-descriptions-item>
+        <el-descriptions-item label="时间">{{ formatDateTime(selectedLog.created_at) }}</el-descriptions-item>
+        <el-descriptions-item label="用户 ID" v-if="selectedLog.user_id">{{ selectedLog.user_id }}</el-descriptions-item>
+        <el-descriptions-item label="IP 地址" v-if="selectedLog.ip">{{ selectedLog.ip }}</el-descriptions-item>
+        <el-descriptions-item label="User Agent" :span="2" v-if="selectedLog.user_agent">
+          {{ selectedLog.user_agent }}
+        </el-descriptions-item>
+        <el-descriptions-item label="请求 ID" :span="2" v-if="selectedLog.request_id">
+          {{ selectedLog.request_id }}
+        </el-descriptions-item>
+        <el-descriptions-item label="消息" :span="2">
+          <div class="log-message">{{ selectedLog.message }}</div>
+        </el-descriptions-item>
+        <el-descriptions-item label="附加字段" :span="2" v-if="selectedLog.fields && selectedLog.fields !== '{}'">
+          <pre class="log-fields">{{ typeof selectedLog.fields === 'string' ? selectedLog.fields : JSON.stringify(selectedLog.fields, null, 2) }}</pre>
+        </el-descriptions-item>
+      </el-descriptions>
+    </el-dialog>
+
+    <!-- 清理对话框 -->
+    <el-dialog v-model="cleanupDialogVisible" title="清理日志" width="400px">
+      <el-form :model="cleanupForm" label-width="100px">
+        <el-form-item label="保留天数">
+          <el-input-number v-model="cleanupForm.retentionDays" :min="1" :max="365" />
+          <span style="margin-left: 10px; color: #909399;">天</span>
+        </el-form-item>
+        <el-alert
+          type="warning"
+          :closable="false"
+          show-icon
+          style="margin-top: 10px"
+        >
+          此操作将删除 {{ cleanupForm.retentionDays }} 天前的所有日志，不可恢复！
+        </el-alert>
+      </el-form>
+      <template #footer>
+        <el-button @click="cleanupDialogVisible = false">取消</el-button>
+        <el-button type="danger" @click="handleCleanup" :loading="cleanupLoading">
+          确认清理
+        </el-button>
+      </template>
+    </el-dialog>
+
+    <!-- 导出对话框 -->
+    <el-dialog v-model="exportDialogVisible" title="导出日志" width="400px">
+      <el-form :model="exportForm" label-width="100px">
+        <el-form-item label="导出格式">
+          <el-radio-group v-model="exportForm.format">
+            <el-radio value="json">JSON</el-radio>
+            <el-radio value="csv">CSV</el-radio>
+          </el-radio-group>
+        </el-form-item>
+        <el-alert
+          type="info"
+          :closable="false"
+          show-icon
+          style="margin-top: 10px"
+        >
+          将导出当前筛选条件下的所有日志
+        </el-alert>
+      </el-form>
+      <template #footer>
+        <el-button @click="exportDialogVisible = false">取消</el-button>
+        <el-button type="primary" @click="confirmExport" :loading="exportLoading">
+          导出
+        </el-button>
+      </template>
+    </el-dialog>
+  </div>
+</template>
+
+<script setup>
+import { ref, reactive, onMounted } from 'vue'
+import { ElMessage, ElMessageBox } from 'element-plus'
+import { Search, Refresh, Download, Delete } from '@element-plus/icons-vue'
+import { logsApi } from '@/api'
+
+// 状态
+const logs = ref([])
+const loading = ref(false)
+const total = ref(0)
+const currentPage = ref(1)
+const pageSize = ref(50)
+
+// 过滤表单
+const filterForm = reactive({
+  level: '',
+  source: '',
+  keyword: '',
+  dateRange: null
+})
+
+// 详情弹窗
+const detailDialogVisible = ref(false)
+const selectedLog = ref(null)
+
+// 清理弹窗
+const cleanupDialogVisible = ref(false)
+const cleanupLoading = ref(false)
+const cleanupForm = reactive({
+  retentionDays: 30
+})
+
+// 导出弹窗
+const exportDialogVisible = ref(false)
+const exportLoading = ref(false)
+const exportForm = reactive({
+  format: 'json'
+})
+
+// 生命周期
+onMounted(() => {
+  fetchLogs()
+})
+
+// 获取日志列表
+const fetchLogs = async () => {
+  loading.value = true
+  try {
+    const params = {
+      page: currentPage.value,
+      page_size: pageSize.value
+    }
+
+    if (filterForm.level) {
+      params.level = filterForm.level
+    }
+    if (filterForm.source) {
+      params.source = filterForm.source
+    }
+    if (filterForm.keyword) {
+      params.keyword = filterForm.keyword
+    }
+    if (filterForm.dateRange && filterForm.dateRange.length === 2) {
+      params.start_time = filterForm.dateRange[0]
+      params.end_time = filterForm.dateRange[1]
+    }
+
+    const response = await logsApi.getLogs(params)
+    logs.value = response.logs || []
+    total.value = response.total || 0
+  } catch (error) {
+    if (!error.cancelled) {
+      console.error('Failed to fetch logs:', error)
+      ElMessage.error('获取日志列表失败')
+    }
+  } finally {
+    loading.value = false
+  }
+}
+
+// 刷新日志
+const refreshLogs = () => {
+  fetchLogs()
+}
+
+// 过滤查询
+const handleFilter = () => {
+  currentPage.value = 1
+  fetchLogs()
+}
+
+// 重置过滤
+const resetFilter = () => {
+  filterForm.level = ''
+  filterForm.source = ''
+  filterForm.keyword = ''
+  filterForm.dateRange = null
+  currentPage.value = 1
+  fetchLogs()
+}
+
+// 分页处理
+const handleSizeChange = (val) => {
+  pageSize.value = val
+  currentPage.value = 1
+  fetchLogs()
+}
+
+const handleCurrentChange = (val) => {
+  currentPage.value = val
+  fetchLogs()
+}
+
+// 行点击
+const handleRowClick = (row) => {
+  showLogDetail(row)
+}
+
+// 显示日志详情
+const showLogDetail = async (log) => {
+  try {
+    const response = await logsApi.getLog(log.id)
+    selectedLog.value = response
+    detailDialogVisible.value = true
+  } catch (error) {
+    if (!error.cancelled) {
+      console.error('Failed to fetch log detail:', error)
+      ElMessage.error('获取日志详情失败')
+    }
+  }
+}
+
+// 显示清理对话框
+const showCleanupDialog = () => {
+  cleanupDialogVisible.value = true
+}
+
+// 执行清理
+const handleCleanup = async () => {
+  try {
+    await ElMessageBox.confirm(
+      `确定要删除 ${cleanupForm.retentionDays} 天前的所有日志吗？此操作不可恢复！`,
+      '警告',
+      {
+        confirmButtonText: '确定',
+        cancelButtonText: '取消',
+        type: 'warning'
+      }
+    )
+
+    cleanupLoading.value = true
+    const response = await logsApi.cleanup({
+      retention_days: cleanupForm.retentionDays
+    })
+    
+    ElMessage.success(`清理完成，共删除 ${response.deleted_count} 条日志`)
+    cleanupDialogVisible.value = false
+    fetchLogs()
+  } catch (error) {
+    if (error !== 'cancel' && !error.cancelled) {
+      console.error('Failed to cleanup logs:', error)
+      ElMessage.error('清理日志失败')
+    }
+  } finally {
+    cleanupLoading.value = false
+  }
+}
+
+// 显示导出对话框
+const handleExport = () => {
+  exportDialogVisible.value = true
+}
+
+// 确认导出
+const confirmExport = async () => {
+  exportLoading.value = true
+  try {
+    const params = {
+      format: exportForm.format
+    }
+
+    if (filterForm.level) {
+      params.level = filterForm.level
+    }
+    if (filterForm.source) {
+      params.source = filterForm.source
+    }
+    if (filterForm.keyword) {
+      params.keyword = filterForm.keyword
+    }
+    if (filterForm.dateRange && filterForm.dateRange.length === 2) {
+      params.start_time = filterForm.dateRange[0]
+      params.end_time = filterForm.dateRange[1]
+    }
+
+    const response = await logsApi.exportLogs(params)
+    
+    // 创建下载链接
+    const blob = new Blob([response], {
+      type: exportForm.format === 'json' ? 'application/json' : 'text/csv'
+    })
+    const url = window.URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = `logs_${new Date().toISOString().slice(0, 10)}.${exportForm.format}`
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    window.URL.revokeObjectURL(url)
+
+    ElMessage.success('导出成功')
+    exportDialogVisible.value = false
+  } catch (error) {
+    if (!error.cancelled) {
+      console.error('Failed to export logs:', error)
+      ElMessage.error('导出日志失败')
+    }
+  } finally {
+    exportLoading.value = false
+  }
+}
+
+// 获取级别标签类型
+const getLevelTagType = (level) => {
+  const types = {
+    debug: 'info',
+    info: 'success',
+    warn: 'warning',
+    error: 'danger',
+    fatal: 'danger'
+  }
+  return types[level] || 'info'
+}
+
+// 获取行样式类名
+const getRowClassName = ({ row }) => {
+  if (row.level === 'error' || row.level === 'fatal') {
+    return 'log-row-error'
+  }
+  return ''
+}
+
+// 格式化日期时间
+const formatDateTime = (dateStr) => {
+  if (!dateStr) return '-'
+  const date = new Date(dateStr)
+  return date.toLocaleString('zh-CN', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit'
+  })
+}
+</script>
+
+<style scoped>
+.logs-container {
+  padding: 20px;
+}
+
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+}
+
+.actions {
+  display: flex;
+  gap: 10px;
+}
+
+.filter-card {
+  margin-bottom: 20px;
+}
+
+.filter-form {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.pagination-container {
+  margin-top: 20px;
+  display: flex;
+  justify-content: center;
+}
+
+.log-message {
+  white-space: pre-wrap;
+  word-break: break-all;
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.log-fields {
+  background-color: #f5f7fa;
+  padding: 10px;
+  border-radius: 4px;
+  margin: 0;
+  max-height: 200px;
+  overflow-y: auto;
+  font-size: 12px;
+}
+
+:deep(.log-row-error) {
+  background-color: #fef0f0 !important;
+}
+
+:deep(.log-row-error:hover > td) {
+  background-color: #fde2e2 !important;
+}
+</style>

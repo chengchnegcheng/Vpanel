@@ -70,9 +70,15 @@ type XrayConfig struct {
 
 // LogConfig contains logging settings.
 type LogConfig struct {
-	Level  string `yaml:"level" env:"V_LOG_LEVEL" default:"info"`
-	Format string `yaml:"format" env:"V_LOG_FORMAT" default:"json"`
-	Output string `yaml:"output" env:"V_LOG_OUTPUT" default:"stdout"`
+	Level           string        `yaml:"level" env:"V_LOG_LEVEL" default:"info"`
+	Format          string        `yaml:"format" env:"V_LOG_FORMAT" default:"json"`
+	Output          string        `yaml:"output" env:"V_LOG_OUTPUT" default:"stdout"`
+	DatabaseEnabled bool          `yaml:"database_enabled" env:"V_LOG_DB_ENABLED" default:"true"`
+	DatabaseLevel   string        `yaml:"database_level" env:"V_LOG_DB_LEVEL" default:"info"`
+	RetentionDays   int           `yaml:"retention_days" env:"V_LOG_RETENTION_DAYS" default:"30"`
+	BufferSize      int           `yaml:"buffer_size" env:"V_LOG_BUFFER_SIZE" default:"1000"`
+	BatchSize       int           `yaml:"batch_size" env:"V_LOG_BATCH_SIZE" default:"100"`
+	FlushInterval   time.Duration `yaml:"flush_interval" env:"V_LOG_FLUSH_INTERVAL" default:"5s"`
 }
 
 // ValidationError represents a configuration validation error.

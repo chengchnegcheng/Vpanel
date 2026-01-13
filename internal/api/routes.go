@@ -11,6 +11,7 @@ import (
 	"v/internal/auth"
 	"v/internal/config"
 	"v/internal/database/repository"
+	logservice "v/internal/log"
 	"v/internal/logger"
 	"v/internal/proxy"
 	"v/internal/settings"
@@ -27,6 +28,7 @@ type Router struct {
 	repos           *repository.Repositories
 	settingsService *settings.Service
 	xrayManager     xray.Manager
+	logService      *logservice.Service
 }
 
 // NewRouter creates a new API router.
@@ -36,6 +38,7 @@ func NewRouter(
 	authService *auth.Service,
 	proxyManager proxy.Manager,
 	repos *repository.Repositories,
+	logService *logservice.Service,
 ) *Router {
 	// Set Gin mode based on config
 	if cfg.Server.Mode == "release" {
@@ -63,6 +66,7 @@ func NewRouter(
 		repos:           repos,
 		settingsService: settingsService,
 		xrayManager:     xrayManager,
+		logService:      logService,
 	}
 }
 
@@ -70,7 +74,7 @@ func NewRouter(
 func (r *Router) Setup() {
 	// Global middleware
 	r.engine.Use(middleware.Recovery(r.logger))
-	r.engine.Use(middleware.Logger(r.logger))
+	r.engine.Use(middleware.LoggerWithService(r.logger, r.logService))
 	r.engine.Use(middleware.CORS(r.config.Server.CORSOrigins))
 	r.engine.Use(middleware.RequestID())
 
@@ -84,6 +88,7 @@ func (r *Router) Setup() {
 	settingsHandler := handlers.NewSettingsHandler(r.logger, r.settingsService)
 	xrayHandler := handlers.NewXrayHandler(r.xrayManager, r.logger)
 	certificatesHandler := handlers.NewCertificatesHandler(r.logger)
+	logHandler := handlers.NewLogHandler(r.logService, r.logger)
 
 	// Initialize system roles
 	ctx := context.Background()
@@ -236,6 +241,17 @@ func (r *Router) Setup() {
 				certificatesRoutes.GET("/:id/validate", certificatesHandler.Validate)
 				certificatesRoutes.DELETE("/:id", certificatesHandler.Delete)
 				certificatesRoutes.PUT("/:id/auto-renew", certificatesHandler.UpdateAutoRenew)
+			}
+
+			// Logs routes (admin only)
+			logsRoutes := protected.Group("/logs")
+			logsRoutes.Use(authMiddleware.RequireRole("admin"))
+			{
+				logsRoutes.GET("", logHandler.ListLogs)
+				logsRoutes.GET("/export", logHandler.ExportLogs)
+				logsRoutes.GET("/:id", logHandler.GetLog)
+				logsRoutes.DELETE("", logHandler.DeleteLogs)
+				logsRoutes.POST("/cleanup", logHandler.Cleanup)
 			}
 		}
 	}

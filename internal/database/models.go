@@ -100,9 +100,11 @@ type Log struct {
 	Level     string    `json:"level" gorm:"size:10;index"`
 	Message   string    `json:"message" gorm:"type:text"`
 	Source    string    `json:"source" gorm:"size:50;index"`
-	UserID    int64     `json:"user_id" gorm:"index"`
+	UserID    *int64    `json:"user_id" gorm:"index"`
 	IP        string    `json:"ip" gorm:"size:50"`
 	UserAgent string    `json:"user_agent" gorm:"size:255"`
+	RequestID string    `json:"request_id" gorm:"size:100;index"`
+	Fields    string    `json:"fields" gorm:"type:text"`
 	CreatedAt time.Time `json:"created_at" gorm:"index"`
 }
 

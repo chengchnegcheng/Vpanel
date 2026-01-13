@@ -75,27 +75,27 @@ func NewVersionManager(binaryDir string, log logger.Logger) *VersionManager {
 
 // GetAvailableVersions fetches available versions from GitHub.
 func (vm *VersionManager) GetAvailableVersions(ctx context.Context) ([]VersionInfo, error) {
-	vm.mu.RLock()
-	if time.Since(vm.lastFetchTime) < vm.cacheDuration && len(vm.cachedVersions) > 0 {
-		versions := vm.cachedVersions
-		vm.mu.RUnlock()
-		return versions, nil
-	}
-	vm.mu.RUnlock()
+	vm.mu.Lock()
+	defer vm.mu.Unlock()
 
-	// Fetch from GitHub
+	// Check cache first (valid for cacheDuration)
+	if len(vm.cachedVersions) > 0 && time.Since(vm.lastFetchTime) < vm.cacheDuration {
+		return vm.cachedVersions, nil
+	}
+
+	// Try to fetch from GitHub
 	releases, err := vm.fetchGitHubReleases(ctx)
 	if err != nil {
-		vm.logger.Warn("failed to fetch GitHub releases, using cached versions", logger.F("error", err))
-		vm.mu.RLock()
+		vm.logger.Warn("failed to fetch GitHub releases", logger.F("error", err))
+		// Return cached versions if available
 		if len(vm.cachedVersions) > 0 {
-			versions := vm.cachedVersions
-			vm.mu.RUnlock()
-			return versions, nil
+			return vm.cachedVersions, nil
 		}
-		vm.mu.RUnlock()
-		// Return default versions if no cache
-		return vm.getDefaultVersions(), nil
+		// Return default versions if no cache (no error, just use defaults)
+		defaultVersions := vm.getDefaultVersionsUnlocked()
+		vm.cachedVersions = defaultVersions
+		vm.lastFetchTime = time.Now()
+		return defaultVersions, nil
 	}
 
 	// Convert to VersionInfo
@@ -106,10 +106,14 @@ func (vm *VersionManager) GetAvailableVersions(ctx context.Context) ([]VersionIn
 		}
 		
 		downloadURL := vm.getDownloadURL(release)
+		isInstalled := false
+		if _, ok := vm.installedVersions[release.TagName]; ok {
+			isInstalled = true
+		}
 		versions = append(versions, VersionInfo{
 			Version:     release.TagName,
 			ReleaseDate: release.PublishedAt,
-			IsInstalled: vm.isVersionInstalled(release.TagName),
+			IsInstalled: isInstalled,
 			IsCurrent:   release.TagName == vm.currentVersion,
 			DownloadURL: downloadURL,
 		})
@@ -125,11 +129,9 @@ func (vm *VersionManager) GetAvailableVersions(ctx context.Context) ([]VersionIn
 		versions = versions[:20]
 	}
 
-	// Update cache
-	vm.mu.Lock()
+	// Update cache (already holding lock)
 	vm.cachedVersions = versions
 	vm.lastFetchTime = time.Now()
-	vm.mu.Unlock()
 
 	return versions, nil
 }
@@ -219,8 +221,9 @@ func (vm *VersionManager) isVersionInstalled(version string) bool {
 	return ok
 }
 
-// getDefaultVersions returns default version list when GitHub is unavailable.
-func (vm *VersionManager) getDefaultVersions() []VersionInfo {
+// getDefaultVersionsUnlocked returns default version list when GitHub is unavailable.
+// Must be called with lock held.
+func (vm *VersionManager) getDefaultVersionsUnlocked() []VersionInfo {
 	defaultVersions := []string{
 		"v1.8.24", "v1.8.23", "v1.8.22", "v1.8.21", "v1.8.20",
 		"v1.8.19", "v1.8.18", "v1.8.17", "v1.8.16", "v1.8.15",
@@ -228,13 +231,24 @@ func (vm *VersionManager) getDefaultVersions() []VersionInfo {
 
 	versions := make([]VersionInfo, len(defaultVersions))
 	for i, v := range defaultVersions {
+		isInstalled := false
+		if _, ok := vm.installedVersions[v]; ok {
+			isInstalled = true
+		}
 		versions[i] = VersionInfo{
 			Version:     v,
-			IsInstalled: vm.isVersionInstalled(v),
+			IsInstalled: isInstalled,
 			IsCurrent:   v == vm.currentVersion,
 		}
 	}
 	return versions
+}
+
+// getDefaultVersions returns default version list when GitHub is unavailable.
+func (vm *VersionManager) getDefaultVersions() []VersionInfo {
+	vm.mu.RLock()
+	defer vm.mu.RUnlock()
+	return vm.getDefaultVersionsUnlocked()
 }
 
 // compareVersions compares two version strings.

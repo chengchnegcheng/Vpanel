@@ -20,6 +20,7 @@ import { statsApi } from './modules/stats'
 import { certificatesApi } from './modules/certificates'
 import { rolesApi } from './modules/roles'
 import { xrayApi } from './modules/xray'
+import { logsApi } from './modules/logs'
 
 // 导出所有 API 模块
 export {
@@ -54,7 +55,10 @@ export {
   rolesApi,
 
   // Xray
-  xrayApi
+  xrayApi,
+
+  // 日志
+  logsApi
 }
 
 // 兼容旧版导出（逐步废弃）

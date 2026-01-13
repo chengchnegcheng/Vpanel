@@ -233,6 +233,7 @@ type Repositories struct {
 	Role         RoleRepository
 	Settings     SettingsRepository
 	AuditLog     AuditLogRepository
+	Log          LogRepository
 }
 
 // NewRepositories creates all repository instances.
@@ -245,5 +246,6 @@ func NewRepositories(db *gorm.DB) *Repositories {
 		Role:         NewRoleRepository(db),
 		Settings:     NewSettingsRepository(db),
 		AuditLog:     NewAuditLogRepository(db),
+		Log:          NewLogRepository(db),
 	}
 }

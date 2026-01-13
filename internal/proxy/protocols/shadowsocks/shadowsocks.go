@@ -52,6 +52,7 @@ func (p *Protocol) GenerateConfig(settings *proxy.Settings) (json.RawMessage, er
 	config := map[string]any{
 		"tag":      fmt.Sprintf("shadowsocks-%d", settings.ID),
 		"protocol": "shadowsocks",
+		"listen":   "0.0.0.0",
 		"port":     settings.Port,
 		"settings": map[string]any{
 			"method":   method,

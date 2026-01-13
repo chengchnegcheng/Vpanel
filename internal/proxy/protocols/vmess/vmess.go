@@ -41,6 +41,7 @@ func (p *Protocol) GenerateConfig(settings *proxy.Settings) (json.RawMessage, er
 	config := map[string]any{
 		"tag":      fmt.Sprintf("vmess-%d", settings.ID),
 		"protocol": "vmess",
+		"listen":   "0.0.0.0",
 		"port":     settings.Port,
 		"settings": map[string]any{
 			"clients": []map[string]any{

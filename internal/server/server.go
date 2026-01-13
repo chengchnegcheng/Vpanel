@@ -14,6 +14,7 @@ import (
 	"v/internal/auth"
 	"v/internal/config"
 	"v/internal/database/repository"
+	logservice "v/internal/log"
 	"v/internal/logger"
 	"v/internal/proxy"
 )
@@ -27,6 +28,7 @@ type Server struct {
 	authService  *auth.Service
 	proxyManager proxy.Manager
 	repos        *repository.Repositories
+	logService   *logservice.Service
 }
 
 // New creates a new Server.
@@ -36,6 +38,7 @@ func New(
 	authService *auth.Service,
 	proxyManager proxy.Manager,
 	repos *repository.Repositories,
+	logService *logservice.Service,
 ) *Server {
 	return &Server{
 		config:       cfg,
@@ -43,6 +46,7 @@ func New(
 		authService:  authService,
 		proxyManager: proxyManager,
 		repos:        repos,
+		logService:   logService,
 	}
 }
 
@@ -55,6 +59,7 @@ func (s *Server) Start() error {
 		s.authService,
 		s.proxyManager,
 		s.repos,
+		s.logService,
 	)
 	s.router.Setup()
 

@@ -2,6 +2,7 @@
 package middleware
 
 import (
+	"context"
 	"net/http"
 	"runtime/debug"
 	"strings"
@@ -10,6 +11,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 
+	logservice "v/internal/log"
 	"v/internal/logger"
 )
 
@@ -73,6 +75,99 @@ func Logger(log logger.Logger) gin.HandlerFunc {
 			log.Warn("request completed", fields...)
 		} else {
 			log.Info("request completed", fields...)
+		}
+	}
+}
+
+// LoggerWithService returns a middleware that logs requests to both console and database.
+func LoggerWithService(log logger.Logger, logService *logservice.Service) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		start := time.Now()
+		path := c.Request.URL.Path
+		query := c.Request.URL.RawQuery
+
+		c.Next()
+
+		latency := time.Since(start)
+		status := c.Writer.Status()
+		requestID := c.GetString("request_id")
+
+		// Console logging fields
+		fields := []logger.Field{
+			logger.F("status", status),
+			logger.F("method", c.Request.Method),
+			logger.F("path", path),
+			logger.F("latency", latency.String()),
+			logger.F("ip", c.ClientIP()),
+			logger.F("user_agent", c.Request.UserAgent()),
+		}
+
+		if query != "" {
+			fields = append(fields, logger.F("query", query))
+		}
+
+		if requestID != "" {
+			fields = append(fields, logger.F("request_id", requestID))
+		}
+
+		if len(c.Errors) > 0 {
+			fields = append(fields, logger.F("errors", c.Errors.String()))
+		}
+
+		// Determine log level based on status
+		var level string
+		if status >= 500 {
+			level = "error"
+			log.Error("request completed", fields...)
+		} else if status >= 400 {
+			level = "warn"
+			log.Warn("request completed", fields...)
+		} else {
+			level = "info"
+			log.Info("request completed", fields...)
+		}
+
+		// Log to database if service is available
+		if logService != nil {
+			// Get user ID from context if available
+			var userID *int64
+			if uid, exists := c.Get("user_id"); exists {
+				if id, ok := uid.(int64); ok {
+					userID = &id
+				}
+			}
+
+			// Build extra fields for database
+			extraFields := map[string]interface{}{
+				"status":  status,
+				"method":  c.Request.Method,
+				"latency": latency.Milliseconds(),
+			}
+
+			if query != "" {
+				extraFields["query"] = query
+			}
+
+
+			if len(c.Errors) > 0 {
+				extraFields["errors"] = c.Errors.String()
+			}
+
+			// Add context fields
+			if userID != nil {
+				extraFields["user_id"] = *userID
+			}
+			extraFields["ip"] = c.ClientIP()
+			extraFields["user_agent"] = c.Request.UserAgent()
+			extraFields["request_id"] = requestID
+
+			// Log asynchronously (non-blocking)
+			go func() {
+				ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+				defer cancel()
+				_ = logService.Log(ctx, level, "request completed: "+c.Request.Method+" "+path, "http", extraFields)
+			}()
+
 		}
 	}
 }

@@ -46,13 +46,14 @@
           <el-icon><Tools /></el-icon>
           <span>证书管理</span>
         </el-menu-item>
-        
+
         <el-sub-menu index="settings">
           <template #title>
             <el-icon><Setting /></el-icon>
             <span>系统设置</span>
           </template>
           <el-menu-item index="/settings">配置管理</el-menu-item>
+          <el-menu-item index="/logs">日志管理</el-menu-item>
         </el-sub-menu>
       </el-menu>
     </div>

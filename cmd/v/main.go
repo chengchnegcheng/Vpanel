@@ -14,6 +14,7 @@ import (
 	"v/internal/config"
 	"v/internal/database"
 	"v/internal/database/repository"
+	logservice "v/internal/log"
 	"v/internal/logger"
 	"v/internal/proxy"
 	"v/internal/proxy/protocols/shadowsocks"
@@ -83,6 +84,26 @@ func main() {
 	// Initialize repositories
 	repos := repository.NewRepositories(db.DB())
 
+	// Initialize log service
+	logService := logservice.NewService(repos.Log, log, logservice.Config{
+		DatabaseEnabled: cfg.Log.DatabaseEnabled,
+		DatabaseLevel:   cfg.Log.DatabaseLevel,
+		RetentionDays:   cfg.Log.RetentionDays,
+		BufferSize:      cfg.Log.BufferSize,
+		BatchSize:       cfg.Log.BatchSize,
+		FlushInterval:   cfg.Log.FlushInterval,
+	})
+
+	// Start cleanup scheduler
+	cleanupCtx, cleanupCancel := context.WithCancel(context.Background())
+	logService.StartCleanupScheduler(cleanupCtx)
+
+	log.Info("log service initialized",
+		logger.F("database_enabled", cfg.Log.DatabaseEnabled),
+		logger.F("database_level", cfg.Log.DatabaseLevel),
+		logger.F("retention_days", cfg.Log.RetentionDays),
+	)
+
 	// Initialize auth service
 	authService := auth.NewService(auth.Config{
 		JWTSecret:           cfg.Auth.JWTSecret,
@@ -106,7 +127,7 @@ func main() {
 	proxyManager.RegisterProtocol(shadowsocks.New())
 
 	// Create and start server
-	srv := server.New(cfg, log, authService, proxyManager, repos)
+	srv := server.New(cfg, log, authService, proxyManager, repos, logService)
 
 	if err := srv.Start(); err != nil {
 		log.Error("failed to start server", logger.F("error", err))
@@ -124,6 +145,9 @@ func main() {
 
 	log.Info("shutdown signal received", logger.F("signal", sig.String()))
 
+	// Stop cleanup scheduler
+	cleanupCancel()
+
 	// Graceful shutdown
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
@@ -131,6 +155,11 @@ func main() {
 	if err := srv.Stop(ctx); err != nil {
 		log.Error("server shutdown error", logger.F("error", err))
 		os.Exit(1)
+	}
+
+	// Close log service (flushes remaining logs)
+	if err := logService.Close(); err != nil {
+		log.Error("log service shutdown error", logger.F("error", err))
 	}
 
 	log.Info("server stopped gracefully")
