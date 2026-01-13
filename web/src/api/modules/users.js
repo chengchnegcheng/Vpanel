@@ -59,13 +59,6 @@ export const usersApi = {
   disable: (id) => api.post(`/users/${id}/disable`),
 
   /**
-   * 切换用户状态
-   * @param {number|string} id - 用户 ID
-   * @returns {Promise<void>}
-   */
-  toggleStatus: (id) => api.post(`/users/${id}/toggle-status`),
-
-  /**
    * 重置用户密码
    * @param {number|string} id - 用户 ID
    * @returns {Promise<Object>} 包含临时密码
@@ -85,15 +78,7 @@ export const usersApi = {
    * @param {number|string} id - 用户 ID
    * @returns {Promise<void>}
    */
-  clearLoginHistory: (id) => api.delete(`/users/${id}/login-history`),
-
-  /**
-   * 更新用户权限
-   * @param {number|string} id - 用户 ID
-   * @param {Object} data - 权限数据
-   * @returns {Promise<void>}
-   */
-  updatePermissions: (id, data) => api.put(`/users/${id}/permissions`, data)
+  clearLoginHistory: (id) => api.delete(`/users/${id}/login-history`)
 }
 
 export default usersApi

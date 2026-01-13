@@ -42,15 +42,10 @@
           <el-menu-item index="/stats">统计数据</el-menu-item>
         </el-sub-menu>
         
-        <el-sub-menu index="tools">
-          <template #title>
-            <el-icon><Tools /></el-icon>
-            <span>系统工具</span>
-          </template>
-          <el-menu-item index="/logs">系统日志</el-menu-item>
-          <el-menu-item index="/backups">备份恢复</el-menu-item>
-          <el-menu-item index="/certificates">证书管理</el-menu-item>
-        </el-sub-menu>
+        <el-menu-item index="/certificates">
+          <el-icon><Tools /></el-icon>
+          <span>证书管理</span>
+        </el-menu-item>
         
         <el-sub-menu index="settings">
           <template #title>

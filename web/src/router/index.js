@@ -32,9 +32,7 @@ const Stats = () => import(/* webpackChunkName: "monitor" */ '../views/Stats.vue
 
 // 系统管理 - 按需加载
 const Settings = () => import(/* webpackChunkName: "system" */ '../views/Settings.vue')
-const Logs = () => import(/* webpackChunkName: "system" */ '../views/Logs.vue')
 const Certificates = () => import(/* webpackChunkName: "system" */ '../views/Certificates.vue')
-const Backups = () => import(/* webpackChunkName: "system" */ '../views/Backups.vue')
 
 // 错误页面
 const NotFound = () => import(/* webpackChunkName: "error" */ '../views/NotFound.vue')
@@ -140,38 +138,19 @@ const routes = [
         path: 'settings',
         name: 'Settings',
         component: Settings,
-        meta: { 
+        meta: {
           requiresAuth: true,
           title: '系统设置',
           roles: ['admin']
         }
       },
       {
-        path: 'logs',
-        name: 'Logs',
-        component: Logs,
-        meta: { 
-          requiresAuth: true,
-          title: '系统日志'
-        }
-      },
-      {
         path: 'certificates',
         name: 'Certificates',
         component: Certificates,
-        meta: { 
+        meta: {
           requiresAuth: true,
           title: '证书管理',
-          roles: ['admin']
-        }
-      },
-      {
-        path: 'backups',
-        name: 'Backups',
-        component: Backups,
-        meta: { 
-          requiresAuth: true,
-          title: '备份管理',
           roles: ['admin']
         }
       }
