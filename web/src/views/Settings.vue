@@ -1885,7 +1885,7 @@ const checkXrayUpdates = async () => {
     xraySettings.checkingForUpdates = true;
     ElMessage.info('正在检查Xray更新...');
     
-    const response = await api.get('/api/xray/check-updates');
+    const response = await api.get('/xray/check-updates');
     
     if (response.data && response.data.has_update) {
       ElMessageBox.confirm(
@@ -1924,7 +1924,7 @@ const downloadXrayVersion = async (version) => {
   
   try {
     // 调用API下载版本
-    const response = await api.post('/api/xray/download', { version }, {
+    const response = await api.post('/xray/download', { version }, {
       onDownloadProgress: (progressEvent) => {
         if (progressEvent.total) {
           xraySettings.updateProgress.percent = Math.round((progressEvent.loaded / progressEvent.total) * 100);
@@ -1938,7 +1938,7 @@ const downloadXrayVersion = async (version) => {
     xraySettings.updateProgress.percent = 50;
     
     // 调用API安装版本
-    await api.post('/api/xray/install', { version });
+    await api.post('/xray/install', { version });
     
     // 安装完成
     xraySettings.updateProgress.status = 'completed';

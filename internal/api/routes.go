@@ -197,6 +197,10 @@ func (r *Router) Setup() {
 				settingsRoutes.PUT("", settingsHandler.UpdateSettings)
 				settingsRoutes.POST("/backup", settingsHandler.BackupSettings)
 				settingsRoutes.POST("/restore", settingsHandler.RestoreSettings)
+				settingsRoutes.GET("/xray", settingsHandler.GetXraySettings)
+				settingsRoutes.POST("/xray", settingsHandler.UpdateXraySettings)
+				settingsRoutes.GET("/protocols", settingsHandler.GetProtocolSettings)
+				settingsRoutes.POST("/protocols", settingsHandler.UpdateProtocolSettings)
 			}
 
 			// Xray routes (admin only)
@@ -210,9 +214,13 @@ func (r *Router) Setup() {
 				xrayRoutes.GET("/config", xrayHandler.GetConfig)
 				xrayRoutes.PUT("/config", xrayHandler.UpdateConfig)
 				xrayRoutes.POST("/validate", xrayHandler.ValidateConfig)
+				xrayRoutes.POST("/test-config", xrayHandler.TestConfig)
 				xrayRoutes.GET("/version", xrayHandler.GetVersion)
 				xrayRoutes.GET("/versions", xrayHandler.GetVersions)
 				xrayRoutes.POST("/sync-versions", xrayHandler.SyncVersions)
+				xrayRoutes.GET("/check-updates", xrayHandler.CheckUpdates)
+				xrayRoutes.POST("/download", xrayHandler.Download)
+				xrayRoutes.POST("/install", xrayHandler.Install)
 				xrayRoutes.POST("/update", xrayHandler.Update)
 				xrayRoutes.POST("/switch-version", xrayHandler.SwitchVersion)
 			}

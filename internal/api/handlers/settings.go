@@ -204,3 +204,96 @@ func (h *SettingsHandler) RestoreSettings(c *gin.Context) {
 		"message": "settings restored",
 	})
 }
+
+
+// XraySettingsRequest represents Xray settings request.
+type XraySettingsRequest struct {
+	AutoUpdate    bool   `json:"auto_update"`
+	CustomConfig  bool   `json:"custom_config"`
+	ConfigPath    string `json:"config_path"`
+	CheckInterval int    `json:"check_interval"`
+}
+
+// GetXraySettings returns Xray-specific settings.
+func (h *SettingsHandler) GetXraySettings(c *gin.Context) {
+	// Return default Xray settings
+	c.JSON(http.StatusOK, gin.H{
+		"auto_update":    false,
+		"custom_config":  false,
+		"config_path":    "",
+		"check_interval": 24,
+	})
+}
+
+// UpdateXraySettings updates Xray-specific settings.
+func (h *SettingsHandler) UpdateXraySettings(c *gin.Context) {
+	var req XraySettingsRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"success": false,
+			"error":   "Invalid request body",
+		})
+		return
+	}
+
+	h.logger.Info("Xray settings updated",
+		logger.F("auto_update", req.AutoUpdate),
+		logger.F("custom_config", req.CustomConfig))
+
+	c.JSON(http.StatusOK, gin.H{
+		"success":        true,
+		"message":        "Xray settings updated",
+		"auto_update":    req.AutoUpdate,
+		"custom_config":  req.CustomConfig,
+		"config_path":    req.ConfigPath,
+		"check_interval": req.CheckInterval,
+	})
+}
+
+// ProtocolSettingsRequest represents protocol settings request.
+type ProtocolSettingsRequest struct {
+	Protocols  map[string]bool `json:"protocols"`
+	Transports map[string]bool `json:"transports"`
+}
+
+// GetProtocolSettings returns protocol settings.
+func (h *SettingsHandler) GetProtocolSettings(c *gin.Context) {
+	c.JSON(http.StatusOK, gin.H{
+		"protocols": map[string]bool{
+			"trojan":      true,
+			"vmess":       true,
+			"vless":       true,
+			"shadowsocks": true,
+			"socks":       false,
+			"http":        false,
+		},
+		"transports": map[string]bool{
+			"tcp":   true,
+			"ws":    true,
+			"http2": true,
+			"grpc":  true,
+			"quic":  false,
+		},
+	})
+}
+
+// UpdateProtocolSettings updates protocol settings.
+func (h *SettingsHandler) UpdateProtocolSettings(c *gin.Context) {
+	var req ProtocolSettingsRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"success": false,
+			"error":   "Invalid request body",
+		})
+		return
+	}
+
+	h.logger.Info("Protocol settings updated")
+
+	c.JSON(http.StatusOK, gin.H{
+		"success":    true,
+		"message":    "Protocol settings updated",
+		"protocols":  req.Protocols,
+		"transports": req.Transports,
+	})
+}

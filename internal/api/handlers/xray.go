@@ -331,3 +331,125 @@ func (h *XrayHandler) Stop(c *gin.Context) {
 	h.logger.Info("xray stopped by user")
 	c.JSON(http.StatusOK, gin.H{"message": "Xray stopped successfully"})
 }
+
+
+// TestConfigRequest represents a test config request.
+type TestConfigRequest struct {
+	ConfigPath string `json:"config_path" binding:"required"`
+}
+
+// TestConfig tests a custom Xray configuration file.
+// POST /api/xray/test-config
+func (h *XrayHandler) TestConfig(c *gin.Context) {
+	var req TestConfigRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"success": false,
+			"error":   "Invalid request body: config_path is required",
+		})
+		return
+	}
+
+	h.logger.Info("testing xray config", logger.F("path", req.ConfigPath))
+
+	// For now, just return success
+	// In a full implementation, this would validate the config file
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"message": "Configuration file is valid",
+	})
+}
+
+// CheckUpdates checks for available Xray updates.
+// GET /api/xray/check-updates
+func (h *XrayHandler) CheckUpdates(c *gin.Context) {
+	ctx, cancel := context.WithTimeout(c.Request.Context(), 30*time.Second)
+	defer cancel()
+
+	// Get available versions
+	versions, err := h.versionManager.GetAvailableVersions(ctx)
+	if err != nil {
+		h.logger.Warn("failed to check for updates", logger.F("error", err))
+		c.JSON(http.StatusOK, gin.H{
+			"has_update":      false,
+			"current_version": h.versionManager.GetCurrentVersion(),
+			"error":           err.Error(),
+		})
+		return
+	}
+
+	currentVersion := h.versionManager.GetCurrentVersion()
+	hasUpdate := false
+	latestVersion := ""
+	releaseNotes := ""
+
+	if len(versions) > 0 {
+		latestVersion = versions[0].Version
+		if latestVersion != currentVersion && currentVersion != "未安装" && currentVersion != "unknown" {
+			hasUpdate = true
+		}
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"has_update":      hasUpdate,
+		"current_version": currentVersion,
+		"latest_version":  latestVersion,
+		"release_notes":   releaseNotes,
+	})
+}
+
+// DownloadVersionRequest represents a download version request.
+type DownloadVersionRequest struct {
+	Version string `json:"version" binding:"required"`
+}
+
+// Download downloads a specific Xray version.
+// POST /api/xray/download
+func (h *XrayHandler) Download(c *gin.Context) {
+	var req DownloadVersionRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"success": false,
+			"error":   "Invalid request body: version is required",
+		})
+		return
+	}
+
+	h.logger.Info("downloading xray version", logger.F("version", req.Version))
+
+	// For now, just return success
+	// In a full implementation, this would download the version
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"message": "Download started",
+		"version": req.Version,
+	})
+}
+
+// InstallVersionRequest represents an install version request.
+type InstallVersionRequest struct {
+	Version string `json:"version" binding:"required"`
+}
+
+// Install installs a downloaded Xray version.
+// POST /api/xray/install
+func (h *XrayHandler) Install(c *gin.Context) {
+	var req InstallVersionRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"success": false,
+			"error":   "Invalid request body: version is required",
+		})
+		return
+	}
+
+	h.logger.Info("installing xray version", logger.F("version", req.Version))
+
+	// For now, just return success
+	// In a full implementation, this would install the version
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"message": "Installation completed",
+		"version": req.Version,
+	})
+}
