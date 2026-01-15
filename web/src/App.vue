@@ -2,10 +2,11 @@
   <router-view></router-view>
 </template>
 
-<script>
-export default {
-  name: 'App'
-}
+<script setup>
+import { useTheme } from '@/composables/useTheme'
+
+// 初始化主题
+useTheme()
 </script>
 
 <style>

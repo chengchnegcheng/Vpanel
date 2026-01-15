@@ -7,6 +7,7 @@ import 'element-plus/theme-chalk/dark/css-vars.css'
 import App from './App.vue'
 import './assets/styles/main.css'
 import './assets/styles/base.scss'
+import './styles/theme.css'
 import router from './router'
 
 // 导入事件源客户端

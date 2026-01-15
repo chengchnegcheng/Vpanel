@@ -152,6 +152,7 @@ func (d *Database) AutoMigrate() error {
 		&repository.AuditLog{},
 		&repository.Setting{},
 		&repository.Log{},
+		&repository.Subscription{},
 	)
 }
 

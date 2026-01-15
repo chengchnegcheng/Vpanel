@@ -21,6 +21,20 @@ import { certificatesApi } from './modules/certificates'
 import { rolesApi } from './modules/roles'
 import { xrayApi } from './modules/xray'
 import { logsApi } from './modules/logs'
+import { subscriptionApi } from './modules/subscription'
+
+// 商业化模块
+import { plansApi } from './modules/plans'
+import { ordersApi } from './modules/orders'
+import { paymentsApi } from './modules/payments'
+import { balanceApi } from './modules/balance'
+import { couponsApi } from './modules/coupons'
+import { invitesApi } from './modules/invites'
+import { invoicesApi } from './modules/invoices'
+import { planChangeApi } from './modules/planchange'
+import { currencyApi } from './modules/currency'
+import pauseApi from './modules/pause'
+import { giftCardsApi } from './modules/giftcards'
 
 // 导出所有 API 模块
 export {
@@ -58,7 +72,23 @@ export {
   xrayApi,
 
   // 日志
-  logsApi
+  logsApi,
+
+  // 订阅
+  subscriptionApi,
+
+  // 商业化
+  plansApi,
+  ordersApi,
+  paymentsApi,
+  balanceApi,
+  couponsApi,
+  invitesApi,
+  invoicesApi,
+  planChangeApi,
+  currencyApi,
+  pauseApi,
+  giftCardsApi
 }
 
 // 兼容旧版导出（逐步废弃）

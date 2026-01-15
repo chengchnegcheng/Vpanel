@@ -1,0 +1,264 @@
+// Package payment provides payment gateway functionality.
+package payment
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"sync"
+
+	"v/internal/commercial/order"
+	"v/internal/logger"
+)
+
+// Common errors
+var (
+	ErrGatewayNotFound    = errors.New("payment gateway not found")
+	ErrOrderNotFound      = errors.New("order not found")
+	ErrOrderNotPending    = errors.New("order is not pending")
+	ErrPaymentFailed      = errors.New("payment failed")
+	ErrRefundFailed       = errors.New("refund failed")
+	ErrDuplicateCallback  = errors.New("duplicate callback")
+)
+
+// Service provides payment management operations.
+type Service struct {
+	gateways     map[string]PaymentGateway
+	orderService *order.Service
+	logger       logger.Logger
+	mu           sync.RWMutex
+
+	// Track processed callbacks for idempotency
+	processedCallbacks map[string]bool
+	callbackMu         sync.Mutex
+}
+
+// NewService creates a new payment service.
+func NewService(orderService *order.Service, log logger.Logger) *Service {
+	return &Service{
+		gateways:           make(map[string]PaymentGateway),
+		orderService:       orderService,
+		logger:             log,
+		processedCallbacks: make(map[string]bool),
+	}
+}
+
+// RegisterGateway registers a payment gateway.
+func (s *Service) RegisterGateway(gateway PaymentGateway) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.gateways[gateway.Name()] = gateway
+	s.logger.Info("Registered payment gateway", logger.F("name", gateway.Name()))
+}
+
+// GetGateway returns a payment gateway by name.
+func (s *Service) GetGateway(name string) (PaymentGateway, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	gateway, ok := s.gateways[name]
+	if !ok {
+		return nil, ErrGatewayNotFound
+	}
+	return gateway, nil
+}
+
+// ListGateways returns all registered gateway names.
+func (s *Service) ListGateways() []string {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	names := make([]string, 0, len(s.gateways))
+	for name := range s.gateways {
+		names = append(names, name)
+	}
+	return names
+}
+
+// CreatePayment creates a payment for an order.
+func (s *Service) CreatePayment(ctx context.Context, orderNo string, method string) (*PaymentRequest, error) {
+	// Get order
+	ord, err := s.orderService.GetByOrderNo(ctx, orderNo)
+	if err != nil {
+		return nil, ErrOrderNotFound
+	}
+
+	// Check order status
+	if ord.Status != order.StatusPending {
+		return nil, ErrOrderNotPending
+	}
+
+	// Get gateway
+	gateway, err := s.GetGateway(method)
+	if err != nil {
+		return nil, err
+	}
+
+	// Create payment order
+	paymentOrder := &PaymentOrder{
+		OrderNo:     ord.OrderNo,
+		Amount:      ord.PayAmount,
+		Subject:     fmt.Sprintf("Order %s", ord.OrderNo),
+		Description: fmt.Sprintf("Payment for order %s", ord.OrderNo),
+	}
+
+	// Create payment
+	request, err := gateway.CreatePayment(paymentOrder)
+	if err != nil {
+		s.logger.Error("Failed to create payment",
+			logger.Err(err),
+			logger.F("orderNo", orderNo),
+			logger.F("method", method))
+		return nil, fmt.Errorf("%w: %v", ErrPaymentFailed, err)
+	}
+
+	s.logger.Info("Payment created",
+		logger.F("orderNo", orderNo),
+		logger.F("method", method))
+
+	return request, nil
+}
+
+// HandleCallback handles a payment callback.
+func (s *Service) HandleCallback(ctx context.Context, method string, data []byte, signature string) error {
+	// Get gateway
+	gateway, err := s.GetGateway(method)
+	if err != nil {
+		return err
+	}
+
+	// Verify callback
+	result, err := gateway.VerifyCallback(data, signature)
+	if err != nil {
+		s.logger.Error("Failed to verify callback",
+			logger.Err(err),
+			logger.F("method", method))
+		return err
+	}
+
+	if !result.Success {
+		s.logger.Warn("Payment callback indicates failure",
+			logger.F("orderNo", result.OrderNo),
+			logger.F("error", result.Error))
+		return nil
+	}
+
+	// Check for duplicate callback (idempotency)
+	callbackKey := fmt.Sprintf("%s:%s", method, result.PaymentNo)
+	s.callbackMu.Lock()
+	if s.processedCallbacks[callbackKey] {
+		s.callbackMu.Unlock()
+		s.logger.Info("Duplicate callback ignored",
+			logger.F("paymentNo", result.PaymentNo))
+		return nil // Idempotent - return success
+	}
+	s.processedCallbacks[callbackKey] = true
+	s.callbackMu.Unlock()
+
+	// Mark order as paid
+	if err := s.orderService.MarkPaid(ctx, result.OrderNo, result.PaymentNo); err != nil {
+		s.logger.Error("Failed to mark order as paid",
+			logger.Err(err),
+			logger.F("orderNo", result.OrderNo))
+		// Remove from processed to allow retry
+		s.callbackMu.Lock()
+		delete(s.processedCallbacks, callbackKey)
+		s.callbackMu.Unlock()
+		return err
+	}
+
+	s.logger.Info("Payment callback processed",
+		logger.F("orderNo", result.OrderNo),
+		logger.F("paymentNo", result.PaymentNo),
+		logger.F("amount", result.Amount))
+
+	return nil
+}
+
+// QueryPayment queries the payment status.
+func (s *Service) QueryPayment(ctx context.Context, method string, paymentNo string) (*PaymentResult, error) {
+	gateway, err := s.GetGateway(method)
+	if err != nil {
+		return nil, err
+	}
+
+	result, err := gateway.QueryPayment(paymentNo)
+	if err != nil {
+		s.logger.Error("Failed to query payment",
+			logger.Err(err),
+			logger.F("method", method),
+			logger.F("paymentNo", paymentNo))
+		return nil, err
+	}
+
+	return result, nil
+}
+
+// ProcessRefund processes a refund for an order.
+func (s *Service) ProcessRefund(ctx context.Context, orderID int64, amount int64, reason string) (*RefundResult, error) {
+	// Get order
+	ord, err := s.orderService.GetByID(ctx, orderID)
+	if err != nil {
+		return nil, ErrOrderNotFound
+	}
+
+	// Check if order has payment info
+	if ord.PaymentNo == "" || ord.PaymentMethod == "" {
+		return nil, fmt.Errorf("order has no payment information")
+	}
+
+	// Get gateway
+	gateway, err := s.GetGateway(ord.PaymentMethod)
+	if err != nil {
+		return nil, err
+	}
+
+	// Process refund
+	result, err := gateway.Refund(ord.PaymentNo, amount, reason)
+	if err != nil {
+		s.logger.Error("Failed to process refund",
+			logger.Err(err),
+			logger.F("orderID", orderID),
+			logger.F("amount", amount))
+		return nil, fmt.Errorf("%w: %v", ErrRefundFailed, err)
+	}
+
+	if !result.Success {
+		s.logger.Warn("Refund failed",
+			logger.F("orderID", orderID),
+			logger.F("error", result.Error))
+		return result, nil
+	}
+
+	// Update order status
+	if err := s.orderService.UpdateStatus(ctx, orderID, order.StatusRefunded); err != nil {
+		s.logger.Error("Failed to update order status after refund",
+			logger.Err(err),
+			logger.F("orderID", orderID))
+		// Refund was successful, just log the error
+	}
+
+	s.logger.Info("Refund processed",
+		logger.F("orderID", orderID),
+		logger.F("refundNo", result.RefundNo),
+		logger.F("amount", result.Amount))
+
+	return result, nil
+}
+
+// IsCallbackProcessed checks if a callback has been processed (for idempotency).
+func (s *Service) IsCallbackProcessed(method, paymentNo string) bool {
+	callbackKey := fmt.Sprintf("%s:%s", method, paymentNo)
+	s.callbackMu.Lock()
+	defer s.callbackMu.Unlock()
+	return s.processedCallbacks[callbackKey]
+}
+
+// GetPaymentStatus returns the payment status for an order.
+func (s *Service) GetPaymentStatus(ctx context.Context, orderNo string) (string, error) {
+	ord, err := s.orderService.GetByOrderNo(ctx, orderNo)
+	if err != nil {
+		return "", ErrOrderNotFound
+	}
+	return ord.Status, nil
+}

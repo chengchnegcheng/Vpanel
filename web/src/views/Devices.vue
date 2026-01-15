@@ -1,0 +1,391 @@
+<template>
+  <div class="devices-container">
+    <h1>我的设备</h1>
+    
+    <!-- 设备槽位信息 -->
+    <el-card class="device-quota-card">
+      <div class="quota-info">
+        <div class="quota-item">
+          <span class="quota-label">在线设备</span>
+          <span class="quota-value">{{ devices.length }}</span>
+        </div>
+        <div class="quota-divider">/</div>
+        <div class="quota-item">
+          <span class="quota-label">最大设备数</span>
+          <span class="quota-value" :class="{ 'text-warning': isNearLimit }">
+            {{ maxDevices === 0 ? '无限制' : maxDevices }}
+          </span>
+        </div>
+      </div>
+      <el-progress 
+        v-if="maxDevices > 0"
+        :percentage="deviceUsagePercent" 
+        :status="deviceUsageStatus"
+        :stroke-width="10"
+        style="margin-top: 15px;"
+      />
+      <div class="quota-tips" v-if="isNearLimit">
+        <el-icon><Warning /></el-icon>
+        您的设备数量即将达到上限，如需更多设备请联系管理员
+      </div>
+    </el-card>
+    
+    <!-- 设备列表 -->
+    <el-card style="margin-top: 20px;">
+      <template #header>
+        <div class="card-header">
+          <span>在线设备列表</span>
+          <el-button size="small" @click="fetchDevices" :loading="loading">
+            <el-icon><Refresh /></el-icon>
+            刷新
+          </el-button>
+        </div>
+      </template>
+      
+      <el-empty v-if="devices.length === 0 && !loading" description="暂无在线设备" />
+      
+      <div class="device-list" v-else>
+        <el-card 
+          v-for="device in devices" 
+          :key="device.ip" 
+          class="device-card"
+          :class="{ 'current-device': device.isCurrent }"
+          shadow="hover"
+        >
+          <div class="device-info">
+            <div class="device-icon">
+              <el-icon :size="32"><Monitor /></el-icon>
+            </div>
+            <div class="device-details">
+              <div class="device-ip">
+                {{ device.ip }}
+                <el-tag v-if="device.isCurrent" size="small" type="success">当前设备</el-tag>
+              </div>
+              <div class="device-location">
+                <el-icon><Location /></el-icon>
+                {{ device.countryFlag }} {{ device.country }} {{ device.city ? `- ${device.city}` : '' }}
+              </div>
+              <div class="device-time">
+                <el-icon><Clock /></el-icon>
+                最后活动: {{ device.lastActivity }}
+              </div>
+              <div class="device-agent" v-if="device.userAgent">
+                <el-icon><Platform /></el-icon>
+                {{ device.userAgent }}
+              </div>
+            </div>
+            <div class="device-actions">
+              <el-button 
+                type="danger" 
+                size="small" 
+                @click="kickDevice(device)"
+                :disabled="device.isCurrent"
+                :loading="device.kicking"
+              >
+                <el-icon><Close /></el-icon>
+                踢出
+              </el-button>
+            </div>
+          </div>
+        </el-card>
+      </div>
+    </el-card>
+    
+    <!-- IP 访问历史 -->
+    <el-card style="margin-top: 20px;">
+      <template #header>
+        <div class="card-header">
+          <span>IP 访问历史</span>
+        </div>
+      </template>
+      
+      <el-table :data="ipHistory" border v-loading="historyLoading">
+        <el-table-column prop="ip" label="IP 地址" width="150"></el-table-column>
+        <el-table-column prop="country" label="国家/地区" width="120">
+          <template #default="scope">
+            {{ scope.row.countryFlag }} {{ scope.row.country }}
+          </template>
+        </el-table-column>
+        <el-table-column prop="city" label="城市" width="120"></el-table-column>
+        <el-table-column prop="firstSeen" label="首次访问" width="180"></el-table-column>
+        <el-table-column prop="lastSeen" label="最后访问" width="180"></el-table-column>
+        <el-table-column prop="accessCount" label="访问次数" width="100"></el-table-column>
+      </el-table>
+      
+      <div class="pagination-container">
+        <el-pagination
+          v-model:current-page="historyPage"
+          v-model:page-size="historyPageSize"
+          :page-sizes="[10, 20, 50]"
+          layout="total, sizes, prev, pager, next"
+          :total="historyTotal"
+          @size-change="fetchIPHistory"
+          @current-change="fetchIPHistory"
+        />
+      </div>
+    </el-card>
+    
+    <!-- 订阅链接访问 IP -->
+    <el-card style="margin-top: 20px;" v-if="subscriptionIPs.length > 0">
+      <template #header>
+        <div class="card-header">
+          <span>订阅链接访问 IP</span>
+          <el-tooltip content="这些 IP 曾访问过您的订阅链接">
+            <el-icon><QuestionFilled /></el-icon>
+          </el-tooltip>
+        </div>
+      </template>
+      
+      <el-table :data="subscriptionIPs" border>
+        <el-table-column prop="ip" label="IP 地址" width="150"></el-table-column>
+        <el-table-column prop="country" label="国家/地区" width="120"></el-table-column>
+        <el-table-column prop="lastAccess" label="最后访问" width="180"></el-table-column>
+        <el-table-column prop="accessCount" label="访问次数" width="100"></el-table-column>
+        <el-table-column prop="userAgent" label="客户端"></el-table-column>
+      </el-table>
+    </el-card>
+  </div>
+</template>
+
+<script setup>
+import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { ElMessage, ElMessageBox } from 'element-plus'
+import { Monitor, Location, Clock, Platform, Refresh, Close, Warning, QuestionFilled } from '@element-plus/icons-vue'
+import api from '@/api/index'
+
+// 设备数据
+const loading = ref(false)
+const devices = ref([])
+const maxDevices = ref(0)
+
+// IP 历史
+const historyLoading = ref(false)
+const ipHistory = ref([])
+const historyPage = ref(1)
+const historyPageSize = ref(10)
+const historyTotal = ref(0)
+
+// 订阅 IP
+const subscriptionIPs = ref([])
+
+// 计算属性
+const deviceUsagePercent = computed(() => {
+  if (maxDevices.value === 0) return 0
+  return Math.min(100, Math.round((devices.value.length / maxDevices.value) * 100))
+})
+
+const deviceUsageStatus = computed(() => {
+  if (deviceUsagePercent.value >= 100) return 'exception'
+  if (deviceUsagePercent.value >= 80) return 'warning'
+  return 'success'
+})
+
+const isNearLimit = computed(() => {
+  return maxDevices.value > 0 && deviceUsagePercent.value >= 80
+})
+
+// 获取设备列表
+const fetchDevices = async () => {
+  loading.value = true
+  try {
+    const response = await api.get('/user/devices')
+    devices.value = (response.devices || response || []).map(d => ({
+      ...d,
+      kicking: false
+    }))
+    maxDevices.value = response.maxDevices || 0
+  } catch (error) {
+    console.error('Failed to fetch devices:', error)
+    ElMessage.error('获取设备列表失败')
+  } finally {
+    loading.value = false
+  }
+}
+
+// 踢出设备
+const kickDevice = (device) => {
+  ElMessageBox.confirm(
+    `确定要踢出设备 ${device.ip} 吗？该设备将需要重新连接。`,
+    '踢出设备',
+    {
+      confirmButtonText: '确定',
+      cancelButtonText: '取消',
+      type: 'warning'
+    }
+  ).then(async () => {
+    device.kicking = true
+    try {
+      await api.post(`/user/devices/${encodeURIComponent(device.ip)}/kick`)
+      ElMessage.success('设备已踢出')
+      fetchDevices()
+    } catch (error) {
+      console.error('Failed to kick device:', error)
+      ElMessage.error('踢出设备失败')
+    } finally {
+      device.kicking = false
+    }
+  }).catch(() => {})
+}
+
+// 获取 IP 历史
+const fetchIPHistory = async () => {
+  historyLoading.value = true
+  try {
+    const response = await api.get('/user/ip-history', {
+      params: {
+        page: historyPage.value,
+        pageSize: historyPageSize.value
+      }
+    })
+    ipHistory.value = response.list || response || []
+    historyTotal.value = response.total || ipHistory.value.length
+  } catch (error) {
+    console.error('Failed to fetch IP history:', error)
+  } finally {
+    historyLoading.value = false
+  }
+}
+
+// 获取订阅 IP
+const fetchSubscriptionIPs = async () => {
+  try {
+    const response = await api.get('/user/subscription-ips')
+    subscriptionIPs.value = response || []
+  } catch (error) {
+    console.error('Failed to fetch subscription IPs:', error)
+  }
+}
+
+// 自动刷新
+let refreshInterval = null
+
+onMounted(() => {
+  fetchDevices()
+  fetchIPHistory()
+  fetchSubscriptionIPs()
+  
+  // 每30秒自动刷新设备列表
+  refreshInterval = setInterval(fetchDevices, 30000)
+})
+
+onUnmounted(() => {
+  if (refreshInterval) {
+    clearInterval(refreshInterval)
+  }
+})
+</script>
+
+<style scoped>
+.devices-container {
+  padding: 20px;
+}
+
+.device-quota-card {
+  background: linear-gradient(135deg, var(--el-color-primary-light-9), var(--el-color-primary-light-7));
+}
+
+.quota-info {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 20px;
+}
+
+.quota-item {
+  text-align: center;
+}
+
+.quota-label {
+  display: block;
+  font-size: 14px;
+  color: var(--el-text-color-secondary);
+}
+
+.quota-value {
+  display: block;
+  font-size: 36px;
+  font-weight: bold;
+  color: var(--el-color-primary);
+}
+
+.quota-divider {
+  font-size: 36px;
+  color: var(--el-text-color-secondary);
+}
+
+.quota-tips {
+  margin-top: 15px;
+  padding: 10px;
+  background: var(--el-color-warning-light-9);
+  border-radius: 4px;
+  color: var(--el-color-warning);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.device-list {
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+}
+
+.device-card {
+  border-left: 4px solid var(--el-color-primary);
+}
+
+.device-card.current-device {
+  border-left-color: var(--el-color-success);
+  background: var(--el-color-success-light-9);
+}
+
+.device-info {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+}
+
+.device-icon {
+  color: var(--el-color-primary);
+}
+
+.device-details {
+  flex: 1;
+}
+
+.device-ip {
+  font-size: 16px;
+  font-weight: bold;
+  margin-bottom: 8px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.device-location,
+.device-time,
+.device-agent {
+  font-size: 13px;
+  color: var(--el-text-color-secondary);
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin-top: 4px;
+}
+
+.pagination-container {
+  margin-top: 20px;
+  display: flex;
+  justify-content: center;
+}
+
+.text-warning {
+  color: var(--el-color-warning) !important;
+}
+</style>

@@ -55,6 +55,19 @@ func (r *userRepository) GetByUsername(ctx context.Context, username string) (*U
 	return &user, nil
 }
 
+// GetByEmail retrieves a user by email.
+func (r *userRepository) GetByEmail(ctx context.Context, email string) (*User, error) {
+	var user User
+	result := r.db.WithContext(ctx).Where("email = ?", email).First(&user)
+	if result.Error != nil {
+		if result.Error == gorm.ErrRecordNotFound {
+			return nil, errors.NewNotFoundError("user", email)
+		}
+		return nil, errors.NewDatabaseError("failed to get user", result.Error)
+	}
+	return &user, nil
+}
+
 // Update updates a user.
 func (r *userRepository) Update(ctx context.Context, user *User) error {
 	result := r.db.WithContext(ctx).Save(user)

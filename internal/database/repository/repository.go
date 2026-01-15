@@ -20,8 +20,15 @@ type User struct {
 	TrafficUsed         int64      `gorm:"default:0"`
 	ExpiresAt           *time.Time `gorm:"index"`
 	ForcePasswordChange bool       `gorm:"default:false"`
-	CreatedAt           time.Time  `gorm:"autoCreateTime"`
-	UpdatedAt           time.Time  `gorm:"autoUpdateTime"`
+	// Portal fields
+	EmailVerified    bool       `gorm:"default:false"`
+	EmailVerifiedAt  *time.Time
+	TwoFactorEnabled bool       `gorm:"default:false"`
+	LastLoginAt      *time.Time
+	LastLoginIP      string     `gorm:"size:45"`
+	TelegramID       string     `gorm:"size:50;index"`
+	CreatedAt        time.Time  `gorm:"autoCreateTime"`
+	UpdatedAt        time.Time  `gorm:"autoUpdateTime"`
 }
 
 // IsExpired checks if the user account has expired.
@@ -106,6 +113,7 @@ type UserRepository interface {
 	Create(ctx context.Context, user *User) error
 	GetByID(ctx context.Context, id int64) (*User, error)
 	GetByUsername(ctx context.Context, username string) (*User, error)
+	GetByEmail(ctx context.Context, email string) (*User, error)
 	Update(ctx context.Context, user *User) error
 	Delete(ctx context.Context, id int64) error
 	List(ctx context.Context, limit, offset int) ([]*User, error)
@@ -234,6 +242,24 @@ type Repositories struct {
 	Settings     SettingsRepository
 	AuditLog     AuditLogRepository
 	Log          LogRepository
+	Subscription SubscriptionRepository
+	Ticket       TicketRepository
+	Announcement AnnouncementRepository
+	HelpArticle  HelpArticleRepository
+	AuthToken    AuthTokenRepository
+	// Commercial System repositories
+	Plan         PlanRepository
+	Order        OrderRepository
+	Balance      BalanceRepository
+	Coupon       CouponRepository
+	Invite       InviteRepository
+	Invoice      InvoiceRepository
+	Trial        TrialRepository
+	PlanChange   PlanChangeRepository
+	ExchangeRate ExchangeRateRepository
+	PlanPrice    PlanPriceRepository
+	Pause        PauseRepository
+	GiftCard     GiftCardRepository
 }
 
 // NewRepositories creates all repository instances.
@@ -247,5 +273,23 @@ func NewRepositories(db *gorm.DB) *Repositories {
 		Settings:     NewSettingsRepository(db),
 		AuditLog:     NewAuditLogRepository(db),
 		Log:          NewLogRepository(db),
+		Subscription: NewSubscriptionRepository(db),
+		Ticket:       NewTicketRepository(db),
+		Announcement: NewAnnouncementRepository(db),
+		HelpArticle:  NewHelpArticleRepository(db),
+		AuthToken:    NewAuthTokenRepository(db),
+		// Commercial System repositories
+		Plan:         NewPlanRepository(db),
+		Order:        NewOrderRepository(db),
+		Balance:      NewBalanceRepository(db),
+		Coupon:       NewCouponRepository(db),
+		Invite:       NewInviteRepository(db),
+		Invoice:      NewInvoiceRepository(db),
+		Trial:        NewTrialRepository(db),
+		PlanChange:   NewPlanChangeRepository(db),
+		ExchangeRate: NewExchangeRateRepository(db),
+		PlanPrice:    NewPlanPriceRepository(db),
+		Pause:        NewPauseRepository(db),
+		GiftCard:     NewGiftCardRepository(db),
 	}
 }

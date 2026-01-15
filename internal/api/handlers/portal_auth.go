@@ -1,0 +1,500 @@
+// Package handlers provides HTTP request handlers for the API.
+package handlers
+
+import (
+	"net/http"
+
+	"github.com/gin-gonic/gin"
+
+	"v/internal/auth"
+	"v/internal/database/repository"
+	"v/internal/logger"
+	pkgerrors "v/pkg/errors"
+	portalauth "v/internal/portal/auth"
+)
+
+// PortalAuthHandler handles portal authentication requests.
+type PortalAuthHandler struct {
+	portalAuthService *portalauth.Service
+	authService       *auth.Service
+	userRepo          repository.UserRepository
+	rateLimiter       *portalauth.RateLimiter
+	rateLimitConfig   portalauth.RateLimitConfig
+	logger            logger.Logger
+}
+
+// NewPortalAuthHandler creates a new PortalAuthHandler.
+func NewPortalAuthHandler(
+	portalAuthService *portalauth.Service,
+	authService *auth.Service,
+	userRepo repository.UserRepository,
+	log logger.Logger,
+) *PortalAuthHandler {
+	return &PortalAuthHandler{
+		portalAuthService: portalAuthService,
+		authService:       authService,
+		userRepo:          userRepo,
+		rateLimiter:       portalauth.NewRateLimiter(),
+		rateLimitConfig:   portalauth.DefaultRateLimitConfig(),
+		logger:            log,
+	}
+}
+
+// PortalRegisterRequest represents a registration request.
+type PortalRegisterRequest struct {
+	Username   string `json:"username" binding:"required"`
+	Email      string `json:"email" binding:"required"`
+	Password   string `json:"password" binding:"required"`
+	InviteCode string `json:"invite_code,omitempty"`
+}
+
+// Register handles user registration.
+func (h *PortalAuthHandler) Register(c *gin.Context) {
+	var req PortalRegisterRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "请求参数无效"})
+		return
+	}
+
+	registerReq := &portalauth.RegisterRequest{
+		Username:   req.Username,
+		Email:      req.Email,
+		Password:   req.Password,
+		InviteCode: req.InviteCode,
+	}
+
+	result, err := h.portalAuthService.Register(c.Request.Context(), registerReq, false, h.authService.HashPassword)
+	if err != nil {
+		h.handleError(c, err)
+		return
+	}
+
+	h.logger.Info("user registered via portal", logger.F("user_id", result.UserID), logger.F("username", result.Username))
+
+	c.JSON(http.StatusCreated, gin.H{
+		"message": "注册成功",
+		"user": gin.H{
+			"id":       result.UserID,
+			"username": result.Username,
+			"email":    result.Email,
+		},
+	})
+}
+
+// PortalLoginRequest represents a login request.
+type PortalLoginRequest struct {
+	Username string `json:"username" binding:"required"`
+	Password string `json:"password" binding:"required"`
+	Remember bool   `json:"remember"`
+}
+
+// Login handles user login.
+func (h *PortalAuthHandler) Login(c *gin.Context) {
+	var req PortalLoginRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "请求参数无效"})
+		return
+	}
+
+	loginReq := &portalauth.LoginRequest{
+		Username: req.Username,
+		Password: req.Password,
+		Remember: req.Remember,
+	}
+
+	result, err := h.portalAuthService.Login(
+		c.Request.Context(),
+		loginReq,
+		c.ClientIP(),
+		h.rateLimiter,
+		h.rateLimitConfig,
+		h.authService.VerifyPassword,
+		h.authService.GenerateToken,
+	)
+	if err != nil {
+		h.handleError(c, err)
+		return
+	}
+
+	// Check if 2FA is required
+	if result.Requires2FA {
+		c.JSON(http.StatusOK, gin.H{
+			"requires_2fa": true,
+			"user_id":      result.UserID,
+		})
+		return
+	}
+
+	h.logger.Info("user logged in via portal", logger.F("user_id", result.UserID))
+
+	c.JSON(http.StatusOK, gin.H{
+		"token": result.Token,
+		"user": gin.H{
+			"id":       result.UserID,
+			"username": result.Username,
+			"email":    result.Email,
+			"role":     result.Role,
+		},
+	})
+}
+
+// Logout handles user logout.
+func (h *PortalAuthHandler) Logout(c *gin.Context) {
+	// In a stateless JWT system, logout is handled client-side
+	c.JSON(http.StatusOK, gin.H{"message": "登出成功"})
+}
+
+// PortalForgotPasswordRequest represents a forgot password request.
+type PortalForgotPasswordRequest struct {
+	Email string `json:"email" binding:"required"`
+}
+
+// ForgotPassword handles password reset request.
+func (h *PortalAuthHandler) ForgotPassword(c *gin.Context) {
+	var req PortalForgotPasswordRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "请求参数无效"})
+		return
+	}
+
+	resetReq := &portalauth.RequestPasswordResetRequest{
+		Email: req.Email,
+	}
+
+	token, err := h.portalAuthService.RequestPasswordReset(c.Request.Context(), resetReq)
+	if err != nil {
+		h.handleError(c, err)
+		return
+	}
+
+	// In production, send email with token
+	// For now, just return success (don't reveal if email exists)
+	_ = token
+
+	c.JSON(http.StatusOK, gin.H{"message": "如果该邮箱已注册，您将收到密码重置邮件"})
+}
+
+// PortalResetPasswordRequest represents a password reset request.
+type PortalResetPasswordRequest struct {
+	Token       string `json:"token" binding:"required"`
+	NewPassword string `json:"new_password" binding:"required"`
+}
+
+// ResetPassword handles password reset.
+func (h *PortalAuthHandler) ResetPassword(c *gin.Context) {
+	var req PortalResetPasswordRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "请求参数无效"})
+		return
+	}
+
+	resetReq := &portalauth.ResetPasswordRequest{
+		Token:       req.Token,
+		NewPassword: req.NewPassword,
+	}
+
+	if err := h.portalAuthService.ExecutePasswordReset(c.Request.Context(), resetReq, h.authService.HashPassword); err != nil {
+		h.handleError(c, err)
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "密码重置成功"})
+}
+
+// VerifyEmail handles email verification.
+func (h *PortalAuthHandler) VerifyEmail(c *gin.Context) {
+	token := c.Query("token")
+	if token == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "验证令牌不能为空"})
+		return
+	}
+
+	if err := h.portalAuthService.VerifyEmail(c.Request.Context(), token); err != nil {
+		h.handleError(c, err)
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "邮箱验证成功"})
+}
+
+// GetProfile returns the current user's profile.
+func (h *PortalAuthHandler) GetProfile(c *gin.Context) {
+	userID, exists := c.Get("user_id")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "未认证"})
+		return
+	}
+
+	user, err := h.userRepo.GetByID(c.Request.Context(), userID.(int64))
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "用户不存在"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"id":                 user.ID,
+		"username":           user.Username,
+		"email":              user.Email,
+		"role":               user.Role,
+		"enabled":            user.Enabled,
+		"traffic_limit":      user.TrafficLimit,
+		"traffic_used":       user.TrafficUsed,
+		"expires_at":         user.ExpiresAt,
+		"two_factor_enabled": user.TwoFactorEnabled,
+		"created_at":         user.CreatedAt,
+	})
+}
+
+// PortalUpdateProfileRequest represents a profile update request.
+type PortalUpdateProfileRequest struct {
+	Email       string `json:"email,omitempty"`
+	DisplayName string `json:"display_name,omitempty"`
+}
+
+// UpdateProfile updates the current user's profile.
+func (h *PortalAuthHandler) UpdateProfile(c *gin.Context) {
+	userID, exists := c.Get("user_id")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "未认证"})
+		return
+	}
+
+	var req PortalUpdateProfileRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "请求参数无效"})
+		return
+	}
+
+	user, err := h.userRepo.GetByID(c.Request.Context(), userID.(int64))
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "用户不存在"})
+		return
+	}
+
+	if req.Email != "" && req.Email != user.Email {
+		if !portalauth.ValidateEmail(req.Email) {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "邮箱格式不正确"})
+			return
+		}
+		user.Email = req.Email
+	}
+
+	if err := h.userRepo.Update(c.Request.Context(), user); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "更新失败"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "更新成功"})
+}
+
+// PortalChangePasswordRequest represents a password change request.
+type PortalChangePasswordRequest struct {
+	CurrentPassword string `json:"current_password" binding:"required"`
+	NewPassword     string `json:"new_password" binding:"required"`
+}
+
+// ChangePassword changes the current user's password.
+func (h *PortalAuthHandler) ChangePassword(c *gin.Context) {
+	userID, exists := c.Get("user_id")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "未认证"})
+		return
+	}
+
+	var req PortalChangePasswordRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "请求参数无效"})
+		return
+	}
+
+	changeReq := &portalauth.ChangePasswordRequest{
+		CurrentPassword: req.CurrentPassword,
+		NewPassword:     req.NewPassword,
+	}
+
+	if err := h.portalAuthService.ChangePassword(
+		c.Request.Context(),
+		userID.(int64),
+		changeReq,
+		h.authService.VerifyPassword,
+		h.authService.HashPassword,
+	); err != nil {
+		h.handleError(c, err)
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "密码修改成功"})
+}
+
+// Enable2FA initiates 2FA setup.
+func (h *PortalAuthHandler) Enable2FA(c *gin.Context) {
+	userID, exists := c.Get("user_id")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "未认证"})
+		return
+	}
+
+	secret, backupCodes, err := h.portalAuthService.Setup2FA(c.Request.Context(), userID.(int64), h.authService.GenerateTOTPSecret)
+	if err != nil {
+		h.handleError(c, err)
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"secret":       secret,
+		"backup_codes": backupCodes,
+	})
+}
+
+// Portal2FAVerifyRequest represents a 2FA verification request.
+type Portal2FAVerifyRequest struct {
+	Code string `json:"code" binding:"required"`
+}
+
+// Verify2FA verifies and enables 2FA.
+func (h *PortalAuthHandler) Verify2FA(c *gin.Context) {
+	userID, exists := c.Get("user_id")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "未认证"})
+		return
+	}
+
+	var req Portal2FAVerifyRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "请求参数无效"})
+		return
+	}
+
+	if err := h.portalAuthService.Enable2FA(c.Request.Context(), userID.(int64), req.Code, h.authService.VerifyTOTP); err != nil {
+		h.handleError(c, err)
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "两步验证已启用"})
+}
+
+// Portal2FALoginRequest represents a 2FA login verification request.
+type Portal2FALoginRequest struct {
+	UserID int64  `json:"user_id" binding:"required"`
+	Code   string `json:"code" binding:"required"`
+}
+
+// Verify2FALogin verifies 2FA code during login.
+func (h *PortalAuthHandler) Verify2FALogin(c *gin.Context) {
+	var req Portal2FALoginRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "请求参数无效"})
+		return
+	}
+
+	twoFactorReq := &portalauth.TwoFactorRequest{
+		UserID: req.UserID,
+		Code:   req.Code,
+	}
+
+	result, err := h.portalAuthService.Verify2FA(
+		c.Request.Context(),
+		twoFactorReq,
+		h.authService.VerifyTOTP,
+		h.authService.GenerateToken,
+	)
+	if err != nil {
+		h.handleError(c, err)
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"token": result.Token,
+		"user": gin.H{
+			"id":       result.UserID,
+			"username": result.Username,
+			"email":    result.Email,
+			"role":     result.Role,
+		},
+	})
+}
+
+// PortalDisable2FARequest represents a 2FA disable request.
+type PortalDisable2FARequest struct {
+	Password string `json:"password" binding:"required"`
+}
+
+// Disable2FA disables 2FA for the current user.
+func (h *PortalAuthHandler) Disable2FA(c *gin.Context) {
+	userID, exists := c.Get("user_id")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "未认证"})
+		return
+	}
+
+	var req PortalDisable2FARequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "请求参数无效"})
+		return
+	}
+
+	if err := h.portalAuthService.Disable2FA(c.Request.Context(), userID.(int64), req.Password, h.authService.VerifyPassword); err != nil {
+		h.handleError(c, err)
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "两步验证已禁用"})
+}
+
+// handleError handles errors and returns appropriate HTTP responses.
+func (h *PortalAuthHandler) handleError(c *gin.Context, err error) {
+	// Check error type using errors package
+	if appErr, ok := pkgerrors.AsAppError(err); ok {
+		switch appErr.Code {
+		case pkgerrors.ErrCodeValidation, pkgerrors.ErrCodeBadRequest:
+			c.JSON(http.StatusBadRequest, gin.H{"error": appErr.Message})
+		case pkgerrors.ErrCodeUnauthorized:
+			c.JSON(http.StatusUnauthorized, gin.H{"error": appErr.Message})
+		case pkgerrors.ErrCodeForbidden:
+			c.JSON(http.StatusForbidden, gin.H{"error": appErr.Message})
+		case pkgerrors.ErrCodeConflict:
+			c.JSON(http.StatusConflict, gin.H{"error": appErr.Message})
+		case pkgerrors.ErrCodeRateLimit:
+			c.JSON(http.StatusTooManyRequests, gin.H{"error": appErr.Message})
+		case pkgerrors.ErrCodeNotFound:
+			c.JSON(http.StatusNotFound, gin.H{"error": appErr.Message})
+		default:
+			h.logger.Error("portal auth error", logger.F("error", err))
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "服务器内部错误"})
+		}
+		return
+	}
+
+	// Fallback to string matching for non-AppError errors
+	errStr := err.Error()
+	switch {
+	case contains(errStr, "validation"):
+		c.JSON(http.StatusBadRequest, gin.H{"error": errStr})
+	case contains(errStr, "unauthorized"), contains(errStr, "密码错误"):
+		c.JSON(http.StatusUnauthorized, gin.H{"error": errStr})
+	case contains(errStr, "forbidden"), contains(errStr, "禁用"):
+		c.JSON(http.StatusForbidden, gin.H{"error": errStr})
+	case contains(errStr, "conflict"), contains(errStr, "已存在"):
+		c.JSON(http.StatusConflict, gin.H{"error": errStr})
+	case contains(errStr, "rate limit"), contains(errStr, "过于频繁"):
+		c.JSON(http.StatusTooManyRequests, gin.H{"error": errStr})
+	case contains(errStr, "not found"):
+		c.JSON(http.StatusNotFound, gin.H{"error": errStr})
+	default:
+		h.logger.Error("portal auth error", logger.F("error", err))
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "服务器内部错误"})
+	}
+}
+
+func contains(s, substr string) bool {
+	return len(s) >= len(substr) && (s == substr || len(s) > 0 && containsLower(s, substr))
+}
+
+func containsLower(s, substr string) bool {
+	for i := 0; i <= len(s)-len(substr); i++ {
+		if s[i:i+len(substr)] == substr {
+			return true
+		}
+	}
+	return false
+}

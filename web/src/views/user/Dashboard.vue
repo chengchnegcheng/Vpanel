@@ -1,0 +1,682 @@
+<template>
+  <div class="dashboard-page">
+    <!-- 欢迎区域 -->
+    <div class="welcome-section">
+      <div class="welcome-content">
+        <h1 class="welcome-title">
+          {{ greeting }}，{{ userStore.username || '用户' }}
+        </h1>
+        <p class="welcome-subtitle">
+          欢迎回来，这是您的账户概览
+        </p>
+      </div>
+      <div class="welcome-actions">
+        <el-button type="primary" @click="goToSubscription">
+          <el-icon><Link /></el-icon>
+          获取订阅
+        </el-button>
+      </div>
+    </div>
+
+    <!-- 状态卡片 -->
+    <el-row :gutter="20" class="status-cards">
+      <!-- 账户状态 -->
+      <el-col :xs="24" :sm="12" :lg="6">
+        <div class="status-card">
+          <div class="card-icon" :class="accountStatusClass">
+            <el-icon><User /></el-icon>
+          </div>
+          <div class="card-content">
+            <div class="card-label">账户状态</div>
+            <div class="card-value">
+              <el-tag :type="accountStatusType" size="small">
+                {{ accountStatusText }}
+              </el-tag>
+            </div>
+          </div>
+        </div>
+      </el-col>
+
+      <!-- 到期时间 -->
+      <el-col :xs="24" :sm="12" :lg="6">
+        <div class="status-card">
+          <div class="card-icon expiry">
+            <el-icon><Calendar /></el-icon>
+          </div>
+          <div class="card-content">
+            <div class="card-label">到期时间</div>
+            <div class="card-value">
+              <template v-if="userStore.expiresAt">
+                {{ formatDate(userStore.expiresAt) }}
+                <span v-if="userStore.daysUntilExpiry !== null" class="days-hint">
+                  ({{ userStore.daysUntilExpiry > 0 ? `剩余 ${userStore.daysUntilExpiry} 天` : '已过期' }})
+                </span>
+              </template>
+              <template v-else>永久有效</template>
+            </div>
+          </div>
+        </div>
+      </el-col>
+
+      <!-- 在线设备 -->
+      <el-col :xs="24" :sm="12" :lg="6">
+        <div class="status-card">
+          <div class="card-icon devices">
+            <el-icon><Monitor /></el-icon>
+          </div>
+          <div class="card-content">
+            <div class="card-label">在线设备</div>
+            <div class="card-value">
+              {{ onlineDevices }} / {{ maxDevices }}
+            </div>
+          </div>
+        </div>
+      </el-col>
+
+      <!-- 可用节点 -->
+      <el-col :xs="24" :sm="12" :lg="6">
+        <div class="status-card">
+          <div class="card-icon nodes">
+            <el-icon><Connection /></el-icon>
+          </div>
+          <div class="card-content">
+            <div class="card-label">可用节点</div>
+            <div class="card-value">{{ availableNodes }} 个</div>
+          </div>
+        </div>
+      </el-col>
+    </el-row>
+
+    <!-- 流量使用 -->
+    <el-row :gutter="20" class="main-content">
+      <el-col :xs="24" :lg="16">
+        <el-card class="traffic-card" shadow="never">
+          <template #header>
+            <div class="card-header">
+              <span>流量使用</span>
+              <el-button link type="primary" @click="goToStats">
+                查看详情
+                <el-icon><ArrowRight /></el-icon>
+              </el-button>
+            </div>
+          </template>
+
+          <div class="traffic-overview">
+            <div class="traffic-progress">
+              <el-progress
+                type="dashboard"
+                :percentage="userStore.trafficPercent"
+                :width="160"
+                :stroke-width="12"
+                :color="trafficProgressColor"
+              >
+                <template #default>
+                  <div class="progress-content">
+                    <div class="progress-value">{{ userStore.trafficPercent }}%</div>
+                    <div class="progress-label">已使用</div>
+                  </div>
+                </template>
+              </el-progress>
+            </div>
+
+            <div class="traffic-details">
+              <div class="traffic-item">
+                <span class="item-label">已使用</span>
+                <span class="item-value">{{ formatTraffic(userStore.trafficUsed) }}</span>
+              </div>
+              <div class="traffic-item">
+                <span class="item-label">总流量</span>
+                <span class="item-value">{{ formatTraffic(userStore.trafficLimit) }}</span>
+              </div>
+              <div class="traffic-item">
+                <span class="item-label">剩余流量</span>
+                <span class="item-value">{{ formatTraffic(remainingTraffic) }}</span>
+              </div>
+              <div class="traffic-item" v-if="trafficResetAt">
+                <span class="item-label">重置时间</span>
+                <span class="item-value">{{ formatDate(trafficResetAt) }}</span>
+              </div>
+            </div>
+          </div>
+        </el-card>
+      </el-col>
+
+      <!-- 快捷操作 -->
+      <el-col :xs="24" :lg="8">
+        <el-card class="quick-actions-card" shadow="never">
+          <template #header>
+            <span>快捷操作</span>
+          </template>
+
+          <div class="quick-actions">
+            <div class="action-item" @click="goToNodes">
+              <el-icon class="action-icon"><Connection /></el-icon>
+              <span class="action-label">节点列表</span>
+            </div>
+            <div class="action-item" @click="goToSubscription">
+              <el-icon class="action-icon"><Link /></el-icon>
+              <span class="action-label">订阅管理</span>
+            </div>
+            <div class="action-item" @click="goToDownload">
+              <el-icon class="action-icon"><Download /></el-icon>
+              <span class="action-label">客户端下载</span>
+            </div>
+            <div class="action-item" @click="goToTickets">
+              <el-icon class="action-icon"><ChatDotRound /></el-icon>
+              <span class="action-label">工单支持</span>
+            </div>
+            <div class="action-item" @click="goToSettings">
+              <el-icon class="action-icon"><Setting /></el-icon>
+              <span class="action-label">个人设置</span>
+            </div>
+            <div class="action-item" @click="goToHelp">
+              <el-icon class="action-icon"><QuestionFilled /></el-icon>
+              <span class="action-label">帮助中心</span>
+            </div>
+          </div>
+        </el-card>
+      </el-col>
+    </el-row>
+
+    <!-- 公告区域 -->
+    <el-card class="announcements-card" shadow="never" v-if="announcements.length > 0">
+      <template #header>
+        <div class="card-header">
+          <span>
+            <el-icon><Bell /></el-icon>
+            最新公告
+          </span>
+          <el-button link type="primary" @click="goToAnnouncements">
+            查看全部
+            <el-icon><ArrowRight /></el-icon>
+          </el-button>
+        </div>
+      </template>
+
+      <div class="announcement-list">
+        <div 
+          v-for="item in announcements" 
+          :key="item.id" 
+          class="announcement-item"
+          @click="viewAnnouncement(item.id)"
+        >
+          <el-tag 
+            :type="getCategoryType(item.category)" 
+            size="small"
+            class="announcement-tag"
+          >
+            {{ getCategoryLabel(item.category) }}
+          </el-tag>
+          <span class="announcement-title">{{ item.title }}</span>
+          <span class="announcement-date">{{ formatDate(item.published_at) }}</span>
+        </div>
+      </div>
+    </el-card>
+
+    <!-- 试用和暂停状态卡片 -->
+    <el-row :gutter="20" class="status-section">
+      <el-col :xs="24" :lg="12">
+        <TrialCard />
+      </el-col>
+      <el-col :xs="24" :lg="12">
+        <PauseCard />
+      </el-col>
+    </el-row>
+  </div>
+</template>
+
+<script setup>
+import { ref, computed, onMounted } from 'vue'
+import { useRouter } from 'vue-router'
+import { 
+  User, Calendar, Monitor, Connection, Link, Download,
+  ChatDotRound, Setting, QuestionFilled, Bell, ArrowRight
+} from '@element-plus/icons-vue'
+import { useUserPortalStore } from '@/stores/userPortal'
+import { usePortalAnnouncementsStore } from '@/stores/portalAnnouncements'
+import PauseCard from '@/components/user/PauseCard.vue'
+import TrialCard from '@/components/user/TrialCard.vue'
+
+const router = useRouter()
+const userStore = useUserPortalStore()
+const announcementsStore = usePortalAnnouncementsStore()
+
+// 数据
+const onlineDevices = ref(0)
+const maxDevices = ref(3)
+const availableNodes = ref(0)
+const trafficResetAt = ref(null)
+
+// 计算属性
+const greeting = computed(() => {
+  const hour = new Date().getHours()
+  if (hour < 6) return '夜深了'
+  if (hour < 12) return '早上好'
+  if (hour < 14) return '中午好'
+  if (hour < 18) return '下午好'
+  return '晚上好'
+})
+
+const accountStatusClass = computed(() => {
+  const status = userStore.status
+  if (status === 'active') return 'active'
+  if (status === 'expired') return 'expired'
+  return 'disabled'
+})
+
+const accountStatusType = computed(() => {
+  const status = userStore.status
+  if (status === 'active') return 'success'
+  if (status === 'expired') return 'warning'
+  return 'danger'
+})
+
+const accountStatusText = computed(() => {
+  const status = userStore.status
+  if (status === 'active') return '正常'
+  if (status === 'expired') return '已过期'
+  if (status === 'disabled') return '已禁用'
+  return '未知'
+})
+
+const remainingTraffic = computed(() => {
+  return Math.max(0, userStore.trafficLimit - userStore.trafficUsed)
+})
+
+const trafficProgressColor = computed(() => {
+  const percent = userStore.trafficPercent
+  if (percent >= 90) return '#f56c6c'
+  if (percent >= 70) return '#e6a23c'
+  return '#409eff'
+})
+
+const announcements = computed(() => {
+  return announcementsStore.announcements.slice(0, 5)
+})
+
+// 方法
+function formatDate(dateStr) {
+  if (!dateStr) return '-'
+  const date = new Date(dateStr)
+  return date.toLocaleDateString('zh-CN', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit'
+  })
+}
+
+function formatTraffic(bytes) {
+  if (!bytes || bytes === 0) return '0 B'
+  const units = ['B', 'KB', 'MB', 'GB', 'TB']
+  let i = 0
+  let size = bytes
+  while (size >= 1024 && i < units.length - 1) {
+    size /= 1024
+    i++
+  }
+  return `${size.toFixed(2)} ${units[i]}`
+}
+
+function getCategoryType(category) {
+  const types = {
+    general: 'info',
+    maintenance: 'warning',
+    update: 'success',
+    promotion: 'danger'
+  }
+  return types[category] || 'info'
+}
+
+function getCategoryLabel(category) {
+  const labels = {
+    general: '公告',
+    maintenance: '维护',
+    update: '更新',
+    promotion: '活动'
+  }
+  return labels[category] || '公告'
+}
+
+// 导航方法
+function goToNodes() {
+  router.push('/user/nodes')
+}
+
+function goToSubscription() {
+  router.push('/user/subscription')
+}
+
+function goToDownload() {
+  router.push('/user/download')
+}
+
+function goToTickets() {
+  router.push('/user/tickets')
+}
+
+function goToSettings() {
+  router.push('/user/settings')
+}
+
+function goToHelp() {
+  router.push('/user/help')
+}
+
+function goToStats() {
+  router.push('/user/stats')
+}
+
+function goToAnnouncements() {
+  router.push('/user/announcements')
+}
+
+function viewAnnouncement(id) {
+  router.push(`/user/announcements/${id}`)
+}
+
+// 加载数据
+async function loadDashboardData() {
+  try {
+    await userStore.fetchProfile()
+    await announcementsStore.fetchAnnouncements()
+  } catch (error) {
+    console.error('Failed to load dashboard data:', error)
+  }
+}
+
+onMounted(() => {
+  loadDashboardData()
+})
+</script>
+
+<style scoped>
+.dashboard-page {
+  padding: 20px;
+}
+
+/* 欢迎区域 */
+.welcome-section {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 24px;
+  padding: 24px;
+  background: linear-gradient(135deg, #409eff 0%, #66b1ff 100%);
+  border-radius: 12px;
+  color: #fff;
+}
+
+.welcome-title {
+  font-size: 24px;
+  font-weight: 600;
+  margin: 0 0 8px 0;
+}
+
+.welcome-subtitle {
+  font-size: 14px;
+  opacity: 0.9;
+  margin: 0;
+}
+
+.welcome-actions .el-button {
+  background: rgba(255, 255, 255, 0.2);
+  border-color: rgba(255, 255, 255, 0.3);
+  color: #fff;
+}
+
+.welcome-actions .el-button:hover {
+  background: rgba(255, 255, 255, 0.3);
+}
+
+/* 状态卡片 */
+.status-cards {
+  margin-bottom: 20px;
+}
+
+.status-card {
+  display: flex;
+  align-items: center;
+  padding: 20px;
+  background: #fff;
+  border-radius: 8px;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.04);
+  margin-bottom: 20px;
+}
+
+.card-icon {
+  width: 48px;
+  height: 48px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 24px;
+  margin-right: 16px;
+}
+
+.card-icon.active {
+  background: rgba(103, 194, 58, 0.1);
+  color: #67c23a;
+}
+
+.card-icon.expired {
+  background: rgba(230, 162, 60, 0.1);
+  color: #e6a23c;
+}
+
+.card-icon.disabled {
+  background: rgba(245, 108, 108, 0.1);
+  color: #f56c6c;
+}
+
+.card-icon.expiry {
+  background: rgba(64, 158, 255, 0.1);
+  color: #409eff;
+}
+
+.card-icon.devices {
+  background: rgba(144, 147, 153, 0.1);
+  color: #909399;
+}
+
+.card-icon.nodes {
+  background: rgba(103, 194, 58, 0.1);
+  color: #67c23a;
+}
+
+.card-label {
+  font-size: 13px;
+  color: #909399;
+  margin-bottom: 4px;
+}
+
+.card-value {
+  font-size: 16px;
+  font-weight: 500;
+  color: #303133;
+}
+
+.days-hint {
+  font-size: 12px;
+  color: #909399;
+  font-weight: normal;
+}
+
+/* 主内容区 */
+.main-content {
+  margin-bottom: 20px;
+}
+
+.traffic-card,
+.quick-actions-card,
+.announcements-card {
+  height: 100%;
+  border-radius: 8px;
+}
+
+.card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+/* 流量卡片 */
+.traffic-overview {
+  display: flex;
+  align-items: center;
+  gap: 40px;
+}
+
+.traffic-progress {
+  flex-shrink: 0;
+}
+
+.progress-content {
+  text-align: center;
+}
+
+.progress-value {
+  font-size: 28px;
+  font-weight: 600;
+  color: #303133;
+}
+
+.progress-label {
+  font-size: 13px;
+  color: #909399;
+}
+
+.traffic-details {
+  flex: 1;
+}
+
+.traffic-item {
+  display: flex;
+  justify-content: space-between;
+  padding: 12px 0;
+  border-bottom: 1px solid #ebeef5;
+}
+
+.traffic-item:last-child {
+  border-bottom: none;
+}
+
+.item-label {
+  color: #909399;
+}
+
+.item-value {
+  font-weight: 500;
+  color: #303133;
+}
+
+/* 快捷操作 */
+.quick-actions {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+}
+
+.action-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 16px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.3s;
+}
+
+.action-item:hover {
+  background: #f5f7fa;
+}
+
+.action-icon {
+  font-size: 28px;
+  color: #409eff;
+  margin-bottom: 8px;
+}
+
+.action-label {
+  font-size: 13px;
+  color: #606266;
+}
+
+/* 公告列表 */
+.announcements-card {
+  margin-top: 20px;
+}
+
+.announcements-card .card-header span {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.announcement-list {
+  display: flex;
+  flex-direction: column;
+}
+
+.announcement-item {
+  display: flex;
+  align-items: center;
+  padding: 12px 0;
+  border-bottom: 1px solid #ebeef5;
+  cursor: pointer;
+  transition: background 0.3s;
+}
+
+.announcement-item:last-child {
+  border-bottom: none;
+}
+
+.announcement-item:hover {
+  background: #f5f7fa;
+  margin: 0 -20px;
+  padding: 12px 20px;
+}
+
+.announcement-tag {
+  flex-shrink: 0;
+  margin-right: 12px;
+}
+
+.announcement-title {
+  flex: 1;
+  color: #303133;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.announcement-date {
+  flex-shrink: 0;
+  font-size: 13px;
+  color: #909399;
+  margin-left: 12px;
+}
+
+/* 试用和暂停状态区域 */
+.status-section {
+  margin-top: 20px;
+}
+
+/* 响应式 */
+@media (max-width: 768px) {
+  .welcome-section {
+    flex-direction: column;
+    text-align: center;
+    gap: 16px;
+  }
+
+  .traffic-overview {
+    flex-direction: column;
+    gap: 24px;
+  }
+
+  .quick-actions {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+</style>

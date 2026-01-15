@@ -1,0 +1,537 @@
+<template>
+  <div class="subscription-page">
+    <!-- 页面标题 -->
+    <div class="page-header">
+      <h1 class="page-title">订阅管理</h1>
+      <p class="page-subtitle">获取订阅链接，导入到您的客户端使用</p>
+    </div>
+
+    <!-- 订阅状态和操作卡片 -->
+    <el-row :gutter="20" class="subscription-actions">
+      <!-- 订阅状态卡片 -->
+      <el-col :xs="24" :lg="12">
+        <el-card class="status-card" shadow="never">
+          <template #header>
+            <div class="card-header">
+              <span>订阅状态</span>
+              <el-tag :type="subscriptionStatus.type" size="small">
+                {{ subscriptionStatus.label }}
+              </el-tag>
+            </div>
+          </template>
+          <div class="status-content">
+            <el-descriptions :column="1" border size="small">
+              <el-descriptions-item label="到期时间">
+                {{ expiresAt || '永久有效' }}
+                <span v-if="daysUntilExpiry !== null" class="days-hint">
+                  ({{ daysUntilExpiry > 0 ? `剩余 ${daysUntilExpiry} 天` : '已过期' }})
+                </span>
+              </el-descriptions-item>
+              <el-descriptions-item label="已用流量">
+                {{ formatTraffic(trafficUsed) }} / {{ formatTraffic(trafficLimit) }}
+              </el-descriptions-item>
+              <el-descriptions-item label="可用节点">
+                {{ availableNodes }} 个
+              </el-descriptions-item>
+            </el-descriptions>
+            
+            <!-- 升级/降级按钮 -->
+            <div class="action-buttons">
+              <el-button type="primary" @click="goToPlanUpgrade">
+                <el-icon><TrendCharts /></el-icon>
+                升级/降级套餐
+              </el-button>
+              <el-button type="success" @click="goToPlans">
+                <el-icon><ShoppingCart /></el-icon>
+                续费套餐
+              </el-button>
+            </div>
+          </div>
+        </el-card>
+      </el-col>
+
+      <!-- 暂停/恢复卡片 -->
+      <el-col :xs="24" :lg="12">
+        <PauseCard />
+      </el-col>
+    </el-row>
+
+    <!-- 订阅链接卡片 -->
+    <el-card class="subscription-card" shadow="never">
+      <template #header>
+        <div class="card-header">
+          <span>订阅链接</span>
+          <el-button link type="primary" @click="resetSubscription">
+            <el-icon><Refresh /></el-icon>
+            重置链接
+          </el-button>
+        </div>
+      </template>
+
+      <div class="subscription-content">
+        <!-- 订阅格式选择 -->
+        <div class="format-selector">
+          <span class="selector-label">订阅格式：</span>
+          <el-radio-group v-model="selectedFormat" size="small">
+            <el-radio-button 
+              v-for="format in formats" 
+              :key="format.value" 
+              :value="format.value"
+            >
+              {{ format.label }}
+            </el-radio-button>
+          </el-radio-group>
+        </div>
+
+        <!-- 订阅链接 -->
+        <div class="subscription-url">
+          <el-input
+            v-model="subscriptionUrl"
+            readonly
+            size="large"
+          >
+            <template #append>
+              <el-button @click="copyUrl">
+                <el-icon><CopyDocument /></el-icon>
+                复制
+              </el-button>
+            </template>
+          </el-input>
+        </div>
+
+        <!-- QR 码 -->
+        <div class="qrcode-section">
+          <div class="qrcode-wrapper">
+            <canvas ref="qrcodeCanvas"></canvas>
+          </div>
+          <div class="qrcode-actions">
+            <el-button size="small" @click="downloadQRCode">
+              <el-icon><Download /></el-icon>
+              下载二维码
+            </el-button>
+          </div>
+        </div>
+
+        <!-- 使用说明 -->
+        <el-alert
+          type="info"
+          :closable="false"
+          show-icon
+          class="usage-tip"
+        >
+          <template #title>
+            <span>使用说明</span>
+          </template>
+          <template #default>
+            <p>1. 复制上方订阅链接或扫描二维码</p>
+            <p>2. 在客户端中添加订阅</p>
+            <p>3. 更新订阅获取最新节点</p>
+          </template>
+        </el-alert>
+      </div>
+    </el-card>
+
+    <!-- 客户端推荐 -->
+    <el-card class="clients-card" shadow="never">
+      <template #header>
+        <div class="card-header">
+          <span>推荐客户端</span>
+          <el-button link type="primary" @click="goToDownload">
+            查看全部
+            <el-icon><ArrowRight /></el-icon>
+          </el-button>
+        </div>
+      </template>
+
+      <div class="clients-grid">
+        <div 
+          v-for="client in recommendedClients" 
+          :key="client.name"
+          class="client-item"
+          @click="openClientLink(client)"
+        >
+          <div class="client-icon">
+            <el-icon><component :is="client.icon" /></el-icon>
+          </div>
+          <div class="client-info">
+            <h4 class="client-name">{{ client.name }}</h4>
+            <span class="client-platform">{{ client.platform }}</span>
+          </div>
+          <el-icon class="client-arrow"><ArrowRight /></el-icon>
+        </div>
+      </div>
+    </el-card>
+
+    <!-- 重置确认对话框 -->
+    <el-dialog
+      v-model="showResetDialog"
+      title="重置订阅链接"
+      width="400px"
+    >
+      <el-alert
+        type="warning"
+        :closable="false"
+        show-icon
+      >
+        <template #title>
+          重置后，旧的订阅链接将失效，您需要在所有客户端中更新订阅链接。
+        </template>
+      </el-alert>
+      <template #footer>
+        <el-button @click="showResetDialog = false">取消</el-button>
+        <el-button type="danger" @click="confirmReset" :loading="resetting">
+          确认重置
+        </el-button>
+      </template>
+    </el-dialog>
+  </div>
+</template>
+
+<script setup>
+import { ref, computed, onMounted, nextTick } from 'vue'
+import { useRouter } from 'vue-router'
+import { ElMessage } from 'element-plus'
+import { 
+  Refresh, CopyDocument, Download, ArrowRight,
+  Monitor, Iphone, Apple, TrendCharts, ShoppingCart
+} from '@element-plus/icons-vue'
+import { useUserPortalStore } from '@/stores/userPortal'
+import PauseCard from '@/components/user/PauseCard.vue'
+import QRCode from 'qrcode'
+
+const router = useRouter()
+const userStore = useUserPortalStore()
+
+// 引用
+const qrcodeCanvas = ref(null)
+
+// 状态
+const selectedFormat = ref('clash')
+const showResetDialog = ref(false)
+const resetting = ref(false)
+const subscriptionToken = ref('abc123xyz') // 从 API 获取
+
+// 订阅格式
+const formats = [
+  { value: 'clash', label: 'Clash' },
+  { value: 'v2ray', label: 'V2Ray' },
+  { value: 'shadowrocket', label: 'Shadowrocket' },
+  { value: 'surge', label: 'Surge' },
+  { value: 'quantumult', label: 'Quantumult X' }
+]
+
+// 推荐客户端
+const recommendedClients = [
+  { name: 'Clash Verge', platform: 'Windows / macOS / Linux', icon: Monitor, url: '#' },
+  { name: 'Shadowrocket', platform: 'iOS', icon: Iphone, url: '#' },
+  { name: 'ClashX Pro', platform: 'macOS', icon: Apple, url: '#' }
+]
+
+// 计算属性
+const subscriptionUrl = computed(() => {
+  const baseUrl = window.location.origin
+  return `${baseUrl}/api/subscription/${subscriptionToken.value}?format=${selectedFormat.value}`
+})
+
+const subscriptionStatus = computed(() => {
+  const status = userStore.status
+  if (status === 'active') return { type: 'success', label: '正常' }
+  if (status === 'expired') return { type: 'warning', label: '已过期' }
+  return { type: 'danger', label: '已禁用' }
+})
+
+const expiresAt = computed(() => {
+  if (!userStore.expiresAt) return null
+  return new Date(userStore.expiresAt).toLocaleDateString('zh-CN')
+})
+
+const daysUntilExpiry = computed(() => userStore.daysUntilExpiry)
+
+const trafficUsed = computed(() => userStore.trafficUsed)
+const trafficLimit = computed(() => userStore.trafficLimit)
+const lastUpdated = ref(null)
+const availableNodes = ref(0)
+
+// 方法
+function formatTraffic(bytes) {
+  if (!bytes || bytes === 0) return '0 B'
+  const units = ['B', 'KB', 'MB', 'GB', 'TB']
+  let i = 0
+  let size = bytes
+  while (size >= 1024 && i < units.length - 1) {
+    size /= 1024
+    i++
+  }
+  return `${size.toFixed(2)} ${units[i]}`
+}
+
+async function generateQRCode() {
+  await nextTick()
+  if (qrcodeCanvas.value) {
+    try {
+      await QRCode.toCanvas(qrcodeCanvas.value, subscriptionUrl.value, {
+        width: 200,
+        margin: 2,
+        color: {
+          dark: '#303133',
+          light: '#ffffff'
+        }
+      })
+    } catch (error) {
+      console.error('Failed to generate QR code:', error)
+    }
+  }
+}
+
+function copyUrl() {
+  navigator.clipboard.writeText(subscriptionUrl.value)
+    .then(() => {
+      ElMessage.success('订阅链接已复制')
+    })
+    .catch(() => {
+      ElMessage.error('复制失败')
+    })
+}
+
+function downloadQRCode() {
+  if (!qrcodeCanvas.value) return
+  
+  const link = document.createElement('a')
+  link.download = `subscription-${selectedFormat.value}.png`
+  link.href = qrcodeCanvas.value.toDataURL('image/png')
+  link.click()
+  
+  ElMessage.success('二维码已下载')
+}
+
+function resetSubscription() {
+  showResetDialog.value = true
+}
+
+async function confirmReset() {
+  resetting.value = true
+  try {
+    // 调用 API 重置订阅
+    // await api.resetSubscription()
+    subscriptionToken.value = 'new_token_' + Date.now()
+    showResetDialog.value = false
+    ElMessage.success('订阅链接已重置')
+    generateQRCode()
+  } catch (error) {
+    ElMessage.error('重置失败')
+  } finally {
+    resetting.value = false
+  }
+}
+
+function goToDownload() {
+  router.push('/user/download')
+}
+
+function goToPlanUpgrade() {
+  router.push('/user/plan-upgrade')
+}
+
+function goToPlans() {
+  router.push('/user/plans')
+}
+
+function openClientLink(client) {
+  if (client.url && client.url !== '#') {
+    window.open(client.url, '_blank')
+  } else {
+    router.push('/user/download')
+  }
+}
+
+// 监听格式变化重新生成二维码
+import { watch } from 'vue'
+watch(selectedFormat, () => {
+  generateQRCode()
+})
+
+onMounted(() => {
+  generateQRCode()
+})
+</script>
+
+<style scoped>
+.subscription-page {
+  padding: 20px;
+}
+
+.page-header {
+  margin-bottom: 24px;
+}
+
+.page-title {
+  font-size: 24px;
+  font-weight: 600;
+  color: #303133;
+  margin: 0 0 8px 0;
+}
+
+.page-subtitle {
+  font-size: 14px;
+  color: #909399;
+  margin: 0;
+}
+
+/* 订阅操作区域 */
+.subscription-actions {
+  margin-bottom: 20px;
+}
+
+.status-card {
+  height: 100%;
+  border-radius: 8px;
+}
+
+.status-content {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.days-hint {
+  font-size: 12px;
+  color: #909399;
+  margin-left: 8px;
+}
+
+.action-buttons {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+/* 卡片样式 */
+.subscription-card,
+.clients-card {
+  margin-bottom: 20px;
+  border-radius: 8px;
+}
+
+.card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+/* 订阅内容 */
+.subscription-content {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.format-selector {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.selector-label {
+  font-size: 14px;
+  color: #606266;
+}
+
+.subscription-url {
+  width: 100%;
+}
+
+/* 二维码 */
+.qrcode-section {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  padding: 20px;
+  background: #fafafa;
+  border-radius: 8px;
+}
+
+.qrcode-wrapper {
+  padding: 16px;
+  background: #fff;
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+}
+
+.qrcode-wrapper canvas {
+  display: block;
+}
+
+/* 使用说明 */
+.usage-tip p {
+  margin: 4px 0;
+  font-size: 13px;
+}
+
+/* 客户端网格 */
+.clients-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 12px;
+}
+
+.client-item {
+  display: flex;
+  align-items: center;
+  padding: 16px;
+  border: 1px solid #ebeef5;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.3s;
+}
+
+.client-item:hover {
+  border-color: #409eff;
+  background: #f5f7fa;
+}
+
+.client-icon {
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #ecf5ff;
+  border-radius: 8px;
+  color: #409eff;
+  font-size: 20px;
+  margin-right: 12px;
+}
+
+.client-info {
+  flex: 1;
+}
+
+.client-name {
+  font-size: 15px;
+  font-weight: 500;
+  color: #303133;
+  margin: 0 0 4px 0;
+}
+
+.client-platform {
+  font-size: 12px;
+  color: #909399;
+}
+
+.client-arrow {
+  color: #c0c4cc;
+}
+
+/* 响应式 */
+@media (max-width: 768px) {
+  .format-selector {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .clients-grid {
+    grid-template-columns: 1fr;
+  }
+}
+</style>

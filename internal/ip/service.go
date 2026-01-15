@@ -1,0 +1,585 @@
+package ip
+
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"time"
+
+	"gorm.io/gorm"
+)
+
+// NotificationSender interface for sending notifications
+type NotificationSender interface {
+	NotifyNewDevice(data NotificationData) error
+	NotifyIPLimitReached(data NotificationData) error
+	NotifySuspiciousActivity(data NotificationData) error
+	NotifyDeviceKicked(data NotificationData) error
+	NotifyAutoBlacklisted(data NotificationData) error
+}
+
+// NotificationData contains data for IP-related notifications
+type NotificationData struct {
+	UserID       uint
+	Username     string
+	Email        string
+	IP           string
+	Country      string
+	City         string
+	DeviceInfo   string
+	Reason       string
+	CurrentCount int
+	MaxCount     int
+	Timestamp    time.Time
+}
+
+// Error codes for IP restriction.
+const (
+	ErrCodeIPLimitExceeded     = "IP_LIMIT_EXCEEDED"
+	ErrCodeIPBlacklisted       = "IP_BLACKLISTED"
+	ErrCodeGeoRestricted       = "GEO_RESTRICTED"
+	ErrCodeSubscriptionIPLimit = "SUBSCRIPTION_IP_LIMIT"
+	ErrCodeIPKickFailed        = "IP_KICK_FAILED"
+	ErrCodeInvalidCIDR         = "INVALID_CIDR"
+	ErrCodeGeolocationFailed   = "GEOLOCATION_FAILED"
+)
+
+// Service provides the main IP restriction functionality.
+type Service struct {
+	db           *gorm.DB
+	validator    *Validator
+	tracker      *Tracker
+	geoService   *GeolocationService
+	settings     *IPRestrictionSettings
+	notifier     NotificationSender
+}
+
+// ServiceConfig holds configuration for the IP restriction service.
+type ServiceConfig struct {
+	GeoConfig *GeolocationConfig
+	Notifier  NotificationSender
+}
+
+// NewService creates a new IP restriction service.
+func NewService(db *gorm.DB, config *ServiceConfig) (*Service, error) {
+	var geoConfig *GeolocationConfig
+	if config != nil {
+		geoConfig = config.GeoConfig
+	}
+
+	geoService, err := NewGeolocationService(db, geoConfig)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create geolocation service: %w", err)
+	}
+
+	return &Service{
+		db:         db,
+		validator:  NewValidator(db),
+		tracker:    NewTracker(db),
+		geoService: geoService,
+		settings:   DefaultIPRestrictionSettings(),
+		notifier:   config.Notifier,
+	}, nil
+}
+
+// Close closes the service and releases resources.
+func (s *Service) Close() error {
+	if s.geoService != nil {
+		return s.geoService.Close()
+	}
+	return nil
+}
+
+// LoadSettings loads IP restriction settings from the database.
+func (s *Service) LoadSettings(ctx context.Context) error {
+	var setting struct {
+		Value string
+	}
+	err := s.db.WithContext(ctx).
+		Table("settings").
+		Where("`key` = ?", "ip_restriction").
+		Select("value").
+		First(&setting).Error
+
+	if err != nil {
+		if err == gorm.ErrRecordNotFound {
+			// Use default settings
+			return nil
+		}
+		return err
+	}
+
+	var settings IPRestrictionSettings
+	if err := json.Unmarshal([]byte(setting.Value), &settings); err != nil {
+		return err
+	}
+
+	s.settings = &settings
+	return nil
+}
+
+// SaveSettings saves IP restriction settings to the database.
+func (s *Service) SaveSettings(ctx context.Context, settings *IPRestrictionSettings) error {
+	data, err := json.Marshal(settings)
+	if err != nil {
+		return err
+	}
+
+	return s.db.WithContext(ctx).Exec(
+		"INSERT OR REPLACE INTO settings (`key`, value, updated_at) VALUES (?, ?, ?)",
+		"ip_restriction", string(data), time.Now(),
+	).Error
+}
+
+// GetSettings returns the current settings.
+func (s *Service) GetSettings() *IPRestrictionSettings {
+	return s.settings
+}
+
+// SetNotifier sets the notification sender.
+func (s *Service) SetNotifier(notifier NotificationSender) {
+	s.notifier = notifier
+}
+
+
+// CheckAccess checks if an IP is allowed to access for a user.
+func (s *Service) CheckAccess(ctx context.Context, userID uint, ip string, accessType AccessType, maxConcurrentIPs int) (*AccessResult, error) {
+	if !s.settings.Enabled {
+		return &AccessResult{Allowed: true}, nil
+	}
+
+	// Check whitelist first - whitelisted IPs bypass all checks
+	if s.validator.IsWhitelisted(ctx, ip, &userID) {
+		return &AccessResult{Allowed: true, Reason: "whitelisted"}, nil
+	}
+
+	// Check blacklist
+	if entry, blocked := s.validator.IsBlacklisted(ctx, ip, &userID); blocked {
+		return &AccessResult{
+			Allowed: false,
+			Code:    ErrCodeIPBlacklisted,
+			Reason:  fmt.Sprintf("IP is blacklisted: %s", entry.Reason),
+		}, nil
+	}
+
+	// Check geo restriction
+	if s.settings.GeoRestrictionEnabled {
+		geoResult, err := s.geoService.CheckGeoRestriction(ctx, ip, s.settings.AllowedCountries, s.settings.BlockedCountries)
+		if err == nil && !geoResult.Allowed {
+			return &AccessResult{
+				Allowed: false,
+				Code:    ErrCodeGeoRestricted,
+				Reason:  fmt.Sprintf("Access from %s is not allowed: %s", geoResult.Country, geoResult.Reason),
+			}, nil
+		}
+	}
+
+	// Check concurrent IP limit
+	// Use provided maxConcurrentIPs, or fall back to default
+	limit := maxConcurrentIPs
+	if limit < 0 {
+		limit = s.settings.DefaultMaxConcurrentIPs
+	}
+
+	// 0 means unlimited
+	if limit == 0 {
+		return &AccessResult{Allowed: true, Reason: "unlimited"}, nil
+	}
+
+	// Clean up inactive IPs first
+	timeout := time.Duration(s.settings.InactiveTimeout) * time.Minute
+	_, _ = s.tracker.CleanupInactiveIPsForUser(ctx, userID, timeout)
+
+	// Check if IP is already active
+	isActive, err := s.tracker.IsIPActive(ctx, userID, ip)
+	if err != nil {
+		return nil, err
+	}
+
+	if isActive {
+		// Update last active time
+		_ = s.tracker.UpdateLastActive(ctx, userID, ip)
+		return &AccessResult{Allowed: true, Reason: "existing session"}, nil
+	}
+
+	// Check current active IP count
+	count, err := s.tracker.GetActiveIPCount(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+
+	if count >= limit {
+		// Get online IPs for error response
+		onlineIPs, _ := s.tracker.GetOnlineIPs(ctx, userID)
+		ips := make([]string, len(onlineIPs))
+		for i, oip := range onlineIPs {
+			ips[i] = oip.IP
+		}
+
+		// Send notification for IP limit reached
+		if s.notifier != nil {
+			var country, city string
+			if s.geoService != nil {
+				geoInfo, _ := s.geoService.Lookup(ctx, ip)
+				if geoInfo != nil {
+					country = geoInfo.Country
+					city = geoInfo.City
+				}
+			}
+			_ = s.notifier.NotifyIPLimitReached(NotificationData{
+				UserID:       userID,
+				IP:           ip,
+				Country:      country,
+				City:         city,
+				CurrentCount: count,
+				MaxCount:     limit,
+				Timestamp:    time.Now(),
+			})
+		}
+
+		return &AccessResult{
+			Allowed:        false,
+			Code:           ErrCodeIPLimitExceeded,
+			Reason:         fmt.Sprintf("Maximum device limit (%d) reached", limit),
+			RemainingSlots: 0,
+			OnlineIPs:      ips,
+		}, nil
+	}
+
+	return &AccessResult{
+		Allowed:        true,
+		RemainingSlots: limit - count - 1,
+	}, nil
+}
+
+// RecordActivity records IP activity and adds to active IPs.
+func (s *Service) RecordActivity(ctx context.Context, userID uint, ip, userAgent string, accessType AccessType) error {
+	// Get geolocation info
+	var country, city string
+	if s.geoService != nil {
+		geoInfo, err := s.geoService.Lookup(ctx, ip)
+		if err == nil && geoInfo != nil {
+			country = geoInfo.Country
+			city = geoInfo.City
+		}
+	}
+
+	// Detect device type from user agent
+	deviceType := detectDeviceType(userAgent)
+
+	// Check if this is a new device
+	isNewDevice := false
+	isActive, _ := s.tracker.IsIPActive(ctx, userID, ip)
+	if !isActive {
+		isNewDevice = true
+	}
+
+	// Add to active IPs
+	if err := s.tracker.AddActiveIP(ctx, userID, ip, userAgent, deviceType, country, city); err != nil {
+		return err
+	}
+
+	// Record in history
+	record := &IPHistory{
+		UserID:     userID,
+		IP:         ip,
+		UserAgent:  userAgent,
+		AccessType: accessType,
+		Country:    country,
+		City:       city,
+		CreatedAt:  time.Now(),
+	}
+
+	// Check for suspicious activity
+	isSuspicious := s.isSuspiciousActivity(ctx, userID, country)
+	if isSuspicious {
+		record.IsSuspicious = true
+		// Send suspicious activity notification
+		if s.notifier != nil {
+			_ = s.notifier.NotifySuspiciousActivity(NotificationData{
+				UserID:     userID,
+				IP:         ip,
+				Country:    country,
+				City:       city,
+				DeviceInfo: userAgent,
+				Reason:     "Multiple countries detected in short time window",
+				Timestamp:  time.Now(),
+			})
+		}
+	}
+
+	// Send new device notification
+	if isNewDevice && s.notifier != nil {
+		_ = s.notifier.NotifyNewDevice(NotificationData{
+			UserID:     userID,
+			IP:         ip,
+			Country:    country,
+			City:       city,
+			DeviceInfo: userAgent,
+			Timestamp:  time.Now(),
+		})
+	}
+
+	return s.tracker.RecordIPHistory(ctx, record)
+}
+
+// isSuspiciousActivity checks if the activity is suspicious.
+func (s *Service) isSuspiciousActivity(ctx context.Context, userID uint, currentCountry string) bool {
+	if currentCountry == "" {
+		return false
+	}
+
+	// Get recent countries (last 30 minutes)
+	countries, err := s.tracker.GetRecentCountries(ctx, userID, 30)
+	if err != nil {
+		return false
+	}
+
+	// If more than 3 different countries in 30 minutes, it's suspicious
+	uniqueCountries := make(map[string]bool)
+	uniqueCountries[currentCountry] = true
+	for _, c := range countries {
+		uniqueCountries[c] = true
+	}
+
+	return len(uniqueCountries) > 3
+}
+
+// detectDeviceType detects device type from user agent.
+func detectDeviceType(userAgent string) string {
+	// Simple detection - can be enhanced with a proper library
+	ua := userAgent
+	if ua == "" {
+		return "unknown"
+	}
+
+	// Check for mobile indicators
+	mobileKeywords := []string{"Mobile", "Android", "iPhone", "iPad", "iPod"}
+	for _, keyword := range mobileKeywords {
+		if contains(ua, keyword) {
+			if contains(ua, "iPad") || contains(ua, "Tablet") {
+				return "tablet"
+			}
+			return "mobile"
+		}
+	}
+
+	return "desktop"
+}
+
+func contains(s, substr string) bool {
+	return len(s) >= len(substr) && (s == substr || len(s) > 0 && containsSubstring(s, substr))
+}
+
+func containsSubstring(s, substr string) bool {
+	for i := 0; i <= len(s)-len(substr); i++ {
+		if s[i:i+len(substr)] == substr {
+			return true
+		}
+	}
+	return false
+}
+
+
+// GetOnlineIPs returns online IPs for a user.
+func (s *Service) GetOnlineIPs(ctx context.Context, userID uint) ([]OnlineIP, error) {
+	// Clean up inactive IPs first
+	timeout := time.Duration(s.settings.InactiveTimeout) * time.Minute
+	_, _ = s.tracker.CleanupInactiveIPsForUser(ctx, userID, timeout)
+
+	return s.tracker.GetOnlineIPs(ctx, userID)
+}
+
+// KickIP removes an IP from active IPs and optionally adds to temporary blacklist.
+func (s *Service) KickIP(ctx context.Context, userID uint, ip string, addToBlacklist bool, blockDuration time.Duration) error {
+	// Get geolocation info for notification
+	var country, city string
+	if s.geoService != nil {
+		geoInfo, _ := s.geoService.Lookup(ctx, ip)
+		if geoInfo != nil {
+			country = geoInfo.Country
+			city = geoInfo.City
+		}
+	}
+
+	// Remove from active IPs
+	if err := s.tracker.RemoveActiveIP(ctx, userID, ip); err != nil {
+		return err
+	}
+
+	// Send device kicked notification
+	if s.notifier != nil {
+		_ = s.notifier.NotifyDeviceKicked(NotificationData{
+			UserID:    userID,
+			IP:        ip,
+			Country:   country,
+			City:      city,
+			Reason:    "Device kicked by user or admin",
+			Timestamp: time.Now(),
+		})
+	}
+
+	// Optionally add to temporary blacklist
+	if addToBlacklist && blockDuration > 0 {
+		expiresAt := time.Now().Add(blockDuration)
+		entry := &IPBlacklist{
+			IP:          ip,
+			UserID:      &userID,
+			Reason:      "kicked by user",
+			ExpiresAt:   &expiresAt,
+			IsAutomatic: false,
+		}
+		return s.validator.AddToBlacklist(ctx, entry)
+	}
+
+	return nil
+}
+
+// GetIPStats returns IP statistics for a user.
+func (s *Service) GetIPStats(ctx context.Context, userID uint, maxConcurrentIPs int) (*IPStats, error) {
+	// Clean up inactive IPs first
+	timeout := time.Duration(s.settings.InactiveTimeout) * time.Minute
+	_, _ = s.tracker.CleanupInactiveIPsForUser(ctx, userID, timeout)
+
+	// Get active IP count
+	activeCount, err := s.tracker.GetActiveIPCount(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+
+	// Get unique IP count (last 30 days)
+	startTime := time.Now().AddDate(0, 0, -30)
+	endTime := time.Now()
+	uniqueCount, err := s.tracker.GetUniqueIPCount(ctx, userID, startTime, endTime)
+	if err != nil {
+		return nil, err
+	}
+
+	// Get IPs by country
+	ipsByCountry, err := s.tracker.GetIPsByCountry(ctx, userID)
+	if err != nil {
+		ipsByCountry = make(map[string]int)
+	}
+
+	// Get recent IPs
+	recentIPs, err := s.tracker.GetOnlineIPs(ctx, userID)
+	if err != nil {
+		recentIPs = []OnlineIP{}
+	}
+
+	// Calculate limit
+	limit := maxConcurrentIPs
+	if limit < 0 {
+		limit = s.settings.DefaultMaxConcurrentIPs
+	}
+
+	remaining := limit - activeCount
+	if remaining < 0 || limit == 0 {
+		remaining = 0
+	}
+
+	// Check for suspicious activity
+	countries, _ := s.tracker.GetRecentCountries(ctx, userID, 30)
+	suspicious := len(countries) > 3
+
+	return &IPStats{
+		TotalUniqueIPs:     uniqueCount,
+		CurrentActiveIPs:   activeCount,
+		MaxConcurrentIPs:   limit,
+		RemainingSlots:     remaining,
+		IPsByCountry:       ipsByCountry,
+		RecentIPs:          recentIPs,
+		SuspiciousActivity: suspicious,
+	}, nil
+}
+
+// RecordFailedAttempt records a failed access attempt.
+func (s *Service) RecordFailedAttempt(ctx context.Context, ip, reason string) error {
+	attempt := &FailedAttempt{
+		IP:        ip,
+		Reason:    reason,
+		CreatedAt: time.Now(),
+	}
+	return s.db.WithContext(ctx).Create(attempt).Error
+}
+
+// CheckAutoBlacklist checks if an IP should be auto-blacklisted.
+func (s *Service) CheckAutoBlacklist(ctx context.Context, ip string) (bool, error) {
+	if !s.settings.AutoBlacklistEnabled {
+		return false, nil
+	}
+
+	// Count failed attempts in the window
+	windowStart := time.Now().Add(-time.Duration(s.settings.FailedAttemptWindow) * time.Minute)
+	var count int64
+	err := s.db.WithContext(ctx).
+		Model(&FailedAttempt{}).
+		Where("ip = ? AND created_at >= ?", ip, windowStart).
+		Count(&count).Error
+
+	if err != nil {
+		return false, err
+	}
+
+	if int(count) >= s.settings.MaxFailedAttempts {
+		// Add to blacklist
+		expiresAt := time.Now().Add(time.Duration(s.settings.AutoBlacklistDuration) * time.Minute)
+		entry := &IPBlacklist{
+			IP:          ip,
+			Reason:      fmt.Sprintf("auto-blacklisted: %d failed attempts", count),
+			ExpiresAt:   &expiresAt,
+			IsAutomatic: true,
+		}
+		if err := s.validator.AddToBlacklist(ctx, entry); err != nil {
+			return false, err
+		}
+
+		// Send auto-blacklist notification
+		if s.notifier != nil {
+			var country, city string
+			if s.geoService != nil {
+				geoInfo, _ := s.geoService.Lookup(ctx, ip)
+				if geoInfo != nil {
+					country = geoInfo.Country
+					city = geoInfo.City
+				}
+			}
+			_ = s.notifier.NotifyAutoBlacklisted(NotificationData{
+				IP:        ip,
+				Country:   country,
+				City:      city,
+				Reason:    fmt.Sprintf("Auto-blacklisted after %d failed attempts", count),
+				Timestamp: time.Now(),
+			})
+		}
+
+		return true, nil
+	}
+
+	return false, nil
+}
+
+// CleanupFailedAttempts removes old failed attempt records.
+func (s *Service) CleanupFailedAttempts(ctx context.Context) (int64, error) {
+	// Keep only records from the last window period
+	cutoff := time.Now().Add(-time.Duration(s.settings.FailedAttemptWindow*2) * time.Minute)
+	result := s.db.WithContext(ctx).
+		Where("created_at < ?", cutoff).
+		Delete(&FailedAttempt{})
+	return result.RowsAffected, result.Error
+}
+
+// Validator returns the IP validator.
+func (s *Service) Validator() *Validator {
+	return s.validator
+}
+
+// Tracker returns the IP tracker.
+func (s *Service) Tracker() *Tracker {
+	return s.tracker
+}
+
+// GeoService returns the geolocation service.
+func (s *Service) GeoService() *GeolocationService {
+	return s.geoService
+}

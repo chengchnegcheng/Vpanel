@@ -1,4 +1,5 @@
 import { createRouter, createWebHistory } from 'vue-router'
+import { userRoutes, userRouteGuard } from './user'
 
 /**
  * 路由配置
@@ -34,11 +35,27 @@ const Stats = () => import(/* webpackChunkName: "monitor" */ '../views/Stats.vue
 const Settings = () => import(/* webpackChunkName: "system" */ '../views/Settings.vue')
 const Certificates = () => import(/* webpackChunkName: "system" */ '../views/Certificates.vue')
 const Logs = () => import(/* webpackChunkName: "system" */ '../views/Logs.vue')
+const IPRestriction = () => import(/* webpackChunkName: "system" */ '../views/IPRestriction.vue')
+
+// 订阅管理 - 按需加载
+const Subscription = () => import(/* webpackChunkName: "subscription" */ '../views/Subscription.vue')
+const AdminSubscriptions = () => import(/* webpackChunkName: "subscription" */ '../views/AdminSubscriptions.vue')
+
+// 商业化管理 - 按需加载
+const AdminPlans = () => import(/* webpackChunkName: "commercial-admin" */ '../views/AdminPlans.vue')
+const AdminOrders = () => import(/* webpackChunkName: "commercial-admin" */ '../views/AdminOrders.vue')
+const AdminCoupons = () => import(/* webpackChunkName: "commercial-admin" */ '../views/AdminCoupons.vue')
+const AdminReports = () => import(/* webpackChunkName: "commercial-admin" */ '../views/AdminReports.vue')
+const AdminGiftCards = () => import(/* webpackChunkName: "commercial-admin" */ '../views/AdminGiftCards.vue')
+const AdminTrials = () => import(/* webpackChunkName: "commercial-admin" */ '../views/AdminTrials.vue')
 
 // 错误页面
 const NotFound = () => import(/* webpackChunkName: "error" */ '../views/NotFound.vue')
 
 const routes = [
+  // 用户前台路由
+  ...userRoutes,
+  
   {
     path: '/',
     component: MainLayout,
@@ -72,6 +89,17 @@ const routes = [
         }
       },
       
+      // 设备管理
+      {
+        path: 'devices',
+        name: 'Devices',
+        component: () => import(/* webpackChunkName: "user" */ '../views/Devices.vue'),
+        meta: {
+          requiresAuth: true,
+          title: '我的设备'
+        }
+      },
+      
       // 代理管理
       {
         path: 'inbounds',
@@ -80,6 +108,27 @@ const routes = [
         meta: { 
           requiresAuth: true,
           title: '入站管理'
+        }
+      },
+      
+      // 订阅管理
+      {
+        path: 'subscription',
+        name: 'Subscription',
+        component: Subscription,
+        meta: { 
+          requiresAuth: true,
+          title: '订阅管理'
+        }
+      },
+      {
+        path: 'admin/subscriptions',
+        name: 'AdminSubscriptions',
+        component: AdminSubscriptions,
+        meta: {
+          requiresAuth: true,
+          title: '订阅管理（管理员）',
+          roles: ['admin']
         }
       },
       
@@ -164,6 +213,77 @@ const routes = [
           title: '日志管理',
           roles: ['admin']
         }
+      },
+      {
+        path: 'ip-restriction',
+        name: 'IPRestriction',
+        component: IPRestriction,
+        meta: {
+          requiresAuth: true,
+          title: 'IP 限制管理',
+          roles: ['admin']
+        }
+      },
+      // 商业化管理
+      {
+        path: 'admin/plans',
+        name: 'AdminPlans',
+        component: AdminPlans,
+        meta: {
+          requiresAuth: true,
+          title: '套餐管理',
+          roles: ['admin']
+        }
+      },
+      {
+        path: 'admin/orders',
+        name: 'AdminOrders',
+        component: AdminOrders,
+        meta: {
+          requiresAuth: true,
+          title: '订单管理',
+          roles: ['admin']
+        }
+      },
+      {
+        path: 'admin/coupons',
+        name: 'AdminCoupons',
+        component: AdminCoupons,
+        meta: {
+          requiresAuth: true,
+          title: '优惠券管理',
+          roles: ['admin']
+        }
+      },
+      {
+        path: 'admin/reports',
+        name: 'AdminReports',
+        component: AdminReports,
+        meta: {
+          requiresAuth: true,
+          title: '财务报表',
+          roles: ['admin']
+        }
+      },
+      {
+        path: 'admin/gift-cards',
+        name: 'AdminGiftCards',
+        component: AdminGiftCards,
+        meta: {
+          requiresAuth: true,
+          title: '礼品卡管理',
+          roles: ['admin']
+        }
+      },
+      {
+        path: 'admin/trials',
+        name: 'AdminTrials',
+        component: AdminTrials,
+        meta: {
+          requiresAuth: true,
+          title: '试用管理',
+          roles: ['admin']
+        }
       }
     ]
   },
@@ -211,6 +331,12 @@ const router = createRouter({
 
 // 全局前置守卫
 router.beforeEach((to, from, next) => {
+  // 用户前台路由使用专门的守卫
+  if (to.path.startsWith('/user')) {
+    userRouteGuard(to, from, next)
+    return
+  }
+  
   const isAuthenticated = localStorage.getItem('token')
   const userRole = localStorage.getItem('userRole') || 'user'
   

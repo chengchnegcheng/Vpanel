@@ -7,7 +7,7 @@ server:
   # Host to bind to (0.0.0.0 for all interfaces)
   host: "0.0.0.0"
   # Port to listen on
-  port: 8080
+  port: 8081
   # Read timeout for HTTP requests
   read_timeout: "30s"
   # Write timeout for HTTP responses
@@ -27,7 +27,7 @@ database:
 # Authentication configuration
 auth:
   # JWT secret key (REQUIRED - change this in production!)
-  jwt_secret: "change-me-in-production"
+  jwt_secret: "change-me-in-production-this-is-a-very-long-secret-key-for-development"
   # Token expiry duration
   token_expiry: "24h"
   # Default admin username

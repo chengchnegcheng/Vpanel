@@ -9,12 +9,33 @@ import (
 	"v/internal/api/handlers"
 	"v/internal/api/middleware"
 	"v/internal/auth"
+	"v/internal/commercial/balance"
+	"v/internal/commercial/commission"
+	"v/internal/commercial/coupon"
+	"v/internal/commercial/currency"
+	"v/internal/commercial/giftcard"
+	"v/internal/commercial/invite"
+	"v/internal/commercial/invoice"
+	"v/internal/commercial/order"
+	"v/internal/commercial/pause"
+	"v/internal/commercial/payment"
+	"v/internal/commercial/plan"
+	"v/internal/commercial/planchange"
+	"v/internal/commercial/refund"
+	"v/internal/commercial/trial"
 	"v/internal/config"
 	"v/internal/database/repository"
 	logservice "v/internal/log"
 	"v/internal/logger"
+	"v/internal/portal/announcement"
+	"v/internal/portal/help"
+	"v/internal/portal/node"
+	"v/internal/portal/stats"
+	"v/internal/portal/ticket"
+	portalauth "v/internal/portal/auth"
 	"v/internal/proxy"
 	"v/internal/settings"
+	"v/internal/subscription"
 	"v/internal/xray"
 )
 
@@ -90,6 +111,55 @@ func (r *Router) Setup() {
 	certificatesHandler := handlers.NewCertificatesHandler(r.logger)
 	logHandler := handlers.NewLogHandler(r.logService, r.logger)
 
+	// Create subscription service and handler
+	subscriptionService := subscription.NewService(
+		r.repos.Subscription,
+		r.repos.User,
+		r.repos.Proxy,
+		r.logger,
+		r.config.GetBaseURL(),
+	)
+	subscriptionHandler := handlers.NewSubscriptionHandler(subscriptionService, r.logger)
+
+	// Create commercial services
+	planService := plan.NewService(r.repos.Plan, r.logger)
+	balanceService := balance.NewService(r.repos.Balance, r.logger)
+	couponService := coupon.NewService(r.repos.Coupon, r.logger)
+	orderService := order.NewService(r.repos.Order, r.repos.Plan, r.logger, nil)
+	paymentService := payment.NewService(orderService, r.logger)
+	inviteService := invite.NewService(r.repos.Invite, r.logger, &invite.Config{BaseURL: r.config.GetBaseURL()})
+	commissionService := commission.NewService(r.repos.Invite, balanceService, r.logger, nil)
+	invoiceService := invoice.NewService(r.repos.Invoice, r.repos.Order, r.logger, nil)
+	refundService := refund.NewService(r.repos.Order, balanceService, commissionService, r.logger)
+	trialService := trial.NewService(r.repos.Trial, r.repos.User, r.logger, nil)
+	planChangeService := planchange.NewService(r.repos.PlanChange, r.repos.Plan, r.repos.User, orderService, balanceService, r.logger)
+
+	// Create pause service
+	pauseService := pause.NewService(r.repos.Pause, r.repos.User, r.logger, nil)
+
+	// Create gift card service
+	giftCardService := giftcard.NewService(r.repos.GiftCard, balanceService, r.logger)
+
+	// Create currency service
+	currencyService := currency.NewService(r.repos.ExchangeRate, nil, nil, r.logger)
+	planCurrencyService := plan.NewCurrencyService(planService, currencyService, r.repos.PlanPrice, r.logger)
+
+	// Create commercial handlers
+	planHandler := handlers.NewPlanHandler(planService, r.logger)
+	orderHandler := handlers.NewOrderHandler(orderService, r.logger)
+	paymentHandler := handlers.NewPaymentHandler(paymentService, r.logger)
+	balanceHandler := handlers.NewBalanceHandler(balanceService, r.logger)
+	couponHandler := handlers.NewCouponHandler(couponService, r.logger)
+	inviteHandler := handlers.NewInviteHandler(inviteService, commissionService, r.logger)
+	invoiceHandler := handlers.NewInvoiceHandler(invoiceService, r.logger)
+	reportHandler := handlers.NewReportHandler(orderService, r.logger)
+	trialHandler := handlers.NewTrialHandler(trialService, r.logger)
+	planChangeHandler := handlers.NewPlanChangeHandler(planChangeService, r.logger)
+	currencyHandler := handlers.NewCurrencyHandler(currencyService, planCurrencyService, r.logger)
+	pauseHandler := handlers.NewPauseHandler(pauseService, r.logger)
+	giftCardHandler := handlers.NewGiftCardHandler(giftCardService, r.logger)
+	_ = refundService // Will be used in admin routes
+
 	// Initialize system roles
 	ctx := context.Background()
 	if err := roleHandler.InitSystemRoles(ctx); err != nil {
@@ -105,6 +175,10 @@ func (r *Router) Setup() {
 	// Public routes
 	r.engine.GET("/health", healthHandler.Health)
 	r.engine.GET("/ready", healthHandler.Ready)
+
+	// Public subscription routes (token-based access, no auth required)
+	r.engine.GET("/api/subscription/:token", subscriptionHandler.GetContent)
+	r.engine.GET("/s/:code", subscriptionHandler.GetShortContent)
 
 	// API routes
 	api := r.engine.Group("/api")
@@ -176,6 +250,14 @@ func (r *Router) Setup() {
 				stats.GET("/traffic", statsHandler.GetTrafficStats)
 				stats.GET("/user", statsHandler.GetUserStats)
 				stats.GET("/detailed", statsHandler.GetDetailedStats)
+			}
+
+			// Subscription routes (user)
+			subscriptionRoutes := protected.Group("/subscription")
+			{
+				subscriptionRoutes.GET("/link", subscriptionHandler.GetLink)
+				subscriptionRoutes.GET("/info", subscriptionHandler.GetInfo)
+				subscriptionRoutes.POST("/regenerate", subscriptionHandler.Regenerate)
 			}
 
 			// User management (admin only)
@@ -253,7 +335,223 @@ func (r *Router) Setup() {
 				logsRoutes.DELETE("", logHandler.DeleteLogs)
 				logsRoutes.POST("/cleanup", logHandler.Cleanup)
 			}
+
+			// Admin subscription routes (admin only)
+			adminSubscriptions := protected.Group("/admin/subscriptions")
+			adminSubscriptions.Use(authMiddleware.RequireRole("admin"))
+			{
+				adminSubscriptions.GET("", subscriptionHandler.AdminList)
+				adminSubscriptions.DELETE("/:user_id", subscriptionHandler.AdminRevoke)
+				adminSubscriptions.POST("/:user_id/reset-stats", subscriptionHandler.AdminResetStats)
+			}
+
+			// ==================== Commercial System Routes ====================
+
+			// Plan routes (public - list active plans)
+			plans := protected.Group("/plans")
+			{
+				plans.GET("", planHandler.ListActivePlans)
+				plans.GET("/:id", planHandler.GetPlan)
+				plans.GET("/:id/prices", currencyHandler.GetPlanPrices)
+			}
+
+			// Currency routes (public)
+			currencies := protected.Group("/currencies")
+			{
+				currencies.GET("", currencyHandler.GetSupportedCurrencies)
+				currencies.GET("/detect", currencyHandler.DetectCurrency)
+				currencies.GET("/rate", currencyHandler.GetExchangeRate)
+				currencies.POST("/convert", currencyHandler.ConvertAmount)
+			}
+
+			// Plans with prices (currency-aware)
+			protected.GET("/plans-with-prices", currencyHandler.GetPlansWithPrices)
+
+			// Order routes (user)
+			orders := protected.Group("/orders")
+			{
+				orders.POST("", orderHandler.CreateOrder)
+				orders.GET("", orderHandler.ListUserOrders)
+				orders.GET("/:id", orderHandler.GetOrder)
+				orders.POST("/:id/cancel", orderHandler.CancelOrder)
+			}
+
+			// Payment routes
+			payments := protected.Group("/payments")
+			{
+				payments.POST("/create", paymentHandler.CreatePayment)
+				payments.GET("/status/:orderNo", paymentHandler.GetPaymentStatus)
+				payments.GET("/methods", paymentHandler.ListAvailablePaymentMethods)
+				payments.POST("/switch-method", paymentHandler.SwitchPaymentMethod)
+				payments.POST("/retry", paymentHandler.RetryPayment)
+				payments.GET("/retry/:orderID", paymentHandler.GetRetryInfo)
+			}
+
+			// Balance routes (user)
+			balanceRoutes := protected.Group("/balance")
+			{
+				balanceRoutes.GET("", balanceHandler.GetBalance)
+				balanceRoutes.GET("/transactions", balanceHandler.GetTransactions)
+			}
+
+			// Coupon routes (user - validate only)
+			coupons := protected.Group("/coupons")
+			{
+				coupons.POST("/validate", couponHandler.ValidateCoupon)
+			}
+
+			// Invite routes (user)
+			invites := protected.Group("/invite")
+			{
+				invites.GET("/code", inviteHandler.GetInviteCode)
+				invites.GET("/referrals", inviteHandler.GetReferrals)
+				invites.GET("/stats", inviteHandler.GetInviteStats)
+				invites.GET("/commissions", inviteHandler.GetCommissions)
+				invites.GET("/earnings", inviteHandler.GetCommissionSummary)
+			}
+
+			// Invoice routes (user)
+			invoices := protected.Group("/invoices")
+			{
+				invoices.GET("", invoiceHandler.ListInvoices)
+				invoices.GET("/:id/download", invoiceHandler.DownloadInvoice)
+			}
+
+			// Trial routes (user)
+			trials := protected.Group("/trial")
+			{
+				trials.GET("", trialHandler.GetTrialStatus)
+				trials.POST("/activate", trialHandler.ActivateTrial)
+			}
+
+			// Plan change routes (user)
+			planChanges := protected.Group("/plan-change")
+			{
+				planChanges.POST("/calculate", planChangeHandler.CalculatePlanChange)
+				planChanges.POST("/upgrade", planChangeHandler.UpgradePlan)
+				planChanges.POST("/downgrade", planChangeHandler.DowngradePlan)
+				planChanges.GET("/downgrade", planChangeHandler.GetPendingDowngrade)
+				planChanges.DELETE("/downgrade", planChangeHandler.CancelPendingDowngrade)
+			}
+
+			// Subscription pause routes (user)
+			subscriptionPause := protected.Group("/subscription/pause")
+			{
+				subscriptionPause.GET("", pauseHandler.GetPauseStatus)
+				subscriptionPause.POST("", pauseHandler.PauseSubscription)
+				subscriptionPause.GET("/history", pauseHandler.GetPauseHistory)
+			}
+			protected.POST("/subscription/resume", pauseHandler.ResumeSubscription)
+
+			// Gift card routes (user)
+			giftCards := protected.Group("/gift-cards")
+			{
+				giftCards.POST("/redeem", giftCardHandler.RedeemGiftCard)
+				giftCards.GET("", giftCardHandler.ListUserGiftCards)
+				giftCards.POST("/validate", giftCardHandler.ValidateGiftCard)
+			}
+
+			// ==================== Admin Commercial Routes ====================
+
+			// Admin plan routes
+			adminPlans := protected.Group("/admin/plans")
+			adminPlans.Use(authMiddleware.RequireRole("admin"))
+			{
+				adminPlans.GET("", planHandler.ListAllPlans)
+				adminPlans.POST("", planHandler.CreatePlan)
+				adminPlans.PUT("/:id", planHandler.UpdatePlan)
+				adminPlans.DELETE("/:id", planHandler.DeletePlan)
+				adminPlans.PUT("/:id/status", planHandler.TogglePlanStatus)
+				adminPlans.PUT("/:id/prices", currencyHandler.SetPlanPrices)
+				adminPlans.DELETE("/:id/prices/:currency", currencyHandler.DeletePlanPrice)
+			}
+
+			// Admin currency routes
+			adminCurrencies := protected.Group("/admin/currencies")
+			adminCurrencies.Use(authMiddleware.RequireRole("admin"))
+			{
+				adminCurrencies.POST("/update-rates", currencyHandler.UpdateExchangeRates)
+			}
+
+			// Admin order routes
+			adminOrders := protected.Group("/admin/orders")
+			adminOrders.Use(authMiddleware.RequireRole("admin"))
+			{
+				adminOrders.GET("", orderHandler.ListAllOrders)
+				adminOrders.PUT("/:id/status", orderHandler.UpdateOrderStatus)
+			}
+
+			// Admin balance routes
+			adminBalance := protected.Group("/admin/balance")
+			adminBalance.Use(authMiddleware.RequireRole("admin"))
+			{
+				adminBalance.POST("/adjust", balanceHandler.AdjustBalance)
+			}
+
+			// Admin coupon routes
+			adminCoupons := protected.Group("/admin/coupons")
+			adminCoupons.Use(authMiddleware.RequireRole("admin"))
+			{
+				adminCoupons.GET("", couponHandler.ListCoupons)
+				adminCoupons.POST("", couponHandler.CreateCoupon)
+				adminCoupons.DELETE("/:id", couponHandler.DeleteCoupon)
+				adminCoupons.POST("/batch", couponHandler.GenerateBatchCodes)
+			}
+
+			// Admin invoice routes
+			adminInvoices := protected.Group("/admin/invoices")
+			adminInvoices.Use(authMiddleware.RequireRole("admin"))
+			{
+				adminInvoices.POST("/generate", invoiceHandler.GenerateInvoice)
+			}
+
+			// Admin report routes
+			adminReports := protected.Group("/admin/reports")
+			adminReports.Use(authMiddleware.RequireRole("admin"))
+			{
+				adminReports.GET("/revenue", reportHandler.GetRevenueReport)
+				adminReports.GET("/orders", reportHandler.GetOrderStats)
+				adminReports.GET("/failed-payments", paymentHandler.GetFailedPaymentStats)
+			}
+
+			// Admin trial routes
+			adminTrials := protected.Group("/admin/trials")
+			adminTrials.Use(authMiddleware.RequireRole("admin"))
+			{
+				adminTrials.GET("", trialHandler.AdminListTrials)
+				adminTrials.GET("/stats", trialHandler.AdminGetTrialStats)
+				adminTrials.POST("/grant", trialHandler.AdminGrantTrial)
+				adminTrials.GET("/user/:user_id", trialHandler.AdminGetTrialByUser)
+				adminTrials.POST("/expire", trialHandler.AdminExpireTrials)
+			}
+
+			// Admin pause routes
+			adminPause := protected.Group("/admin/subscription/pause")
+			adminPause.Use(authMiddleware.RequireRole("admin"))
+			{
+				adminPause.GET("/stats", pauseHandler.AdminGetPauseStats)
+				adminPause.POST("/auto-resume", pauseHandler.AdminTriggerAutoResume)
+			}
+
+			// Admin gift card routes
+			adminGiftCards := protected.Group("/admin/gift-cards")
+			adminGiftCards.Use(authMiddleware.RequireRole("admin"))
+			{
+				adminGiftCards.GET("", giftCardHandler.AdminListGiftCards)
+				adminGiftCards.POST("/batch", giftCardHandler.AdminCreateBatch)
+				adminGiftCards.GET("/stats", giftCardHandler.AdminGetStats)
+				adminGiftCards.GET("/:id", giftCardHandler.AdminGetGiftCard)
+				adminGiftCards.PUT("/:id/status", giftCardHandler.AdminSetStatus)
+				adminGiftCards.DELETE("/:id", giftCardHandler.AdminDeleteGiftCard)
+				adminGiftCards.GET("/batch/:batch_id/stats", giftCardHandler.AdminGetBatchStats)
+			}
 		}
+
+		// Payment callback routes (public - no auth required)
+		api.POST("/payments/callback/:method", paymentHandler.HandleCallback)
+
+		// Portal routes (user-facing API)
+		r.setupPortalRoutes(api)
 	}
 
 	// Static files for frontend (if enabled)
@@ -272,4 +570,94 @@ func (r *Router) Setup() {
 // Engine returns the underlying Gin engine.
 func (r *Router) Engine() *gin.Engine {
 	return r.engine
+}
+
+// setupPortalRoutes configures the user portal API routes.
+func (r *Router) setupPortalRoutes(api *gin.RouterGroup) {
+	// Create portal services
+	portalAuthService := portalauth.NewService(r.repos.User, r.repos.AuthToken)
+	ticketService := ticket.NewService(r.repos.Ticket, r.repos.User)
+	announcementService := announcement.NewService(r.repos.Announcement)
+	helpService := help.NewService(r.repos.HelpArticle)
+	nodeService := node.NewService(r.repos.Proxy, r.repos.User)
+	statsService := stats.NewService(r.repos.Traffic, r.repos.User)
+
+	// Create portal handlers
+	portalAuthHandler := handlers.NewPortalAuthHandler(portalAuthService, r.authService, r.repos.User, r.logger)
+	portalDashboardHandler := handlers.NewPortalDashboardHandler(r.repos.User, statsService, announcementService, r.logger)
+	portalNodeHandler := handlers.NewPortalNodeHandler(nodeService, r.logger)
+	portalTicketHandler := handlers.NewPortalTicketHandler(ticketService, r.logger)
+	portalAnnouncementHandler := handlers.NewPortalAnnouncementHandler(announcementService, r.logger)
+	portalStatsHandler := handlers.NewPortalStatsHandler(statsService, r.logger)
+	portalHelpHandler := handlers.NewPortalHelpHandler(helpService, r.logger)
+
+	// Portal auth middleware
+	portalAuthMiddleware := middleware.NewPortalAuthMiddleware(r.authService, r.repos.User, r.logger)
+
+	// Portal routes group
+	portal := api.Group("/portal")
+	{
+		// Public auth routes
+		portalAuth := portal.Group("/auth")
+		{
+			portalAuth.POST("/register", portalAuthHandler.Register)
+			portalAuth.POST("/login", portalAuthHandler.Login)
+			portalAuth.POST("/forgot-password", portalAuthHandler.ForgotPassword)
+			portalAuth.POST("/reset-password", portalAuthHandler.ResetPassword)
+			portalAuth.GET("/verify-email", portalAuthHandler.VerifyEmail)
+			portalAuth.POST("/2fa/login", portalAuthHandler.Verify2FALogin)
+		}
+
+		// Protected portal routes
+		portalProtected := portal.Group("")
+		portalProtected.Use(portalAuthMiddleware.Authenticate())
+		{
+			// Auth routes (protected)
+			portalProtected.POST("/auth/logout", portalAuthHandler.Logout)
+			portalProtected.GET("/auth/profile", portalAuthHandler.GetProfile)
+			portalProtected.PUT("/auth/profile", portalAuthHandler.UpdateProfile)
+			portalProtected.PUT("/auth/password", portalAuthHandler.ChangePassword)
+			portalProtected.POST("/auth/2fa/enable", portalAuthHandler.Enable2FA)
+			portalProtected.POST("/auth/2fa/verify", portalAuthHandler.Verify2FA)
+			portalProtected.POST("/auth/2fa/disable", portalAuthHandler.Disable2FA)
+
+			// Dashboard routes
+			portalProtected.GET("/dashboard", portalDashboardHandler.GetDashboard)
+			portalProtected.GET("/dashboard/traffic", portalDashboardHandler.GetTrafficSummary)
+			portalProtected.GET("/dashboard/announcements", portalDashboardHandler.GetRecentAnnouncements)
+
+			// Node routes
+			portalProtected.GET("/nodes", portalNodeHandler.ListNodes)
+			portalProtected.GET("/nodes/:id", portalNodeHandler.GetNode)
+			portalProtected.POST("/nodes/:id/ping", portalNodeHandler.TestLatency)
+
+			// Ticket routes
+			portalProtected.GET("/tickets", portalTicketHandler.ListTickets)
+			portalProtected.POST("/tickets", portalTicketHandler.CreateTicket)
+			portalProtected.GET("/tickets/:id", portalTicketHandler.GetTicket)
+			portalProtected.POST("/tickets/:id/reply", portalTicketHandler.ReplyTicket)
+			portalProtected.POST("/tickets/:id/close", portalTicketHandler.CloseTicket)
+			portalProtected.POST("/tickets/:id/reopen", portalTicketHandler.ReopenTicket)
+
+			// Announcement routes
+			portalProtected.GET("/announcements", portalAnnouncementHandler.ListAnnouncements)
+			portalProtected.GET("/announcements/:id", portalAnnouncementHandler.GetAnnouncement)
+			portalProtected.POST("/announcements/:id/read", portalAnnouncementHandler.MarkAsRead)
+			portalProtected.GET("/announcements/unread-count", portalAnnouncementHandler.GetUnreadCount)
+
+			// Stats routes
+			portalProtected.GET("/stats/traffic", portalStatsHandler.GetTrafficStats)
+			portalProtected.GET("/stats/usage", portalStatsHandler.GetUsageStats)
+			portalProtected.GET("/stats/daily", portalStatsHandler.GetDailyTraffic)
+			portalProtected.GET("/stats/export", portalStatsHandler.ExportStats)
+
+			// Help routes
+			portalProtected.GET("/help/articles", portalHelpHandler.ListArticles)
+			portalProtected.GET("/help/articles/:slug", portalHelpHandler.GetArticle)
+			portalProtected.GET("/help/search", portalHelpHandler.SearchArticles)
+			portalProtected.GET("/help/featured", portalHelpHandler.GetFeaturedArticles)
+			portalProtected.GET("/help/categories", portalHelpHandler.GetCategories)
+			portalProtected.POST("/help/articles/:slug/helpful", portalHelpHandler.MarkHelpful)
+		}
+	}
 }

@@ -1,0 +1,582 @@
+<template>
+  <div class="user-portal" :class="{ 'dark-mode': isDarkMode }">
+    <!-- 顶部导航栏 -->
+    <header class="user-header">
+      <div class="header-container">
+        <div class="header-left">
+          <router-link to="/user/dashboard" class="logo">
+            <span class="logo-text">V Panel</span>
+          </router-link>
+          
+          <!-- 桌面端导航 -->
+          <nav class="desktop-nav">
+            <router-link 
+              v-for="item in navItems" 
+              :key="item.path"
+              :to="item.path"
+              class="nav-item"
+              :class="{ active: isActive(item.path) }"
+            >
+              <el-icon><component :is="item.icon" /></el-icon>
+              <span>{{ item.label }}</span>
+            </router-link>
+          </nav>
+        </div>
+        
+        <div class="header-right">
+          <!-- 公告通知 -->
+          <el-badge :value="unreadCount" :hidden="unreadCount === 0" class="notification-badge">
+            <el-button circle @click="goToAnnouncements">
+              <el-icon><Bell /></el-icon>
+            </el-button>
+          </el-badge>
+          
+          <!-- 主题切换 -->
+          <el-button circle @click="toggleTheme">
+            <el-icon><Sunny v-if="isDarkMode" /><Moon v-else /></el-icon>
+          </el-button>
+          
+          <!-- 用户菜单 -->
+          <el-dropdown trigger="click" @command="handleCommand">
+            <div class="user-dropdown-trigger">
+              <el-avatar :size="32" class="user-avatar">
+                {{ userInitial }}
+              </el-avatar>
+              <span class="username">{{ username }}</span>
+              <el-icon><ArrowDown /></el-icon>
+            </div>
+            <template #dropdown>
+              <el-dropdown-menu>
+                <el-dropdown-item command="settings">
+                  <el-icon><Setting /></el-icon>
+                  个人设置
+                </el-dropdown-item>
+                <el-dropdown-item command="tickets">
+                  <el-icon><ChatDotRound /></el-icon>
+                  我的工单
+                </el-dropdown-item>
+                <el-dropdown-item command="help">
+                  <el-icon><QuestionFilled /></el-icon>
+                  帮助中心
+                </el-dropdown-item>
+                <el-dropdown-item divided command="logout">
+                  <el-icon><SwitchButton /></el-icon>
+                  退出登录
+                </el-dropdown-item>
+              </el-dropdown-menu>
+            </template>
+          </el-dropdown>
+          
+          <!-- 移动端菜单按钮 -->
+          <el-button class="mobile-menu-btn" @click="showMobileMenu = true">
+            <el-icon><Menu /></el-icon>
+          </el-button>
+        </div>
+      </div>
+    </header>
+    
+    <!-- 主内容区 -->
+    <main class="user-main">
+      <router-view v-slot="{ Component }">
+        <transition name="fade" mode="out-in">
+          <component :is="Component" />
+        </transition>
+      </router-view>
+    </main>
+    
+    <!-- 页脚 -->
+    <footer class="user-footer">
+      <div class="footer-container">
+        <div class="footer-links">
+          <router-link to="/user/help">帮助中心</router-link>
+          <a href="#" @click.prevent="showTerms">服务条款</a>
+          <a href="#" @click.prevent="showContact">联系我们</a>
+        </div>
+        <div class="footer-copyright">
+          © {{ currentYear }} V Panel. All rights reserved.
+        </div>
+      </div>
+    </footer>
+    
+    <!-- 移动端侧边菜单 -->
+    <el-drawer
+      v-model="showMobileMenu"
+      direction="rtl"
+      size="280px"
+      :show-close="false"
+    >
+      <template #header>
+        <div class="mobile-menu-header">
+          <el-avatar :size="48" class="user-avatar">{{ userInitial }}</el-avatar>
+          <div class="user-info">
+            <div class="username">{{ username }}</div>
+            <div class="user-status" :class="accountStatus">{{ statusText }}</div>
+          </div>
+        </div>
+      </template>
+      
+      <div class="mobile-menu-content">
+        <div class="mobile-nav">
+          <router-link 
+            v-for="item in navItems" 
+            :key="item.path"
+            :to="item.path"
+            class="mobile-nav-item"
+            @click="showMobileMenu = false"
+          >
+            <el-icon><component :is="item.icon" /></el-icon>
+            <span>{{ item.label }}</span>
+          </router-link>
+        </div>
+        
+        <el-divider />
+        
+        <div class="mobile-nav">
+          <router-link to="/user/settings" class="mobile-nav-item" @click="showMobileMenu = false">
+            <el-icon><Setting /></el-icon>
+            <span>个人设置</span>
+          </router-link>
+          <router-link to="/user/tickets" class="mobile-nav-item" @click="showMobileMenu = false">
+            <el-icon><ChatDotRound /></el-icon>
+            <span>我的工单</span>
+          </router-link>
+          <router-link to="/user/help" class="mobile-nav-item" @click="showMobileMenu = false">
+            <el-icon><QuestionFilled /></el-icon>
+            <span>帮助中心</span>
+          </router-link>
+        </div>
+        
+        <el-divider />
+        
+        <el-button type="danger" plain class="logout-btn" @click="handleLogout">
+          <el-icon><SwitchButton /></el-icon>
+          退出登录
+        </el-button>
+      </div>
+    </el-drawer>
+  </div>
+</template>
+
+<script setup>
+import { ref, computed, onMounted } from 'vue'
+import { useRouter, useRoute } from 'vue-router'
+import { ElMessageBox, ElMessage } from 'element-plus'
+import {
+  HomeFilled,
+  Connection,
+  Link,
+  Download,
+  DataAnalysis,
+  Bell,
+  Setting,
+  ArrowDown,
+  Menu,
+  Sunny,
+  Moon,
+  ChatDotRound,
+  QuestionFilled,
+  SwitchButton
+} from '@element-plus/icons-vue'
+import { useTheme } from '@/composables/useTheme'
+
+const router = useRouter()
+const route = useRoute()
+const { isDark, toggleDarkMode } = useTheme()
+
+// 状态
+const showMobileMenu = ref(false)
+const unreadCount = ref(0)
+const username = ref('用户')
+const accountStatus = ref('active')
+
+// 使用共享的主题状态
+const isDarkMode = isDark
+
+// 导航项
+const navItems = [
+  { path: '/user/dashboard', label: '仪表板', icon: HomeFilled },
+  { path: '/user/nodes', label: '节点列表', icon: Connection },
+  { path: '/user/subscription', label: '订阅管理', icon: Link },
+  { path: '/user/download', label: '客户端下载', icon: Download },
+  { path: '/user/stats', label: '使用统计', icon: DataAnalysis }
+]
+
+// 计算属性
+const userInitial = computed(() => username.value.charAt(0).toUpperCase())
+const currentYear = computed(() => new Date().getFullYear())
+const statusText = computed(() => {
+  const statusMap = {
+    active: '正常',
+    expired: '已过期',
+    disabled: '已禁用'
+  }
+  return statusMap[accountStatus.value] || '未知'
+})
+
+// 方法
+const isActive = (path) => {
+  return route.path === path || route.path.startsWith(path + '/')
+}
+
+const toggleTheme = () => {
+  toggleDarkMode()
+}
+
+const goToAnnouncements = () => {
+  router.push('/user/announcements')
+}
+
+const handleCommand = (command) => {
+  switch (command) {
+    case 'settings':
+      router.push('/user/settings')
+      break
+    case 'tickets':
+      router.push('/user/tickets')
+      break
+    case 'help':
+      router.push('/user/help')
+      break
+    case 'logout':
+      handleLogout()
+      break
+  }
+}
+
+const handleLogout = () => {
+  ElMessageBox.confirm('确定要退出登录吗？', '提示', {
+    confirmButtonText: '确定',
+    cancelButtonText: '取消',
+    type: 'warning'
+  }).then(() => {
+    localStorage.removeItem('userToken')
+    localStorage.removeItem('userInfo')
+    ElMessage.success('已退出登录')
+    router.push('/user/login')
+  }).catch(() => {})
+  showMobileMenu.value = false
+}
+
+const showTerms = () => {
+  ElMessage.info('服务条款页面开发中')
+}
+
+const showContact = () => {
+  ElMessage.info('联系我们页面开发中')
+}
+
+// 初始化
+onMounted(() => {
+  // 加载用户信息
+  const userInfo = localStorage.getItem('userInfo')
+  if (userInfo) {
+    try {
+      const info = JSON.parse(userInfo)
+      username.value = info.username || '用户'
+      accountStatus.value = info.status || 'active'
+    } catch (e) {
+      console.error('Failed to parse user info:', e)
+    }
+  }
+  
+  // TODO: 加载未读公告数量
+})
+</script>
+
+
+<style scoped>
+.user-portal {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background-color: #f5f7fa;
+}
+
+.user-portal.dark-mode {
+  background-color: #1a1a2e;
+}
+
+/* 顶部导航栏 */
+.user-header {
+  background-color: #fff;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  position: sticky;
+  top: 0;
+  z-index: 100;
+}
+
+.dark-mode .user-header {
+  background-color: #16213e;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+}
+
+.header-container {
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: 0 20px;
+  height: 60px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.header-left {
+  display: flex;
+  align-items: center;
+  gap: 40px;
+}
+
+.logo {
+  text-decoration: none;
+}
+
+.logo-text {
+  font-size: 20px;
+  font-weight: 600;
+  color: #409eff;
+}
+
+.desktop-nav {
+  display: flex;
+  gap: 8px;
+}
+
+.nav-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 16px;
+  border-radius: 6px;
+  text-decoration: none;
+  color: #606266;
+  font-size: 14px;
+  transition: all 0.2s;
+}
+
+.nav-item:hover {
+  background-color: #f5f7fa;
+  color: #409eff;
+}
+
+.nav-item.active {
+  background-color: #ecf5ff;
+  color: #409eff;
+}
+
+.dark-mode .nav-item {
+  color: #a0a0a0;
+}
+
+.dark-mode .nav-item:hover,
+.dark-mode .nav-item.active {
+  background-color: #1f4068;
+  color: #409eff;
+}
+
+.header-right {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.notification-badge {
+  margin-right: 4px;
+}
+
+.user-dropdown-trigger {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 6px;
+  transition: background-color 0.2s;
+}
+
+.user-dropdown-trigger:hover {
+  background-color: #f5f7fa;
+}
+
+.dark-mode .user-dropdown-trigger:hover {
+  background-color: #1f4068;
+}
+
+.user-avatar {
+  background-color: #409eff !important;
+  color: #fff !important;
+}
+
+.username {
+  font-size: 14px;
+  color: #303133;
+}
+
+.dark-mode .username {
+  color: #e0e0e0;
+}
+
+.mobile-menu-btn {
+  display: none;
+}
+
+/* 主内容区 */
+.user-main {
+  flex: 1;
+  max-width: 1400px;
+  width: 100%;
+  margin: 0 auto;
+  padding: 24px 20px;
+}
+
+/* 页脚 */
+.user-footer {
+  background-color: #fff;
+  border-top: 1px solid #ebeef5;
+  padding: 20px 0;
+}
+
+.dark-mode .user-footer {
+  background-color: #16213e;
+  border-top-color: #2a2a4a;
+}
+
+.footer-container {
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: 0 20px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.footer-links {
+  display: flex;
+  gap: 24px;
+}
+
+.footer-links a {
+  color: #909399;
+  text-decoration: none;
+  font-size: 14px;
+  transition: color 0.2s;
+}
+
+.footer-links a:hover {
+  color: #409eff;
+}
+
+.footer-copyright {
+  color: #909399;
+  font-size: 14px;
+}
+
+/* 移动端菜单 */
+.mobile-menu-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px;
+  background-color: #f5f7fa;
+  margin: -20px -20px 0;
+}
+
+.dark-mode .mobile-menu-header {
+  background-color: #1f4068;
+}
+
+.user-info .username {
+  font-size: 16px;
+  font-weight: 500;
+  color: #303133;
+}
+
+.user-info .user-status {
+  font-size: 12px;
+  margin-top: 4px;
+}
+
+.user-status.active {
+  color: #67c23a;
+}
+
+.user-status.expired {
+  color: #f56c6c;
+}
+
+.user-status.disabled {
+  color: #909399;
+}
+
+.mobile-menu-content {
+  padding: 16px 0;
+}
+
+.mobile-nav {
+  display: flex;
+  flex-direction: column;
+}
+
+.mobile-nav-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 16px;
+  text-decoration: none;
+  color: #303133;
+  font-size: 15px;
+  transition: background-color 0.2s;
+}
+
+.mobile-nav-item:hover {
+  background-color: #f5f7fa;
+}
+
+.dark-mode .mobile-nav-item {
+  color: #e0e0e0;
+}
+
+.dark-mode .mobile-nav-item:hover {
+  background-color: #1f4068;
+}
+
+.logout-btn {
+  width: 100%;
+  margin-top: 16px;
+}
+
+/* 过渡动画 */
+.fade-enter-active,
+.fade-leave-active {
+  transition: opacity 0.2s ease;
+}
+
+.fade-enter-from,
+.fade-leave-to {
+  opacity: 0;
+}
+
+/* 响应式 */
+@media (max-width: 768px) {
+  .desktop-nav {
+    display: none;
+  }
+  
+  .mobile-menu-btn {
+    display: flex;
+  }
+  
+  .user-dropdown-trigger .username {
+    display: none;
+  }
+  
+  .footer-container {
+    flex-direction: column;
+    gap: 12px;
+    text-align: center;
+  }
+  
+  .user-main {
+    padding: 16px 12px;
+  }
+}
+</style>

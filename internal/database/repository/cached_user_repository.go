@@ -93,6 +93,11 @@ func (r *CachedUserRepository) GetByUsername(ctx context.Context, username strin
 	return user, nil
 }
 
+// GetByEmail retrieves a user by email (not cached to avoid complexity).
+func (r *CachedUserRepository) GetByEmail(ctx context.Context, email string) (*User, error) {
+	return r.repo.GetByEmail(ctx, email)
+}
+
 // Update updates a user and invalidates cache.
 func (r *CachedUserRepository) Update(ctx context.Context, user *User) error {
 	// Get old user to invalidate old username cache if changed

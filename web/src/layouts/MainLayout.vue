@@ -24,6 +24,11 @@
           <span>代理服务</span>
         </el-menu-item>
         
+        <el-menu-item index="/subscription">
+          <el-icon><Link /></el-icon>
+          <span>订阅管理</span>
+        </el-menu-item>
+        
         <el-sub-menu index="user">
           <template #title>
             <el-icon><User /></el-icon>
@@ -46,6 +51,18 @@
           <el-icon><Tools /></el-icon>
           <span>证书管理</span>
         </el-menu-item>
+
+        <el-sub-menu index="commercial" v-if="isAdmin">
+          <template #title>
+            <el-icon><ShoppingCart /></el-icon>
+            <span>商业化管理</span>
+          </template>
+          <el-menu-item index="/admin/plans">套餐管理</el-menu-item>
+          <el-menu-item index="/admin/orders">订单管理</el-menu-item>
+          <el-menu-item index="/admin/coupons">优惠券管理</el-menu-item>
+          <el-menu-item index="/admin/gift-cards">礼品卡管理</el-menu-item>
+          <el-menu-item index="/admin/reports">财务报表</el-menu-item>
+        </el-sub-menu>
 
         <el-sub-menu index="settings">
           <template #title>
@@ -103,7 +120,9 @@ import {
   Setting,
   Fold,
   Expand,
-  ArrowDown
+  ArrowDown,
+  Link,
+  ShoppingCart
 } from '@element-plus/icons-vue'
 import { useUserStore } from '@/stores/user'
 
@@ -114,6 +133,12 @@ const userStore = useUserStore()
 const isCollapse = ref(false)
 const username = computed(() => userStore.user?.username || '管理员')
 const activeMenu = computed(() => route.path)
+
+// Check if user is admin
+const isAdmin = computed(() => {
+  const userRole = localStorage.getItem('userRole')
+  return userRole === 'admin'
+})
 
 // 切换侧边栏
 const toggleSidebar = () => {
