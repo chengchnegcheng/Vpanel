@@ -80,7 +80,7 @@
     - **Property 16: Geo Restriction Enforcement**
     - **Validates: Requirements 7.2, 7.3**
 
-- [ ] 5. Checkpoint - 核心服务测试
+- [x] 5. Checkpoint - 核心服务测试
   - 确保所有属性测试通过
   - 如有问题请询问用户
 
@@ -138,11 +138,11 @@
     - **Property 14: Auto-Blacklist Trigger**
     - **Validates: Requirements 5.4**
 
-- [ ] 9. Checkpoint - 服务层测试
+- [x] 9. Checkpoint - 服务层测试
   - 确保所有属性测试通过
   - 如有问题请询问用户
 
-- [-] 10. 管理员 API 接口
+- [x] 10. 管理员 API 接口
   - [x] 10.1 实现 IP 统计 API
     - GET /api/admin/ip-restrictions/stats
     - _Requirements: 9.1_
@@ -178,7 +178,7 @@
     - 在订阅 API 中应用 IP 限制
     - _Requirements: 6.1, 6.2, 6.3_
 
-- [ ] 13. Checkpoint - API 测试
+- [x] 13. Checkpoint - API 测试
   - 确保所有 API 端点正常工作
   - 如有问题请询问用户
 

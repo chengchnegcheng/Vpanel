@@ -1,0 +1,147 @@
+// Package middleware provides HTTP middleware for the API.
+package middleware
+
+import (
+	"net/http"
+	"sync"
+	"time"
+
+	"github.com/gin-gonic/gin"
+)
+
+// SubscriptionRateLimiter provides rate limiting for subscription access.
+// It limits requests per token/IP combination to prevent abuse.
+type SubscriptionRateLimiter struct {
+	mu              sync.RWMutex
+	clients         map[string]*subscriptionClient
+	requestsPerHour int
+	cleanupInterval time.Duration
+	stopCh          chan struct{}
+}
+
+type subscriptionClient struct {
+	requests  int
+	windowEnd time.Time
+}
+
+// NewSubscriptionRateLimiter creates a new subscription rate limiter.
+// requestsPerHour specifies the maximum number of requests allowed per hour per client.
+func NewSubscriptionRateLimiter(requestsPerHour int) *SubscriptionRateLimiter {
+	if requestsPerHour <= 0 {
+		requestsPerHour = 60 // Default: 60 requests per hour
+	}
+
+	rl := &SubscriptionRateLimiter{
+		clients:         make(map[string]*subscriptionClient),
+		requestsPerHour: requestsPerHour,
+		cleanupInterval: 10 * time.Minute,
+		stopCh:          make(chan struct{}),
+	}
+
+	// Start cleanup goroutine
+	go rl.cleanup()
+
+	return rl
+}
+
+// RateLimit returns a middleware that limits subscription access.
+func (rl *SubscriptionRateLimiter) RateLimit() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		// Get client identifier (token + IP)
+		token := c.Param("token")
+		if token == "" {
+			token = c.Param("code") // For short code routes
+		}
+		ip := c.ClientIP()
+		clientKey := token + ":" + ip
+
+		if !rl.allow(clientKey) {
+			c.AbortWithStatusJSON(http.StatusTooManyRequests, gin.H{
+				"error":   "Rate limit exceeded",
+				"message": "Too many subscription requests. Please try again later.",
+			})
+			return
+		}
+
+		c.Next()
+	}
+}
+
+// allow checks if a request is allowed for the given client key.
+func (rl *SubscriptionRateLimiter) allow(clientKey string) bool {
+	rl.mu.Lock()
+	defer rl.mu.Unlock()
+
+	now := time.Now()
+	client, exists := rl.clients[clientKey]
+
+	if !exists || now.After(client.windowEnd) {
+		// New window
+		rl.clients[clientKey] = &subscriptionClient{
+			requests:  1,
+			windowEnd: now.Add(time.Hour),
+		}
+		return true
+	}
+
+	if client.requests >= rl.requestsPerHour {
+		return false
+	}
+
+	client.requests++
+	return true
+}
+
+// cleanup periodically removes expired client entries.
+func (rl *SubscriptionRateLimiter) cleanup() {
+	ticker := time.NewTicker(rl.cleanupInterval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ticker.C:
+			rl.cleanupExpired()
+		case <-rl.stopCh:
+			return
+		}
+	}
+}
+
+// cleanupExpired removes expired client entries.
+func (rl *SubscriptionRateLimiter) cleanupExpired() {
+	rl.mu.Lock()
+	defer rl.mu.Unlock()
+
+	now := time.Now()
+	for key, client := range rl.clients {
+		if now.After(client.windowEnd) {
+			delete(rl.clients, key)
+		}
+	}
+}
+
+// Close stops the cleanup goroutine.
+func (rl *SubscriptionRateLimiter) Close() {
+	close(rl.stopCh)
+}
+
+// GetRemainingRequests returns the number of remaining requests for a client.
+func (rl *SubscriptionRateLimiter) GetRemainingRequests(clientKey string) int {
+	rl.mu.RLock()
+	defer rl.mu.RUnlock()
+
+	client, exists := rl.clients[clientKey]
+	if !exists {
+		return rl.requestsPerHour
+	}
+
+	if time.Now().After(client.windowEnd) {
+		return rl.requestsPerHour
+	}
+
+	remaining := rl.requestsPerHour - client.requests
+	if remaining < 0 {
+		return 0
+	}
+	return remaining
+}

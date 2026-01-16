@@ -448,7 +448,7 @@
     - 在 `internal/commercial/trial/` 创建 `service.go`
     - 实现试用激活、过期检查
     - _Requirements: 15.3-15.5_
-  - [ ]* 36.3 编写属性测试：试用唯一性
+  - [x]* 36.3 编写属性测试：试用唯一性
     - **Property 15: Trial Uniqueness**
     - **Validates: Requirements 15.3**
   - [x] 36.4 创建 Trial API 端点
@@ -462,7 +462,7 @@
     - 在 `internal/commercial/planchange/` 创建 `service.go`
     - 实现升级价格计算
     - _Requirements: 16.2, 16.3_
-  - [ ]* 37.2 编写属性测试：升级价格计算
+  - [x]* 37.2 编写属性测试：升级价格计算
     - **Property 16: Plan Change Proration**
     - **Validates: Requirements 16.3**
   - [x] 37.3 实现降级调度
@@ -482,7 +482,7 @@
     - 在 `internal/commercial/payment/` 创建 `retry.go`
     - 实现重试调度
     - _Requirements: 17.2, 17.3_
-  - [ ]* 38.2 编写属性测试：重试次数限制
+  - [x]* 38.2 编写属性测试：重试次数限制
     - **Property 17: Payment Retry Limit**
     - **Validates: Requirements 17.2**
   - [x] 38.3 实现定时重试任务
@@ -499,7 +499,7 @@
     - 在 `internal/commercial/currency/` 创建 `service.go`
     - 实现汇率获取和转换
     - _Requirements: 18.1, 18.6_
-  - [ ]* 39.2 编写属性测试：货币转换一致性
+  - [x]* 39.2 编写属性测试：货币转换一致性
     - **Property 18: Currency Conversion Consistency**
     - **Validates: Requirements 18.6**
   - [x] 39.3 扩展 Plan 模型支持多币种价格
@@ -517,7 +517,7 @@
     - 在 `internal/commercial/pause/` 创建 `service.go`
     - 实现暂停和恢复逻辑
     - _Requirements: 19.1, 19.2, 19.6_
-  - [ ]* 40.2 编写属性测试：暂停时长限制
+  - [x]* 40.2 编写属性测试：暂停时长限制
     - **Property 19: Pause Duration Limit**
     - **Validates: Requirements 19.3**
   - [x] 40.3 实现暂停频率限制
@@ -539,7 +539,7 @@
     - 在 `internal/commercial/giftcard/` 创建 `service.go`
     - 实现创建、购买、兑换
     - _Requirements: 20.3-20.6_
-  - [ ]* 41.3 编写属性测试：礼品卡兑换
+  - [x]* 41.3 编写属性测试：礼品卡兑换
     - **Property 20: Gift Card Redemption**
     - **Validates: Requirements 20.6**
   - [x] 41.4 创建 Gift Card API 端点
@@ -575,7 +575,7 @@
     - 添加暂停统计
     - _Requirements: 15.8, 19.10, 20.9_
 
-- [-] 44. Final Checkpoint - 完整系统测试
+- [x] 44. Final Checkpoint - 完整系统测试
   - 运行所有后端测试
   - 运行前端构建
   - 手动测试完整流程

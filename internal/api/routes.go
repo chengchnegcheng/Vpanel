@@ -27,6 +27,7 @@ import (
 	"v/internal/database/repository"
 	logservice "v/internal/log"
 	"v/internal/logger"
+	"v/internal/ip"
 	"v/internal/portal/announcement"
 	"v/internal/portal/help"
 	"v/internal/portal/node"
@@ -111,6 +112,17 @@ func (r *Router) Setup() {
 	certificatesHandler := handlers.NewCertificatesHandler(r.logger)
 	logHandler := handlers.NewLogHandler(r.logService, r.logger)
 
+	// Create IP restriction service and handler
+	ipServiceConfig := &ip.ServiceConfig{}
+	ipService, err := ip.NewService(r.repos.DB(), ipServiceConfig)
+	if err != nil {
+		r.logger.Error("Failed to create IP service", logger.F("error", err))
+	}
+	var ipRestrictionHandler *handlers.IPRestrictionHandler
+	if ipService != nil {
+		ipRestrictionHandler = handlers.NewIPRestrictionHandler(r.logger, ipService)
+	}
+
 	// Create subscription service and handler
 	subscriptionService := subscription.NewService(
 		r.repos.Subscription,
@@ -172,13 +184,21 @@ func (r *Router) Setup() {
 	// Access control middleware (checks traffic limits and expiration)
 	accessControlMiddleware := middleware.NewAccessControlMiddleware(r.repos.User, r.logger)
 
+	// Subscription rate limiter (60 requests per hour per token/IP)
+	subscriptionRateLimiter := middleware.NewSubscriptionRateLimiter(60)
+
 	// Public routes
 	r.engine.GET("/health", healthHandler.Health)
 	r.engine.GET("/ready", healthHandler.Ready)
 
 	// Public subscription routes (token-based access, no auth required)
-	r.engine.GET("/api/subscription/:token", subscriptionHandler.GetContent)
-	r.engine.GET("/s/:code", subscriptionHandler.GetShortContent)
+	// Apply rate limiting: 60 requests per hour per token/IP
+	subscriptionPublic := r.engine.Group("")
+	subscriptionPublic.Use(subscriptionRateLimiter.RateLimit())
+	{
+		subscriptionPublic.GET("/api/subscription/:token", subscriptionHandler.GetContent)
+		subscriptionPublic.GET("/s/:code", subscriptionHandler.GetShortContent)
+	}
 
 	// API routes
 	api := r.engine.Group("/api")
@@ -544,6 +564,57 @@ func (r *Router) Setup() {
 				adminGiftCards.PUT("/:id/status", giftCardHandler.AdminSetStatus)
 				adminGiftCards.DELETE("/:id", giftCardHandler.AdminDeleteGiftCard)
 				adminGiftCards.GET("/batch/:batch_id/stats", giftCardHandler.AdminGetBatchStats)
+			}
+
+			// Admin IP restriction routes
+			if ipRestrictionHandler != nil {
+				adminIPRestriction := protected.Group("/admin/ip-restrictions")
+				adminIPRestriction.Use(authMiddleware.RequireRole("admin"))
+				{
+					adminIPRestriction.GET("/stats", ipRestrictionHandler.GetStats)
+				}
+
+				adminIPWhitelist := protected.Group("/admin/ip-whitelist")
+				adminIPWhitelist.Use(authMiddleware.RequireRole("admin"))
+				{
+					adminIPWhitelist.GET("", ipRestrictionHandler.GetWhitelist)
+					adminIPWhitelist.POST("", ipRestrictionHandler.AddWhitelist)
+					adminIPWhitelist.DELETE("/:id", ipRestrictionHandler.DeleteWhitelist)
+					adminIPWhitelist.POST("/import", ipRestrictionHandler.ImportWhitelist)
+				}
+
+				adminIPBlacklist := protected.Group("/admin/ip-blacklist")
+				adminIPBlacklist.Use(authMiddleware.RequireRole("admin"))
+				{
+					adminIPBlacklist.GET("", ipRestrictionHandler.GetBlacklist)
+					adminIPBlacklist.POST("", ipRestrictionHandler.AddBlacklist)
+					adminIPBlacklist.DELETE("/:id", ipRestrictionHandler.DeleteBlacklist)
+				}
+
+				adminIPSettings := protected.Group("/admin/settings")
+				adminIPSettings.Use(authMiddleware.RequireRole("admin"))
+				{
+					adminIPSettings.GET("/ip-restriction", ipRestrictionHandler.GetIPRestrictionSettings)
+					adminIPSettings.PUT("/ip-restriction", ipRestrictionHandler.UpdateIPRestrictionSettings)
+				}
+
+				// Admin user IP routes
+				adminUsers := protected.Group("/admin/users")
+				adminUsers.Use(authMiddleware.RequireRole("admin"))
+				{
+					adminUsers.GET("/:id/online-ips", ipRestrictionHandler.GetUserOnlineIPs)
+					adminUsers.POST("/:id/kick-ip", ipRestrictionHandler.KickUserIP)
+				}
+
+				// User IP routes
+				userDevices := protected.Group("/user/devices")
+				{
+					userDevices.GET("", ipRestrictionHandler.GetUserDevices)
+					userDevices.POST("/:ip/kick", ipRestrictionHandler.KickUserDevice)
+				}
+
+				protected.GET("/user/ip-stats", ipRestrictionHandler.GetUserIPStats)
+				protected.GET("/user/ip-history", ipRestrictionHandler.GetUserIPHistory)
 			}
 		}
 

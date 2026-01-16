@@ -27,8 +27,10 @@ type User struct {
 	LastLoginAt      *time.Time
 	LastLoginIP      string     `gorm:"size:45"`
 	TelegramID       string     `gorm:"size:50;index"`
-	CreatedAt        time.Time  `gorm:"autoCreateTime"`
-	UpdatedAt        time.Time  `gorm:"autoUpdateTime"`
+	// Commercial fields
+	Balance   int64     `gorm:"default:0"` // User balance in cents
+	CreatedAt time.Time `gorm:"autoCreateTime"`
+	UpdatedAt time.Time `gorm:"autoUpdateTime"`
 }
 
 // IsExpired checks if the user account has expired.
@@ -234,6 +236,7 @@ type AuditLogRepository interface {
 
 // Repositories holds all repository instances.
 type Repositories struct {
+	db           *gorm.DB
 	User         UserRepository
 	Proxy        ProxyRepository
 	Traffic      TrafficRepository
@@ -262,9 +265,15 @@ type Repositories struct {
 	GiftCard     GiftCardRepository
 }
 
+// DB returns the underlying database connection.
+func (r *Repositories) DB() *gorm.DB {
+	return r.db
+}
+
 // NewRepositories creates all repository instances.
 func NewRepositories(db *gorm.DB) *Repositories {
 	return &Repositories{
+		db:           db,
 		User:         NewUserRepository(db),
 		Proxy:        NewProxyRepository(db),
 		Traffic:      NewTrafficRepository(db),

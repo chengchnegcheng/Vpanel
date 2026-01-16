@@ -544,6 +544,7 @@ func TestSubscriptionRepository_CascadeDelete(t *testing.T) {
 		last_login_at DATETIME,
 		last_login_ip VARCHAR(45),
 		telegram_id VARCHAR(50),
+		balance INTEGER DEFAULT 0,
 		created_at DATETIME,
 		updated_at DATETIME
 	)`)

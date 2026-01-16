@@ -32,17 +32,17 @@
 - [x] 2. Checkpoint - 确保数据库层测试通过
   - 确保所有测试通过，如有问题请询问用户
 
-- [ ] 3. 服务层实现
-  - [ ] 3.1 扩展日志配置 (`internal/config/config.go`)
+- [x] 3. 服务层实现
+  - [x] 3.1 扩展日志配置 (`internal/config/config.go`)
     - 添加 DatabaseEnabled, DatabaseLevel, RetentionDays, BufferSize, BatchSize, FlushInterval 配置项
     - _Requirements: 5.1, 5.2, 5.3, 5.5_
 
-  - [ ] 3.2 实现 AsyncWriter (`internal/log/async_writer.go`)
+  - [x] 3.2 实现 AsyncWriter (`internal/log/async_writer.go`)
     - 实现缓冲区管理和批量写入
     - 实现定时刷新和优雅关闭
     - _Requirements: 6.1, 6.2, 6.3_
 
-  - [ ] 3.3 实现 LogService (`internal/log/service.go`)
+  - [x] 3.3 实现 LogService (`internal/log/service.go`)
     - 实现 Log, LogSync, Query, GetByID, Delete, Cleanup 方法
     - 实现清理调度器
     - 集成 AsyncWriter
