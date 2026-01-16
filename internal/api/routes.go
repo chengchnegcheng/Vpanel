@@ -28,9 +28,10 @@ import (
 	logservice "v/internal/log"
 	"v/internal/logger"
 	"v/internal/ip"
+	"v/internal/node"
 	"v/internal/portal/announcement"
 	"v/internal/portal/help"
-	"v/internal/portal/node"
+	portalnode "v/internal/portal/node"
 	"v/internal/portal/stats"
 	"v/internal/portal/ticket"
 	portalauth "v/internal/portal/auth"
@@ -155,6 +156,22 @@ func (r *Router) Setup() {
 	// Create currency service
 	currencyService := currency.NewService(r.repos.ExchangeRate, nil, nil, r.logger)
 	planCurrencyService := plan.NewCurrencyService(planService, currencyService, r.repos.PlanPrice, r.logger)
+
+	// Create node management services
+	nodeService := node.NewService(
+		r.repos.Node,
+		r.repos.UserNodeAssignment,
+		r.logger,
+	)
+	nodeGroupService := node.NewGroupService(r.repos.NodeGroup, r.repos.Node, r.logger)
+	nodeHealthChecker := node.NewHealthChecker(nil, r.repos.Node, r.repos.HealthCheck, r.logger)
+	nodeTrafficService := node.NewTrafficService(r.repos.NodeTraffic, r.repos.NodeGroup, r.logger)
+
+	// Create node management handlers
+	nodeHandler := handlers.NewNodeHandler(nodeService, r.logger)
+	nodeGroupHandler := handlers.NewNodeGroupHandler(nodeGroupService, r.logger)
+	nodeHealthHandler := handlers.NewNodeHealthHandler(nodeHealthChecker, r.repos.HealthCheck, r.repos.Node, r.logger)
+	nodeStatsHandler := handlers.NewNodeStatsHandler(nodeTrafficService, nodeService, nodeGroupService, r.logger)
 
 	// Create commercial handlers
 	planHandler := handlers.NewPlanHandler(planService, r.logger)
@@ -566,6 +583,89 @@ func (r *Router) Setup() {
 				adminGiftCards.GET("/batch/:batch_id/stats", giftCardHandler.AdminGetBatchStats)
 			}
 
+			// ==================== Node Management Routes ====================
+
+			// Admin node routes
+			adminNodes := protected.Group("/admin/nodes")
+			adminNodes.Use(authMiddleware.RequireRole("admin"))
+			{
+				// Node CRUD
+				adminNodes.GET("", nodeHandler.List)
+				adminNodes.POST("", nodeHandler.Create)
+				adminNodes.GET("/statistics", nodeHandler.GetStatistics)
+				adminNodes.GET("/:id", nodeHandler.Get)
+				adminNodes.PUT("/:id", nodeHandler.Update)
+				adminNodes.DELETE("/:id", nodeHandler.Delete)
+				adminNodes.PUT("/:id/status", nodeHandler.UpdateStatus)
+
+				// Token management
+				adminNodes.POST("/:id/token", nodeHandler.GenerateToken)
+				adminNodes.POST("/:id/token/rotate", nodeHandler.RotateToken)
+				adminNodes.POST("/:id/token/revoke", nodeHandler.RevokeToken)
+
+				// Health check routes
+				adminNodes.POST("/:id/health-check", nodeHealthHandler.CheckNode)
+				adminNodes.GET("/:id/health-history", nodeHealthHandler.GetHistory)
+				adminNodes.GET("/:id/health-latest", nodeHealthHandler.GetLatest)
+				adminNodes.GET("/:id/health-stats", nodeHealthHandler.GetHealthStats)
+				adminNodes.POST("/health-check", nodeHealthHandler.CheckAll)
+				adminNodes.GET("/cluster-health", nodeHealthHandler.GetClusterHealth)
+
+				// Traffic statistics routes
+				adminNodes.GET("/traffic/total", nodeStatsHandler.GetTotalTraffic)
+				adminNodes.GET("/traffic/by-node", nodeStatsHandler.GetTrafficStatsByNode)
+				adminNodes.GET("/traffic/by-group", nodeStatsHandler.GetTrafficStatsByGroup)
+				adminNodes.GET("/traffic/aggregated", nodeStatsHandler.GetAggregatedStats)
+				adminNodes.GET("/traffic/realtime", nodeStatsHandler.GetRealTimeStats)
+				adminNodes.POST("/traffic", nodeStatsHandler.RecordTraffic)
+				adminNodes.POST("/traffic/batch", nodeStatsHandler.RecordTrafficBatch)
+				adminNodes.POST("/traffic/cleanup", nodeStatsHandler.CleanupOldRecords)
+				adminNodes.GET("/:id/traffic", nodeStatsHandler.GetTrafficByNode)
+				adminNodes.GET("/:id/traffic/top-users", nodeStatsHandler.GetTopUsersByTraffic)
+			}
+
+			// Admin node group routes
+			adminNodeGroups := protected.Group("/admin/node-groups")
+			adminNodeGroups.Use(authMiddleware.RequireRole("admin"))
+			{
+				// Group CRUD
+				adminNodeGroups.GET("", nodeGroupHandler.List)
+				adminNodeGroups.POST("", nodeGroupHandler.Create)
+				adminNodeGroups.GET("/with-stats", nodeGroupHandler.ListWithStats)
+				adminNodeGroups.GET("/stats", nodeGroupHandler.GetAllStats)
+				adminNodeGroups.GET("/:id", nodeGroupHandler.Get)
+				adminNodeGroups.PUT("/:id", nodeGroupHandler.Update)
+				adminNodeGroups.DELETE("/:id", nodeGroupHandler.Delete)
+				adminNodeGroups.GET("/:id/stats", nodeGroupHandler.GetWithStats)
+
+				// Group membership management
+				adminNodeGroups.GET("/:id/nodes", nodeGroupHandler.GetNodes)
+				adminNodeGroups.PUT("/:id/nodes", nodeGroupHandler.SetNodes)
+				adminNodeGroups.POST("/:id/nodes/:node_id", nodeGroupHandler.AddNode)
+				adminNodeGroups.DELETE("/:id/nodes/:node_id", nodeGroupHandler.RemoveNode)
+
+				// Group traffic statistics
+				adminNodeGroups.GET("/:id/traffic", nodeStatsHandler.GetTrafficByGroup)
+			}
+
+			// Health checker control routes
+			healthChecker := protected.Group("/admin/health-checker")
+			healthChecker.Use(authMiddleware.RequireRole("admin"))
+			{
+				healthChecker.GET("/status", nodeHealthHandler.GetCheckerStatus)
+				healthChecker.POST("/start", nodeHealthHandler.StartChecker)
+				healthChecker.POST("/stop", nodeHealthHandler.StopChecker)
+				healthChecker.PUT("/config", nodeHealthHandler.UpdateCheckerConfig)
+			}
+
+			// User node traffic routes (admin only)
+			adminUserTraffic := protected.Group("/admin/users")
+			adminUserTraffic.Use(authMiddleware.RequireRole("admin"))
+			{
+				adminUserTraffic.GET("/:id/node-traffic", nodeStatsHandler.GetTrafficByUser)
+				adminUserTraffic.GET("/:id/node-traffic/breakdown", nodeStatsHandler.GetUserTrafficBreakdown)
+			}
+
 			// Admin IP restriction routes
 			if ipRestrictionHandler != nil {
 				adminIPRestriction := protected.Group("/admin/ip-restrictions")
@@ -621,6 +721,16 @@ func (r *Router) Setup() {
 		// Payment callback routes (public - no auth required)
 		api.POST("/payments/callback/:method", paymentHandler.HandleCallback)
 
+		// Node Agent routes (token-based auth, no user auth required)
+		nodeAgentHandler := handlers.NewNodeAgentHandler(nodeService, r.repos.Node, r.logger)
+		nodeAgent := api.Group("/node")
+		{
+			nodeAgent.POST("/register", nodeAgentHandler.Register)
+			nodeAgent.POST("/heartbeat", nodeAgentHandler.Heartbeat)
+			nodeAgent.POST("/command/result", nodeAgentHandler.ReportCommandResult)
+			nodeAgent.GET("/:id/config", nodeAgentHandler.GetConfig)
+		}
+
 		// Portal routes (user-facing API)
 		r.setupPortalRoutes(api)
 	}
@@ -650,13 +760,13 @@ func (r *Router) setupPortalRoutes(api *gin.RouterGroup) {
 	ticketService := ticket.NewService(r.repos.Ticket, r.repos.User)
 	announcementService := announcement.NewService(r.repos.Announcement)
 	helpService := help.NewService(r.repos.HelpArticle)
-	nodeService := node.NewService(r.repos.Proxy, r.repos.User)
+	portalNodeService := portalnode.NewService(r.repos.Proxy, r.repos.User)
 	statsService := stats.NewService(r.repos.Traffic, r.repos.User)
 
 	// Create portal handlers
 	portalAuthHandler := handlers.NewPortalAuthHandler(portalAuthService, r.authService, r.repos.User, r.logger)
 	portalDashboardHandler := handlers.NewPortalDashboardHandler(r.repos.User, statsService, announcementService, r.logger)
-	portalNodeHandler := handlers.NewPortalNodeHandler(nodeService, r.logger)
+	portalNodeHandler := handlers.NewPortalNodeHandler(portalNodeService, r.logger)
 	portalTicketHandler := handlers.NewPortalTicketHandler(ticketService, r.logger)
 	portalAnnouncementHandler := handlers.NewPortalAnnouncementHandler(announcementService, r.logger)
 	portalStatsHandler := handlers.NewPortalStatsHandler(statsService, r.logger)

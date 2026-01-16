@@ -263,6 +263,12 @@ type Repositories struct {
 	PlanPrice    PlanPriceRepository
 	Pause        PauseRepository
 	GiftCard     GiftCardRepository
+	// Multi-Server Management repositories
+	Node               NodeRepository
+	NodeGroup          NodeGroupRepository
+	HealthCheck        HealthCheckRepository
+	UserNodeAssignment UserNodeAssignmentRepository
+	NodeTraffic        NodeTrafficRepository
 }
 
 // DB returns the underlying database connection.
@@ -300,5 +306,11 @@ func NewRepositories(db *gorm.DB) *Repositories {
 		PlanPrice:    NewPlanPriceRepository(db),
 		Pause:        NewPauseRepository(db),
 		GiftCard:     NewGiftCardRepository(db),
+		// Multi-Server Management repositories
+		Node:               NewNodeRepository(db),
+		NodeGroup:          NewNodeGroupRepository(db),
+		HealthCheck:        NewHealthCheckRepository(db),
+		UserNodeAssignment: NewUserNodeAssignmentRepository(db),
+		NodeTraffic:        NewNodeTrafficRepository(db),
 	}
 }

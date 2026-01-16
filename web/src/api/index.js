@@ -36,6 +36,11 @@ import { currencyApi } from './modules/currency'
 import pauseApi from './modules/pause'
 import { giftCardsApi } from './modules/giftcards'
 
+// 节点管理模块
+import { nodesApi } from './modules/nodes'
+import { nodeGroupsApi } from './modules/nodeGroups'
+import { nodeHealthApi } from './modules/nodeHealth'
+
 // 导出所有 API 模块
 export {
   // 基础
@@ -88,7 +93,12 @@ export {
   planChangeApi,
   currencyApi,
   pauseApi,
-  giftCardsApi
+  giftCardsApi,
+
+  // 节点管理
+  nodesApi,
+  nodeGroupsApi,
+  nodeHealthApi
 }
 
 // 兼容旧版导出（逐步废弃）

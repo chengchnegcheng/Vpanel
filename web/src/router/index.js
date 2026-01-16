@@ -49,85 +49,90 @@ const AdminReports = () => import(/* webpackChunkName: "commercial-admin" */ '..
 const AdminGiftCards = () => import(/* webpackChunkName: "commercial-admin" */ '../views/AdminGiftCards.vue')
 const AdminTrials = () => import(/* webpackChunkName: "commercial-admin" */ '../views/AdminTrials.vue')
 
+// 节点管理 - 按需加载
+const AdminNodes = () => import(/* webpackChunkName: "node-admin" */ '../views/AdminNodes.vue')
+const NodeDetail = () => import(/* webpackChunkName: "node-admin" */ '../views/NodeDetail.vue')
+const NodeForm = () => import(/* webpackChunkName: "node-admin" */ '../views/NodeForm.vue')
+const AdminNodeGroups = () => import(/* webpackChunkName: "node-admin" */ '../views/AdminNodeGroups.vue')
+const NodeDashboard = () => import(/* webpackChunkName: "node-admin" */ '../views/NodeDashboard.vue')
+const NodeMap = () => import(/* webpackChunkName: "node-admin" */ '../views/NodeMap.vue')
+const NodeComparison = () => import(/* webpackChunkName: "node-admin" */ '../views/NodeComparison.vue')
+
 // 错误页面
 const NotFound = () => import(/* webpackChunkName: "error" */ '../views/NotFound.vue')
 
 const routes = [
+  // 根路径重定向到用户门户
+  {
+    path: '/',
+    redirect: '/user/dashboard'
+  },
+  
   // 用户前台路由
   ...userRoutes,
   
+  // 管理后台路由
   {
-    path: '/',
+    path: '/admin',
     component: MainLayout,
+    meta: { requiresAuth: true, roles: ['admin'] },
     children: [
-      // 核心页面
+      // 管理后台首页
       {
         path: '',
-        name: 'Dashboard',
+        redirect: '/admin/dashboard'
+      },
+      {
+        path: 'dashboard',
+        name: 'AdminDashboard',
         component: Dashboard,
         meta: { 
           requiresAuth: true,
-          title: '仪表盘'
+          title: '管理仪表盘',
+          roles: ['admin']
         }
       },
       {
         path: 'profile',
-        name: 'Profile',
+        name: 'AdminProfile',
         component: Profile,
         meta: { 
           requiresAuth: true,
-          title: '个人资料'
+          title: '个人资料',
+          roles: ['admin']
         }
       },
       {
         path: 'change-password',
-        name: 'ChangePassword',
+        name: 'AdminChangePassword',
         component: ChangePassword,
         meta: { 
           requiresAuth: true,
-          title: '修改密码'
-        }
-      },
-      
-      // 设备管理
-      {
-        path: 'devices',
-        name: 'Devices',
-        component: () => import(/* webpackChunkName: "user" */ '../views/Devices.vue'),
-        meta: {
-          requiresAuth: true,
-          title: '我的设备'
+          title: '修改密码',
+          roles: ['admin']
         }
       },
       
       // 代理管理
       {
         path: 'inbounds',
-        name: 'Inbounds',
+        name: 'AdminInbounds',
         component: Inbounds,
         meta: { 
           requiresAuth: true,
-          title: '入站管理'
+          title: '入站管理',
+          roles: ['admin']
         }
       },
       
       // 订阅管理
       {
-        path: 'subscription',
-        name: 'Subscription',
-        component: Subscription,
-        meta: { 
-          requiresAuth: true,
-          title: '订阅管理'
-        }
-      },
-      {
-        path: 'admin/subscriptions',
+        path: 'subscriptions',
         name: 'AdminSubscriptions',
         component: AdminSubscriptions,
         meta: {
           requiresAuth: true,
-          title: '订阅管理（管理员）',
+          title: '订阅管理',
           roles: ['admin']
         }
       },
@@ -135,7 +140,7 @@ const routes = [
       // 用户管理
       {
         path: 'users',
-        name: 'Users',
+        name: 'AdminUsers',
         component: Users,
         meta: { 
           requiresAuth: true,
@@ -145,7 +150,7 @@ const routes = [
       },
       {
         path: 'roles',
-        name: 'Roles',
+        name: 'AdminRoles',
         component: Roles,
         meta: { 
           requiresAuth: true,
@@ -157,36 +162,39 @@ const routes = [
       // 监控统计
       {
         path: 'system-monitor',
-        name: 'SystemMonitor',
+        name: 'AdminSystemMonitor',
         component: SystemMonitor,
         meta: { 
           requiresAuth: true,
-          title: '系统监控'
+          title: '系统监控',
+          roles: ['admin']
         }
       },
       {
         path: 'traffic-monitor',
-        name: 'TrafficMonitor',
+        name: 'AdminTrafficMonitor',
         component: TrafficMonitor,
         meta: { 
           requiresAuth: true,
-          title: '流量监控'
+          title: '流量监控',
+          roles: ['admin']
         }
       },
       {
         path: 'stats',
-        name: 'Stats',
+        name: 'AdminStats',
         component: Stats,
         meta: { 
           requiresAuth: true,
-          title: '统计数据'
+          title: '统计数据',
+          roles: ['admin']
         }
       },
       
       // 系统管理
       {
         path: 'settings',
-        name: 'Settings',
+        name: 'AdminSettings',
         component: Settings,
         meta: {
           requiresAuth: true,
@@ -196,7 +204,7 @@ const routes = [
       },
       {
         path: 'certificates',
-        name: 'Certificates',
+        name: 'AdminCertificates',
         component: Certificates,
         meta: {
           requiresAuth: true,
@@ -206,7 +214,7 @@ const routes = [
       },
       {
         path: 'logs',
-        name: 'Logs',
+        name: 'AdminLogs',
         component: Logs,
         meta: {
           requiresAuth: true,
@@ -216,7 +224,7 @@ const routes = [
       },
       {
         path: 'ip-restriction',
-        name: 'IPRestriction',
+        name: 'AdminIPRestriction',
         component: IPRestriction,
         meta: {
           requiresAuth: true,
@@ -226,7 +234,7 @@ const routes = [
       },
       // 商业化管理
       {
-        path: 'admin/plans',
+        path: 'plans',
         name: 'AdminPlans',
         component: AdminPlans,
         meta: {
@@ -236,7 +244,7 @@ const routes = [
         }
       },
       {
-        path: 'admin/orders',
+        path: 'orders',
         name: 'AdminOrders',
         component: AdminOrders,
         meta: {
@@ -246,7 +254,7 @@ const routes = [
         }
       },
       {
-        path: 'admin/coupons',
+        path: 'coupons',
         name: 'AdminCoupons',
         component: AdminCoupons,
         meta: {
@@ -256,7 +264,7 @@ const routes = [
         }
       },
       {
-        path: 'admin/reports',
+        path: 'reports',
         name: 'AdminReports',
         component: AdminReports,
         meta: {
@@ -266,7 +274,7 @@ const routes = [
         }
       },
       {
-        path: 'admin/gift-cards',
+        path: 'gift-cards',
         name: 'AdminGiftCards',
         component: AdminGiftCards,
         meta: {
@@ -276,12 +284,93 @@ const routes = [
         }
       },
       {
-        path: 'admin/trials',
+        path: 'trials',
         name: 'AdminTrials',
         component: AdminTrials,
         meta: {
           requiresAuth: true,
           title: '试用管理',
+          roles: ['admin']
+        }
+      },
+      // 节点管理
+      {
+        path: 'nodes',
+        name: 'AdminNodes',
+        component: AdminNodes,
+        meta: {
+          requiresAuth: true,
+          title: '节点管理',
+          roles: ['admin']
+        }
+      },
+      {
+        path: 'nodes/new',
+        name: 'NodeCreate',
+        component: NodeForm,
+        meta: {
+          requiresAuth: true,
+          title: '添加节点',
+          roles: ['admin']
+        }
+      },
+      {
+        path: 'nodes/:id',
+        name: 'NodeDetail',
+        component: NodeDetail,
+        meta: {
+          requiresAuth: true,
+          title: '节点详情',
+          roles: ['admin']
+        }
+      },
+      {
+        path: 'nodes/:id/edit',
+        name: 'NodeEdit',
+        component: NodeForm,
+        meta: {
+          requiresAuth: true,
+          title: '编辑节点',
+          roles: ['admin']
+        }
+      },
+      {
+        path: 'node-groups',
+        name: 'AdminNodeGroups',
+        component: AdminNodeGroups,
+        meta: {
+          requiresAuth: true,
+          title: '节点分组',
+          roles: ['admin']
+        }
+      },
+      {
+        path: 'node-dashboard',
+        name: 'NodeDashboard',
+        component: NodeDashboard,
+        meta: {
+          requiresAuth: true,
+          title: '节点集群概览',
+          roles: ['admin']
+        }
+      },
+      {
+        path: 'node-map',
+        name: 'NodeMap',
+        component: NodeMap,
+        meta: {
+          requiresAuth: true,
+          title: '节点地理分布',
+          roles: ['admin']
+        }
+      },
+      {
+        path: 'node-comparison',
+        name: 'NodeComparison',
+        component: NodeComparison,
+        meta: {
+          requiresAuth: true,
+          title: '节点性能对比',
           roles: ['admin']
         }
       }
@@ -353,13 +442,19 @@ router.beforeEach((to, from, next) => {
   
   // 已登录用户访问登录/注册页面
   if (to.meta.guest && isAuthenticated) {
-    next('/')
+    // 根据角色跳转到对应的仪表盘
+    if (userRole === 'admin') {
+      next('/admin/dashboard')
+    } else {
+      next('/user/dashboard')
+    }
     return
   }
   
   // 角色权限检查
   if (to.meta.roles && !to.meta.roles.includes(userRole)) {
-    next({ name: 'Dashboard' })
+    // 非管理员访问管理后台，跳转到用户门户
+    next('/user/dashboard')
     return
   }
   

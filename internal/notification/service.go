@@ -15,11 +15,12 @@ import (
 type NotificationType string
 
 const (
-	NotificationNewDevice       NotificationType = "new_device"
-	NotificationIPLimitReached  NotificationType = "ip_limit_reached"
-	NotificationSuspiciousIP    NotificationType = "suspicious_ip"
-	NotificationDeviceKicked    NotificationType = "device_kicked"
-	NotificationAutoBlacklisted NotificationType = "auto_blacklisted"
+	NotificationNewDevice         NotificationType = "new_device"
+	NotificationIPLimitReached    NotificationType = "ip_limit_reached"
+	NotificationSuspiciousIP      NotificationType = "suspicious_ip"
+	NotificationDeviceKicked      NotificationType = "device_kicked"
+	NotificationAutoBlacklisted   NotificationType = "auto_blacklisted"
+	NotificationNodeStatusChange  NotificationType = "node_status_change"
 )
 
 // NotificationChannel represents the notification channel
@@ -61,6 +62,16 @@ type IPNotificationData struct {
 	CurrentCount int
 	MaxCount     int
 	Timestamp    time.Time
+}
+
+// NodeStatusChangeData contains data for node status change notifications
+type NodeStatusChangeData struct {
+	NodeID    int64
+	NodeName  string
+	OldStatus string
+	NewStatus string
+	Reason    string
+	Timestamp time.Time
 }
 
 // Service handles sending notifications
@@ -177,6 +188,43 @@ func (s *Service) NotifyAutoBlacklisted(data IPNotificationData) error {
 		data.IP,
 		data.Country,
 		data.City,
+		data.Reason,
+		data.Timestamp.Format("2006-01-02 15:04:05"),
+	)
+
+	return s.sendToAdmin(subject, message)
+}
+
+// NotifyNodeStatusChange sends notification when a node status changes
+func (s *Service) NotifyNodeStatusChange(data NodeStatusChangeData) error {
+	if !s.isEnabled(NotificationNodeStatusChange) {
+		return nil
+	}
+
+	var emoji string
+	var statusText string
+	switch data.NewStatus {
+	case "online":
+		emoji = "✅"
+		statusText = "恢复正常"
+	case "unhealthy":
+		emoji = "⚠️"
+		statusText = "不健康"
+	case "offline":
+		emoji = "❌"
+		statusText = "离线"
+	default:
+		emoji = "ℹ️"
+		statusText = data.NewStatus
+	}
+
+	subject := fmt.Sprintf("%s 节点状态变更: %s", emoji, data.NodeName)
+	message := fmt.Sprintf(
+		"节点状态已变更\n\n节点ID: %d\n节点名称: %s\n原状态: %s\n新状态: %s\n原因: %s\n时间: %s",
+		data.NodeID,
+		data.NodeName,
+		data.OldStatus,
+		statusText,
 		data.Reason,
 		data.Timestamp.Format("2006-01-02 15:04:05"),
 	)

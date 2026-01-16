@@ -816,3 +816,172 @@ const (
 
 // BalanceTxTypeGiftCard is the transaction type for gift card redemption
 const BalanceTxTypeGiftCard = "gift_card"
+
+
+// ============================================
+// Multi-Server Management Models
+// ============================================
+
+// Node represents a remote Xray node server.
+type Node struct {
+	ID           int64      `json:"id" gorm:"primaryKey"`
+	Name         string     `json:"name" gorm:"size:128;not null"`
+	Address      string     `json:"address" gorm:"size:256;not null"` // IP or domain
+	Port         int        `json:"port" gorm:"default:8443"`         // Agent port
+	Token        string     `json:"-" gorm:"size:64;uniqueIndex"`     // Authentication token
+	Status       string     `json:"status" gorm:"size:32;default:offline;index"` // online, offline, unhealthy
+	Tags         string     `json:"tags" gorm:"type:text"`            // JSON array
+	Region       string     `json:"region" gorm:"size:64;index"`
+	Weight       int        `json:"weight" gorm:"default:1"`          // Load balancing weight
+	MaxUsers     int        `json:"max_users" gorm:"default:0"`       // 0 = unlimited
+	CurrentUsers int        `json:"current_users" gorm:"default:0"`
+	Latency      int        `json:"latency" gorm:"default:0"`         // milliseconds
+	LastSeenAt   *time.Time `json:"last_seen_at"`
+	SyncStatus   string     `json:"sync_status" gorm:"size:32;default:pending"` // synced, pending, failed
+	SyncedAt     *time.Time `json:"synced_at"`
+	IPWhitelist  string     `json:"ip_whitelist" gorm:"type:text"`    // JSON array of allowed IPs
+	CreatedAt    time.Time  `json:"created_at"`
+	UpdatedAt    time.Time  `json:"updated_at"`
+}
+
+// TableName returns the table name for Node.
+func (Node) TableName() string {
+	return "nodes"
+}
+
+// NodeStatus constants
+const (
+	NodeStatusOnline    = "online"
+	NodeStatusOffline   = "offline"
+	NodeStatusUnhealthy = "unhealthy"
+)
+
+// NodeSyncStatus constants
+const (
+	NodeSyncStatusSynced  = "synced"
+	NodeSyncStatusPending = "pending"
+	NodeSyncStatusFailed  = "failed"
+)
+
+
+// NodeGroup represents a group of nodes for organization and load balancing.
+type NodeGroup struct {
+	ID          int64     `json:"id" gorm:"primaryKey"`
+	Name        string    `json:"name" gorm:"size:64;not null"`
+	Description string    `json:"description" gorm:"size:256"`
+	Region      string    `json:"region" gorm:"size:64"`
+	Strategy    string    `json:"strategy" gorm:"size:32;default:round-robin"` // Load balancing strategy
+	CreatedAt   time.Time `json:"created_at"`
+	UpdatedAt   time.Time `json:"updated_at"`
+}
+
+// TableName returns the table name for NodeGroup.
+func (NodeGroup) TableName() string {
+	return "node_groups"
+}
+
+// NodeGroupMember represents the many-to-many relationship between nodes and groups.
+type NodeGroupMember struct {
+	ID        int64     `json:"id" gorm:"primaryKey"`
+	NodeID    int64     `json:"node_id" gorm:"uniqueIndex:idx_node_group_member,priority:1;not null"`
+	GroupID   int64     `json:"group_id" gorm:"uniqueIndex:idx_node_group_member,priority:2;index;not null"`
+	CreatedAt time.Time `json:"created_at"`
+
+	Node  *Node      `json:"node,omitempty" gorm:"foreignKey:NodeID"`
+	Group *NodeGroup `json:"group,omitempty" gorm:"foreignKey:GroupID"`
+}
+
+// TableName returns the table name for NodeGroupMember.
+func (NodeGroupMember) TableName() string {
+	return "node_group_members"
+}
+
+// LoadBalanceStrategy constants
+const (
+	StrategyRoundRobin       = "round-robin"
+	StrategyLeastConnections = "least-connections"
+	StrategyWeighted         = "weighted"
+	StrategyGeographic       = "geographic"
+)
+
+
+// HealthCheck represents a health check record for a node.
+type HealthCheck struct {
+	ID        int64     `json:"id" gorm:"primaryKey"`
+	NodeID    int64     `json:"node_id" gorm:"index;not null"`
+	Status    string    `json:"status" gorm:"size:32"` // success, failed
+	Latency   int       `json:"latency"`               // milliseconds
+	Message   string    `json:"message" gorm:"size:512"`
+	TCPOk     bool      `json:"tcp_ok" gorm:"default:false"`
+	APIOk     bool      `json:"api_ok" gorm:"default:false"`
+	XrayOk    bool      `json:"xray_ok" gorm:"default:false"`
+	CheckedAt time.Time `json:"checked_at" gorm:"index"`
+
+	Node *Node `json:"node,omitempty" gorm:"foreignKey:NodeID"`
+}
+
+// TableName returns the table name for HealthCheck.
+func (HealthCheck) TableName() string {
+	return "health_checks"
+}
+
+// HealthCheckStatus constants
+const (
+	HealthCheckStatusSuccess = "success"
+	HealthCheckStatusFailed  = "failed"
+)
+
+
+// UserNodeAssignment represents the assignment of a user to a specific node.
+type UserNodeAssignment struct {
+	ID         int64     `json:"id" gorm:"primaryKey"`
+	UserID     int64     `json:"user_id" gorm:"uniqueIndex;not null"`
+	NodeID     int64     `json:"node_id" gorm:"index;not null"`
+	AssignedAt time.Time `json:"assigned_at"`
+	UpdatedAt  time.Time `json:"updated_at"`
+
+	User *User `json:"user,omitempty" gorm:"foreignKey:UserID"`
+	Node *Node `json:"node,omitempty" gorm:"foreignKey:NodeID"`
+}
+
+// TableName returns the table name for UserNodeAssignment.
+func (UserNodeAssignment) TableName() string {
+	return "user_node_assignments"
+}
+
+
+// NodeTraffic represents traffic statistics for a node.
+type NodeTraffic struct {
+	ID         int64     `json:"id" gorm:"primaryKey"`
+	NodeID     int64     `json:"node_id" gorm:"index;not null"`
+	UserID     int64     `json:"user_id" gorm:"index;not null"`
+	ProxyID    *int64    `json:"proxy_id" gorm:"index"`
+	Upload     int64     `json:"upload" gorm:"default:0"`   // bytes
+	Download   int64     `json:"download" gorm:"default:0"` // bytes
+	RecordedAt time.Time `json:"recorded_at" gorm:"index"`
+
+	Node  *Node  `json:"node,omitempty" gorm:"foreignKey:NodeID"`
+	User  *User  `json:"user,omitempty" gorm:"foreignKey:UserID"`
+	Proxy *Proxy `json:"proxy,omitempty" gorm:"foreignKey:ProxyID"`
+}
+
+// TableName returns the table name for NodeTraffic.
+func (NodeTraffic) TableName() string {
+	return "node_traffic"
+}
+
+
+// NodeAuthFailure represents authentication failure records for rate limiting.
+type NodeAuthFailure struct {
+	ID           int64      `json:"id" gorm:"primaryKey"`
+	IP           string     `json:"ip" gorm:"size:45;index;not null"`
+	Attempts     int        `json:"attempts" gorm:"default:1"`
+	BlockedUntil *time.Time `json:"blocked_until"`
+	CreatedAt    time.Time  `json:"created_at"`
+	UpdatedAt    time.Time  `json:"updated_at"`
+}
+
+// TableName returns the table name for NodeAuthFailure.
+func (NodeAuthFailure) TableName() string {
+	return "node_auth_failures"
+}
