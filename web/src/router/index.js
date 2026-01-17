@@ -62,10 +62,20 @@ const NodeComparison = () => import(/* webpackChunkName: "node-admin" */ '../vie
 const NotFound = () => import(/* webpackChunkName: "error" */ '../views/NotFound.vue')
 
 const routes = [
-  // 根路径重定向到用户门户
+  // 根路径 - 由路由守卫根据登录状态和角色智能跳转
   {
     path: '/',
-    redirect: '/user/dashboard'
+    name: 'Home',
+    redirect: () => {
+      // 这个重定向作为后备，实际跳转逻辑在路由守卫中处理
+      const isAuthenticated = localStorage.getItem('token')
+      const userRole = localStorage.getItem('userRole') || 'user'
+      
+      if (isAuthenticated && userRole === 'admin') {
+        return '/admin/dashboard'
+      }
+      return '/user/login'
+    }
   },
   
   // 用户前台路由
@@ -420,14 +430,32 @@ const router = createRouter({
 
 // 全局前置守卫
 router.beforeEach((to, from, next) => {
+  const isAuthenticated = localStorage.getItem('token')
+  const isUserAuthenticated = localStorage.getItem('userToken')
+  const userRole = localStorage.getItem('userRole') || 'user'
+  
+  // 处理根路径 - 根据登录状态和角色智能跳转
+  if (to.path === '/') {
+    if (isAuthenticated && userRole === 'admin') {
+      // admin 用户跳转到管理后台
+      next('/admin/dashboard')
+      return
+    } else if (isUserAuthenticated) {
+      // 普通用户跳转到用户门户
+      next('/user/dashboard')
+      return
+    } else {
+      // 未登录用户跳转到用户登录页
+      next('/user/login')
+      return
+    }
+  }
+  
   // 用户前台路由使用专门的守卫
   if (to.path.startsWith('/user')) {
     userRouteGuard(to, from, next)
     return
   }
-  
-  const isAuthenticated = localStorage.getItem('token')
-  const userRole = localStorage.getItem('userRole') || 'user'
   
   // 更新页面标题
   if (to.meta.title) {

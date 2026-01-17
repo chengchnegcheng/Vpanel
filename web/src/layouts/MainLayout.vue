@@ -14,17 +14,17 @@
         :collapse="isCollapse"
         router
       >
-        <el-menu-item index="/">
+        <el-menu-item index="/admin/dashboard">
           <el-icon><Monitor /></el-icon>
           <span>仪表盘</span>
         </el-menu-item>
         
-        <el-menu-item index="/inbounds">
+        <el-menu-item index="/admin/inbounds">
           <el-icon><Connection /></el-icon>
           <span>代理服务</span>
         </el-menu-item>
         
-        <el-menu-item index="/subscription">
+        <el-menu-item index="/admin/subscriptions">
           <el-icon><Link /></el-icon>
           <span>订阅管理</span>
         </el-menu-item>
@@ -34,8 +34,8 @@
             <el-icon><User /></el-icon>
             <span>用户管理</span>
           </template>
-          <el-menu-item index="/users">用户列表</el-menu-item>
-          <el-menu-item index="/roles">角色管理</el-menu-item>
+          <el-menu-item index="/admin/users">用户列表</el-menu-item>
+          <el-menu-item index="/admin/roles">角色管理</el-menu-item>
         </el-sub-menu>
         
         <el-sub-menu index="monitor">
@@ -43,11 +43,11 @@
             <el-icon><DataAnalysis /></el-icon>
             <span>监控与统计</span>
           </template>
-          <el-menu-item index="/traffic-monitor">流量监控</el-menu-item>
-          <el-menu-item index="/stats">统计数据</el-menu-item>
+          <el-menu-item index="/admin/traffic-monitor">流量监控</el-menu-item>
+          <el-menu-item index="/admin/stats">统计数据</el-menu-item>
         </el-sub-menu>
         
-        <el-menu-item index="/certificates">
+        <el-menu-item index="/admin/certificates">
           <el-icon><Tools /></el-icon>
           <span>证书管理</span>
         </el-menu-item>
@@ -61,7 +61,20 @@
           <el-menu-item index="/admin/orders">订单管理</el-menu-item>
           <el-menu-item index="/admin/coupons">优惠券管理</el-menu-item>
           <el-menu-item index="/admin/gift-cards">礼品卡管理</el-menu-item>
+          <el-menu-item index="/admin/trials">试用管理</el-menu-item>
           <el-menu-item index="/admin/reports">财务报表</el-menu-item>
+        </el-sub-menu>
+
+        <el-sub-menu index="nodes" v-if="isAdmin">
+          <template #title>
+            <el-icon><Connection /></el-icon>
+            <span>节点管理</span>
+          </template>
+          <el-menu-item index="/admin/node-dashboard">集群概览</el-menu-item>
+          <el-menu-item index="/admin/nodes">节点列表</el-menu-item>
+          <el-menu-item index="/admin/node-groups">节点分组</el-menu-item>
+          <el-menu-item index="/admin/node-map">地理分布</el-menu-item>
+          <el-menu-item index="/admin/node-comparison">性能对比</el-menu-item>
         </el-sub-menu>
 
         <el-sub-menu index="settings">
@@ -69,8 +82,9 @@
             <el-icon><Setting /></el-icon>
             <span>系统设置</span>
           </template>
-          <el-menu-item index="/settings">配置管理</el-menu-item>
-          <el-menu-item index="/logs">日志管理</el-menu-item>
+          <el-menu-item index="/admin/settings">配置管理</el-menu-item>
+          <el-menu-item index="/admin/logs">日志管理</el-menu-item>
+          <el-menu-item index="/admin/ip-restriction">IP 限制</el-menu-item>
         </el-sub-menu>
       </el-menu>
     </div>
@@ -147,12 +161,12 @@ const toggleSidebar = () => {
 
 // 导航到个人资料页面
 const goToProfile = () => {
-  router.push('/profile')
+  router.push('/admin/profile')
 }
 
 // 导航到修改密码页面
 const goToChangePassword = () => {
-  router.push('/change-password')
+  router.push('/admin/change-password')
 }
 
 // 确认退出登录

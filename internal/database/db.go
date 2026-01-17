@@ -11,6 +11,7 @@ import (
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
 
+	"v/internal/database/migrations"
 	"v/internal/database/repository"
 )
 
@@ -143,7 +144,17 @@ func (d *Database) Close() error {
 
 // AutoMigrate runs database migrations.
 func (d *Database) AutoMigrate() error {
+	ctx := context.Background()
+	
+	// First, run SQL migrations
+	migrator := migrations.NewMigrator(d.db)
+	if err := migrator.Migrate(ctx); err != nil {
+		return fmt.Errorf("failed to run SQL migrations: %w", err)
+	}
+	
+	// Then, run GORM auto migrations for models
 	return d.db.AutoMigrate(
+		// Core models
 		&repository.User{},
 		&repository.Proxy{},
 		&repository.Traffic{},
@@ -153,6 +164,40 @@ func (d *Database) AutoMigrate() error {
 		&repository.Setting{},
 		&repository.Log{},
 		&repository.Subscription{},
+		// Portal models
+		&repository.Ticket{},
+		&repository.TicketMessage{},
+		&repository.Announcement{},
+		&repository.AnnouncementRead{},
+		&repository.HelpArticle{},
+		// Auth token models
+		&repository.PasswordResetToken{},
+		&repository.EmailVerificationToken{},
+		&repository.InviteCode{},
+		&repository.TwoFactorSecret{},
+		// Commercial System models
+		&repository.CommercialPlan{},
+		&repository.Order{},
+		&repository.BalanceTransaction{},
+		&repository.Coupon{},
+		&repository.CouponUsage{},
+		&repository.CommercialInviteCode{},
+		&repository.Referral{},
+		&repository.Commission{},
+		&repository.Invoice{},
+		&repository.Trial{},
+		&repository.PendingDowngrade{},
+		&repository.ExchangeRate{},
+		&repository.PlanPrice{},
+		&repository.SubscriptionPause{},
+		&repository.GiftCard{},
+		// Multi-Server Management models
+		&repository.Node{},
+		&repository.NodeGroup{},
+		&repository.NodeGroupMember{},
+		&repository.HealthCheck{},
+		&repository.UserNodeAssignment{},
+		&repository.NodeTraffic{},
 	)
 }
 

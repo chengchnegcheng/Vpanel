@@ -115,7 +115,11 @@ const api = axios.create({
 // 请求拦截器
 api.interceptors.request.use(
   config => {
-    const token = localStorage.getItem('token')
+    // 优先使用用户门户令牌，其次使用管理后台令牌
+    const userToken = localStorage.getItem('userToken')
+    const adminToken = localStorage.getItem('token')
+    const token = userToken || adminToken
+    
     if (token) {
       config.headers['Authorization'] = `Bearer ${token}`
     }
@@ -155,8 +159,16 @@ api.interceptors.response.use(
     
     // 处理特定状态码
     if (error.response?.status === 401) {
-      localStorage.removeItem('token')
-      router.push('/login')
+      // 根据当前路径决定清除哪个令牌和跳转到哪个登录页
+      const currentPath = window.location.pathname
+      if (currentPath.startsWith('/user')) {
+        localStorage.removeItem('userToken')
+        localStorage.removeItem('userInfo')
+        router.push('/user/login')
+      } else {
+        localStorage.removeItem('token')
+        router.push('/login')
+      }
     }
     
     // 显示错误消息

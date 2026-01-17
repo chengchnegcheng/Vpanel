@@ -231,12 +231,21 @@ func (h *PortalAuthHandler) GetProfile(c *gin.Context) {
 		return
 	}
 
+	// Determine user status
+	status := "active"
+	if !user.Enabled {
+		status = "disabled"
+	} else if user.IsExpired() {
+		status = "expired"
+	}
+
 	c.JSON(http.StatusOK, gin.H{
 		"id":                 user.ID,
 		"username":           user.Username,
 		"email":              user.Email,
 		"role":               user.Role,
 		"enabled":            user.Enabled,
+		"status":             status,
 		"traffic_limit":      user.TrafficLimit,
 		"traffic_used":       user.TrafficUsed,
 		"expires_at":         user.ExpiresAt,
