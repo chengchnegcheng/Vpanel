@@ -39,9 +39,12 @@ type TransactionResponse struct {
 
 // GetBalance returns the current user's balance.
 func (h *BalanceHandler) GetBalance(c *gin.Context) {
-	userID, exists := c.Get("userID")
+	userID, exists := c.Get("user_id")
 	if !exists {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
+		c.JSON(http.StatusUnauthorized, gin.H{
+			"code":    "UNAUTHORIZED",
+			"message": "Authentication required",
+		})
 		return
 	}
 
@@ -58,9 +61,12 @@ func (h *BalanceHandler) GetBalance(c *gin.Context) {
 
 // GetTransactions returns the current user's transaction history.
 func (h *BalanceHandler) GetTransactions(c *gin.Context) {
-	userID, exists := c.Get("userID")
+	userID, exists := c.Get("user_id")
 	if !exists {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
+		c.JSON(http.StatusUnauthorized, gin.H{
+			"code":    "UNAUTHORIZED",
+			"message": "Authentication required",
+		})
 		return
 	}
 
@@ -94,26 +100,45 @@ func (h *BalanceHandler) GetTransactions(c *gin.Context) {
 // AdjustBalance adjusts a user's balance (admin only).
 func (h *BalanceHandler) AdjustBalance(c *gin.Context) {
 	var req struct {
-		UserID int64  `json:"user_id" binding:"required"`
+		UserID int64  `json:"user_id" binding:"required,gt=0"`
 		Amount int64  `json:"amount" binding:"required"`
-		Reason string `json:"reason" binding:"required"`
+		Reason string `json:"reason" binding:"required,min=1"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request body"})
+		c.JSON(http.StatusBadRequest, gin.H{
+			"code":    "VALIDATION_ERROR",
+			"message": "Invalid request body",
+		})
 		return
 	}
 
+	// Get operator info from context
 	operator, _ := c.Get("username")
+	operatorID, _ := c.Get("user_id")
 	operatorStr := ""
 	if operator != nil {
 		operatorStr = operator.(string)
 	}
 
+	// Log the adjustment operation
+	h.logger.Info("Balance adjustment requested",
+		logger.F("target_user_id", req.UserID),
+		logger.F("operator", operatorStr),
+		logger.F("operator_id", operatorID),
+		logger.F("amount", req.Amount),
+		logger.F("reason", req.Reason))
+
 	if err := h.balanceService.Adjust(c.Request.Context(), req.UserID, req.Amount, req.Reason, operatorStr); err != nil {
-		h.logger.Error("Failed to adjust balance", logger.Err(err))
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		h.logger.Error("Failed to adjust balance", 
+			logger.Err(err),
+			logger.F("target_user_id", req.UserID),
+			logger.F("operator", operatorStr))
+		c.JSON(http.StatusBadRequest, gin.H{
+			"code":    "BALANCE_ERROR",
+			"message": "Failed to adjust balance",
+		})
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"message": "Balance adjusted"})
+	c.JSON(http.StatusOK, gin.H{"message": "Balance adjusted successfully"})
 }

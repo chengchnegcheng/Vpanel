@@ -1,5 +1,5 @@
 <template>
-  <div class="app-container">
+  <div class="app-container" :class="{ 'dark-mode': isDark }">
     <!-- 侧边栏 -->
     <div class="sidebar">
       <div class="logo">
@@ -103,6 +103,9 @@
           </el-icon>
         </div>
         <div class="header-right">
+          <el-button circle @click="toggleTheme" class="theme-toggle-btn" title="切换主题">
+            <el-icon><Sunny v-if="isDark" /><Moon v-else /></el-icon>
+          </el-button>
           <div class="user-info">
             <el-avatar size="small" class="user-avatar">{{ username.charAt(0).toUpperCase() }}</el-avatar>
             <span class="username">{{ username }}</span>
@@ -136,13 +139,17 @@ import {
   Expand,
   ArrowDown,
   Link,
-  ShoppingCart
+  ShoppingCart,
+  Sunny,
+  Moon
 } from '@element-plus/icons-vue'
 import { useUserStore } from '@/stores/user'
+import { useTheme } from '@/composables/useTheme'
 
 const router = useRouter()
 const route = useRoute()
 const userStore = useUserStore()
+const { isDark, toggleDarkMode } = useTheme()
 
 const isCollapse = ref(false)
 const username = computed(() => userStore.user?.username || '管理员')
@@ -157,6 +164,11 @@ const isAdmin = computed(() => {
 // 切换侧边栏
 const toggleSidebar = () => {
   isCollapse.value = !isCollapse.value
+}
+
+// 切换主题
+const toggleTheme = () => {
+  toggleDarkMode()
 }
 
 // 导航到个人资料页面
@@ -177,7 +189,7 @@ const confirmLogout = () => {
     type: 'warning'
   }).then(() => {
     userStore.logout()
-    router.push('/login')
+    router.push('/user/login')
   }).catch(() => {})
 }
 </script>
@@ -373,6 +385,16 @@ const confirmLogout = () => {
   padding: 0 5px;
 }
 
+.theme-toggle-btn {
+  margin-right: 15px;
+  border: none;
+  background-color: transparent;
+}
+
+.theme-toggle-btn:hover {
+  background-color: #f5f7fa;
+}
+
 .user-avatar {
   background-color: #1890ff !important;
   color: white !important;
@@ -401,5 +423,136 @@ const confirmLogout = () => {
 .logout-btn:hover {
   color: #f56c6c;
   opacity: 0.8;
+}
+
+/* 深色模式样式 */
+.app-container.dark-mode {
+  background-color: #1a1a1a;
+}
+
+.dark-mode .sidebar {
+  background-color: #242424;
+  box-shadow: 0 0 10px rgba(0, 0, 0, 0.5);
+}
+
+.dark-mode .logo {
+  background-color: #1a1a1a;
+  border-bottom-color: rgba(255, 255, 255, 0.1);
+}
+
+.dark-mode .logo h1 {
+  color: #e5eaf3;
+}
+
+.dark-mode .sidebar-menu {
+  background-color: #242424;
+}
+
+.dark-mode :deep(.el-menu) {
+  background-color: #242424;
+}
+
+.dark-mode :deep(.el-menu-item) {
+  background-color: #242424;
+  color: #cfd3dc;
+}
+
+.dark-mode :deep(.el-menu-item:hover) {
+  background-color: #1f1f1f !important;
+  color: #409eff;
+}
+
+.dark-mode :deep(.el-menu-item.is-active) {
+  background-color: #1890ff !important;
+  color: white !important;
+}
+
+.dark-mode :deep(.el-sub-menu__title) {
+  background-color: #242424;
+  color: #cfd3dc;
+}
+
+.dark-mode :deep(.el-sub-menu__title:hover) {
+  background-color: #1f1f1f !important;
+  color: #409eff;
+}
+
+.dark-mode :deep(.el-sub-menu .el-menu-item) {
+  background-color: #1a1a1a;
+  color: #a3a6ad;
+}
+
+.dark-mode :deep(.el-sub-menu .el-menu-item:hover) {
+  background-color: #1f1f1f !important;
+  color: #409eff;
+}
+
+.dark-mode .header {
+  background-color: #242424;
+  border-bottom-color: #303030;
+}
+
+.dark-mode .collapse-btn {
+  color: #cfd3dc;
+}
+
+.dark-mode .collapse-btn:hover {
+  color: #409eff;
+}
+
+.dark-mode .dropdown-link {
+  color: #e5eaf3;
+}
+
+.dark-mode .dropdown-link:hover {
+  background-color: #1f1f1f;
+  border-color: #303030;
+}
+
+.dark-mode .username {
+  color: #e5eaf3;
+}
+
+.dark-mode .user-action-btn {
+  color: #a3a6ad;
+}
+
+.dark-mode .user-action-btn:hover {
+  color: #409eff;
+}
+
+.dark-mode .logout-btn {
+  color: #f56c6c;
+}
+
+.dark-mode .content {
+  background-color: #1a1a1a;
+}
+
+.dark-mode .theme-toggle-btn {
+  color: #cfd3dc;
+}
+
+.dark-mode .theme-toggle-btn:hover {
+  background-color: #1f1f1f;
+  color: #409eff;
+}
+
+.dark-mode :deep(.el-dropdown-menu) {
+  background-color: #242424;
+  border-color: #303030;
+}
+
+.dark-mode :deep(.el-dropdown-menu__item) {
+  color: #cfd3dc;
+}
+
+.dark-mode :deep(.el-dropdown-menu__item:not(.is-disabled):hover) {
+  background-color: #1f1f1f;
+  color: #409eff;
+}
+
+.dark-mode :deep(.el-dropdown-menu__item--divided) {
+  border-top-color: #303030;
 }
 </style> 

@@ -33,15 +33,74 @@ func NewIPRestrictionHandler(log logger.Logger, ipService *ip.Service) *IPRestri
 func (h *IPRestrictionHandler) GetStats(c *gin.Context) {
 	ctx := c.Request.Context()
 
+	// Check if IP service is available
+	if h.ipService == nil {
+		h.logger.Error("IP service is not available")
+		c.JSON(http.StatusServiceUnavailable, gin.H{
+			"code":    503,
+			"message": "IP restriction service is not available",
+			"error":   "Service initialization failed",
+		})
+		return
+	}
+
+	// Additional safety check for tracker
+	tracker := h.ipService.Tracker()
+	if tracker == nil {
+		h.logger.Error("IP tracker is not available")
+		c.JSON(http.StatusServiceUnavailable, gin.H{
+			"code":    503,
+			"message": "IP restriction service is not available",
+			"error":   "Tracker initialization failed",
+		})
+		return
+	}
+
 	// Get global statistics
 	var totalActiveIPs int64
 	var totalBlacklisted int64
 	var totalWhitelisted int64
 
-	db := h.ipService.Tracker().GetDB()
-	db.WithContext(ctx).Model(&ip.ActiveIP{}).Count(&totalActiveIPs)
-	db.WithContext(ctx).Model(&ip.IPBlacklist{}).Count(&totalBlacklisted)
-	db.WithContext(ctx).Model(&ip.IPWhitelist{}).Count(&totalWhitelisted)
+	db := tracker.GetDB()
+	if db == nil {
+		h.logger.Error("Database connection is not available")
+		c.JSON(http.StatusServiceUnavailable, gin.H{
+			"code":    503,
+			"message": "Database service is not available",
+			"error":   "Database connection failed",
+		})
+		return
+	}
+
+	if err := db.WithContext(ctx).Model(&ip.ActiveIP{}).Count(&totalActiveIPs).Error; err != nil {
+		h.logger.Error("Failed to count active IPs", logger.Err(err))
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"code":    500,
+			"message": "Failed to retrieve IP statistics",
+			"error":   "Database query failed",
+		})
+		return
+	}
+	
+	if err := db.WithContext(ctx).Model(&ip.IPBlacklist{}).Count(&totalBlacklisted).Error; err != nil {
+		h.logger.Error("Failed to count blacklisted IPs", logger.Err(err))
+		// Don't return error, just log it and continue with 0
+		totalBlacklisted = 0
+	}
+	
+	if err := db.WithContext(ctx).Model(&ip.IPWhitelist{}).Count(&totalWhitelisted).Error; err != nil {
+		h.logger.Error("Failed to count whitelisted IPs", logger.Err(err))
+		// Don't return error, just log it and continue with 0
+		totalWhitelisted = 0
+	}
+
+	// Count unique active users
+	var activeUsers int64
+	if err := db.WithContext(ctx).Model(&ip.ActiveIP{}).Distinct("user_id").Count(&activeUsers).Error; err != nil {
+		h.logger.Error("Failed to count active users", logger.Err(err))
+		// Don't return error, just log it and continue with 0
+		activeUsers = 0
+	}
 
 	c.JSON(http.StatusOK, gin.H{
 		"code":    200,
@@ -50,14 +109,82 @@ func (h *IPRestrictionHandler) GetStats(c *gin.Context) {
 			"total_active_ips":   totalActiveIPs,
 			"total_blacklisted":  totalBlacklisted,
 			"total_whitelisted":  totalWhitelisted,
+			"active_users":       activeUsers,
+			"blocked_today":      0, // TODO: 实现今日拦截统计
+			"suspicious_count":   0, // TODO: 实现可疑活动统计
+			"country_stats":      []interface{}{}, // TODO: 实现国家统计
 			"settings":           h.ipService.GetSettings(),
 		},
+	})
+}
+
+// GetAllOnlineIPs returns all online IPs across all users (admin only).
+// GET /api/admin/ip-restrictions/online
+func (h *IPRestrictionHandler) GetAllOnlineIPs(c *gin.Context) {
+	if h.ipService == nil {
+		h.logger.Error("IP service is not available")
+		c.JSON(http.StatusServiceUnavailable, gin.H{
+			"code":    503,
+			"message": "IP restriction service is not available",
+			"error":   "Service initialization failed",
+		})
+		return
+	}
+	
+	ctx := c.Request.Context()
+	
+	// Get all active IPs from database
+	tracker := h.ipService.Tracker()
+	if tracker == nil {
+		h.logger.Error("IP tracker is not available")
+		c.JSON(http.StatusServiceUnavailable, gin.H{
+			"code":    503,
+			"message": "IP tracker is not available",
+		})
+		return
+	}
+	
+	db := tracker.GetDB()
+	if db == nil {
+		h.logger.Error("Database connection is not available")
+		c.JSON(http.StatusServiceUnavailable, gin.H{
+			"code":    503,
+			"message": "Database service is not available",
+		})
+		return
+	}
+	
+	var activeIPs []ip.ActiveIP
+	if err := db.WithContext(ctx).Find(&activeIPs).Error; err != nil {
+		h.logger.Error("Failed to get active IPs", logger.Err(err))
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"code":    500,
+			"message": "Failed to retrieve online IPs",
+			"error":   "Database query failed",
+		})
+		return
+	}
+	
+	c.JSON(http.StatusOK, gin.H{
+		"code":    200,
+		"message": "success",
+		"data":    activeIPs,
 	})
 }
 
 // GetUserOnlineIPs returns online IPs for a specific user.
 // GET /api/admin/users/:id/online-ips
 func (h *IPRestrictionHandler) GetUserOnlineIPs(c *gin.Context) {
+	if h.ipService == nil {
+		h.logger.Error("IP service is not available")
+		c.JSON(http.StatusServiceUnavailable, gin.H{
+			"code":    503,
+			"message": "IP restriction service is not available",
+			"error":   "Service initialization failed",
+		})
+		return
+	}
+	
 	ctx := c.Request.Context()
 
 	userID, err := strconv.ParseUint(c.Param("id"), 10, 64)
@@ -90,6 +217,16 @@ type KickIPRequest struct {
 // KickUserIP kicks a specific IP for a user.
 // POST /api/admin/users/:id/kick-ip
 func (h *IPRestrictionHandler) KickUserIP(c *gin.Context) {
+	if h.ipService == nil {
+		h.logger.Error("IP service is not available")
+		c.JSON(http.StatusServiceUnavailable, gin.H{
+			"code":    503,
+			"message": "IP restriction service is not available",
+			"error":   "Service initialization failed",
+		})
+		return
+	}
+	
 	ctx := c.Request.Context()
 
 	userID, err := strconv.ParseUint(c.Param("id"), 10, 64)
@@ -133,6 +270,16 @@ type WhitelistEntry struct {
 // GetWhitelist returns the IP whitelist.
 // GET /api/admin/ip-whitelist
 func (h *IPRestrictionHandler) GetWhitelist(c *gin.Context) {
+	if h.ipService == nil {
+		h.logger.Error("IP service is not available")
+		c.JSON(http.StatusServiceUnavailable, gin.H{
+			"code":    503,
+			"message": "IP restriction service is not available",
+			"error":   "Service initialization failed",
+		})
+		return
+	}
+	
 	ctx := c.Request.Context()
 
 	var userID *uint
@@ -169,6 +316,16 @@ type AddWhitelistRequest struct {
 // AddWhitelist adds an IP to the whitelist.
 // POST /api/admin/ip-whitelist
 func (h *IPRestrictionHandler) AddWhitelist(c *gin.Context) {
+	if h.ipService == nil {
+		h.logger.Error("IP service is not available")
+		c.JSON(http.StatusServiceUnavailable, gin.H{
+			"code":    503,
+			"message": "IP restriction service is not available",
+			"error":   "Service initialization failed",
+		})
+		return
+	}
+	
 	ctx := c.Request.Context()
 
 	var req AddWhitelistRequest
@@ -213,6 +370,16 @@ func (h *IPRestrictionHandler) AddWhitelist(c *gin.Context) {
 // DeleteWhitelist removes an IP from the whitelist.
 // DELETE /api/admin/ip-whitelist/:id
 func (h *IPRestrictionHandler) DeleteWhitelist(c *gin.Context) {
+	if h.ipService == nil {
+		h.logger.Error("IP service is not available")
+		c.JSON(http.StatusServiceUnavailable, gin.H{
+			"code":    503,
+			"message": "IP restriction service is not available",
+			"error":   "Service initialization failed",
+		})
+		return
+	}
+	
 	ctx := c.Request.Context()
 
 	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
@@ -245,6 +412,16 @@ type ImportWhitelistRequest struct {
 // ImportWhitelist imports multiple IPs to the whitelist.
 // POST /api/admin/ip-whitelist/import
 func (h *IPRestrictionHandler) ImportWhitelist(c *gin.Context) {
+	if h.ipService == nil {
+		h.logger.Error("IP service is not available")
+		c.JSON(http.StatusServiceUnavailable, gin.H{
+			"code":    503,
+			"message": "IP restriction service is not available",
+			"error":   "Service initialization failed",
+		})
+		return
+	}
+	
 	ctx := c.Request.Context()
 
 	var req ImportWhitelistRequest
@@ -278,6 +455,16 @@ func (h *IPRestrictionHandler) ImportWhitelist(c *gin.Context) {
 // GetBlacklist returns the IP blacklist.
 // GET /api/admin/ip-blacklist
 func (h *IPRestrictionHandler) GetBlacklist(c *gin.Context) {
+	if h.ipService == nil {
+		h.logger.Error("IP service is not available")
+		c.JSON(http.StatusServiceUnavailable, gin.H{
+			"code":    503,
+			"message": "IP restriction service is not available",
+			"error":   "Service initialization failed",
+		})
+		return
+	}
+	
 	ctx := c.Request.Context()
 
 	var userID *uint
@@ -315,6 +502,16 @@ type AddBlacklistRequest struct {
 // AddBlacklist adds an IP to the blacklist.
 // POST /api/admin/ip-blacklist
 func (h *IPRestrictionHandler) AddBlacklist(c *gin.Context) {
+	if h.ipService == nil {
+		h.logger.Error("IP service is not available")
+		c.JSON(http.StatusServiceUnavailable, gin.H{
+			"code":    503,
+			"message": "IP restriction service is not available",
+			"error":   "Service initialization failed",
+		})
+		return
+	}
+	
 	ctx := c.Request.Context()
 
 	var req AddBlacklistRequest
@@ -367,6 +564,16 @@ func (h *IPRestrictionHandler) AddBlacklist(c *gin.Context) {
 // DeleteBlacklist removes an IP from the blacklist.
 // DELETE /api/admin/ip-blacklist/:id
 func (h *IPRestrictionHandler) DeleteBlacklist(c *gin.Context) {
+	if h.ipService == nil {
+		h.logger.Error("IP service is not available")
+		c.JSON(http.StatusServiceUnavailable, gin.H{
+			"code":    503,
+			"message": "IP restriction service is not available",
+			"error":   "Service initialization failed",
+		})
+		return
+	}
+	
 	ctx := c.Request.Context()
 
 	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
@@ -392,6 +599,16 @@ func (h *IPRestrictionHandler) DeleteBlacklist(c *gin.Context) {
 // GetIPRestrictionSettings returns IP restriction settings.
 // GET /api/admin/settings/ip-restriction
 func (h *IPRestrictionHandler) GetIPRestrictionSettings(c *gin.Context) {
+	if h.ipService == nil {
+		h.logger.Error("IP service is not available")
+		c.JSON(http.StatusServiceUnavailable, gin.H{
+			"code":    503,
+			"message": "IP restriction service is not available",
+			"error":   "Service initialization failed",
+		})
+		return
+	}
+	
 	settings := h.ipService.GetSettings()
 
 	c.JSON(http.StatusOK, gin.H{
@@ -404,6 +621,16 @@ func (h *IPRestrictionHandler) GetIPRestrictionSettings(c *gin.Context) {
 // UpdateIPRestrictionSettings updates IP restriction settings.
 // PUT /api/admin/settings/ip-restriction
 func (h *IPRestrictionHandler) UpdateIPRestrictionSettings(c *gin.Context) {
+	if h.ipService == nil {
+		h.logger.Error("IP service is not available")
+		c.JSON(http.StatusServiceUnavailable, gin.H{
+			"code":    503,
+			"message": "IP restriction service is not available",
+			"error":   "Service initialization failed",
+		})
+		return
+	}
+	
 	ctx := c.Request.Context()
 
 	var settings ip.IPRestrictionSettings
@@ -435,6 +662,16 @@ func (h *IPRestrictionHandler) UpdateIPRestrictionSettings(c *gin.Context) {
 // GetUserDevices returns the current user's online devices.
 // GET /api/user/devices
 func (h *IPRestrictionHandler) GetUserDevices(c *gin.Context) {
+	if h.ipService == nil {
+		h.logger.Error("IP service is not available")
+		c.JSON(http.StatusServiceUnavailable, gin.H{
+			"code":    503,
+			"message": "IP restriction service is not available",
+			"error":   "Service initialization failed",
+		})
+		return
+	}
+	
 	ctx := c.Request.Context()
 
 	userID := middleware.GetUserID(c)
@@ -476,6 +713,16 @@ type UserKickDeviceRequest struct {
 // KickUserDevice kicks a specific device for the current user.
 // POST /api/user/devices/:ip/kick
 func (h *IPRestrictionHandler) KickUserDevice(c *gin.Context) {
+	if h.ipService == nil {
+		h.logger.Error("IP service is not available")
+		c.JSON(http.StatusServiceUnavailable, gin.H{
+			"code":    503,
+			"message": "IP restriction service is not available",
+			"error":   "Service initialization failed",
+		})
+		return
+	}
+	
 	ctx := c.Request.Context()
 
 	userID := middleware.GetUserID(c)
@@ -512,6 +759,16 @@ func (h *IPRestrictionHandler) KickUserDevice(c *gin.Context) {
 // GetUserIPStats returns IP statistics for the current user.
 // GET /api/user/ip-stats
 func (h *IPRestrictionHandler) GetUserIPStats(c *gin.Context) {
+	if h.ipService == nil {
+		h.logger.Error("IP service is not available")
+		c.JSON(http.StatusServiceUnavailable, gin.H{
+			"code":    503,
+			"message": "IP restriction service is not available",
+			"error":   "Service initialization failed",
+		})
+		return
+	}
+	
 	ctx := c.Request.Context()
 
 	userID := middleware.GetUserID(c)
@@ -541,6 +798,16 @@ func (h *IPRestrictionHandler) GetUserIPStats(c *gin.Context) {
 // GetUserIPHistory returns IP history for the current user.
 // GET /api/user/ip-history
 func (h *IPRestrictionHandler) GetUserIPHistory(c *gin.Context) {
+	if h.ipService == nil {
+		h.logger.Error("IP service is not available")
+		c.JSON(http.StatusServiceUnavailable, gin.H{
+			"code":    503,
+			"message": "IP restriction service is not available",
+			"error":   "Service initialization failed",
+		})
+		return
+	}
+	
 	ctx := c.Request.Context()
 
 	userID := middleware.GetUserID(c)
@@ -576,6 +843,109 @@ func (h *IPRestrictionHandler) GetUserIPHistory(c *gin.Context) {
 		return
 	}
 
+	c.JSON(http.StatusOK, gin.H{
+		"code":    200,
+		"message": "success",
+		"data":    history,
+	})
+}
+
+// GetAllIPHistory returns IP history for all users (admin only).
+// GET /api/admin/ip-restrictions/history
+func (h *IPRestrictionHandler) GetAllIPHistory(c *gin.Context) {
+	if h.ipService == nil {
+		h.logger.Error("IP service is not available")
+		c.JSON(http.StatusServiceUnavailable, gin.H{
+			"code":    503,
+			"message": "IP restriction service is not available",
+			"error":   "Service initialization failed",
+		})
+		return
+	}
+	
+	ctx := c.Request.Context()
+	
+	// Parse query parameters
+	var userID *uint
+	if userIDStr := c.Query("user_id"); userIDStr != "" {
+		if id, err := strconv.ParseUint(userIDStr, 10, 64); err == nil {
+			uid := uint(id)
+			userID = &uid
+		}
+	}
+	
+	limit := 50
+	if limitStr := c.Query("limit"); limitStr != "" {
+		if l, err := strconv.Atoi(limitStr); err == nil && l > 0 {
+			limit = l
+		}
+	}
+
+	offset := 0
+	if offsetStr := c.Query("offset"); offsetStr != "" {
+		if o, err := strconv.Atoi(offsetStr); err == nil && o >= 0 {
+			offset = o
+		}
+	}
+	
+	tracker := h.ipService.Tracker()
+	if tracker == nil {
+		h.logger.Error("IP tracker is not available")
+		c.JSON(http.StatusServiceUnavailable, gin.H{
+			"code":    503,
+			"message": "IP tracker is not available",
+		})
+		return
+	}
+	
+	// If user_id is specified, get history for that user
+	if userID != nil {
+		filter := &ip.IPHistoryFilter{
+			Limit:  limit,
+			Offset: offset,
+		}
+		
+		history, err := tracker.GetIPHistory(ctx, *userID, filter)
+		if err != nil {
+			h.logger.Error("Failed to get IP history", logger.Err(err), logger.F("user_id", *userID))
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"code":    500,
+				"message": "Failed to retrieve IP history",
+				"error":   "Database query failed",
+			})
+			return
+		}
+		
+		c.JSON(http.StatusOK, gin.H{
+			"code":    200,
+			"message": "success",
+			"data":    history,
+		})
+		return
+	}
+	
+	// Otherwise, return all IP history (this might be expensive, so we limit it)
+	db := tracker.GetDB()
+	if db == nil {
+		h.logger.Error("Database connection is not available")
+		c.JSON(http.StatusServiceUnavailable, gin.H{
+			"code":    503,
+			"message": "Database service is not available",
+		})
+		return
+	}
+	
+	var history []ip.IPHistory
+	if err := db.WithContext(ctx).Limit(limit).Offset(offset).Order("created_at DESC").Find(&history).Error; err != nil {
+		h.logger.Error("Failed to get all IP history", logger.Err(err))
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"code":    500,
+			"message": "Failed to retrieve IP history",
+			"error":   "Database query failed",
+		})
+		return
+	}
+	
 	c.JSON(http.StatusOK, gin.H{
 		"code":    200,
 		"message": "success",

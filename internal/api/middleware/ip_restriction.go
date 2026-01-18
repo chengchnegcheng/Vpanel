@@ -86,7 +86,11 @@ func (m *IPRestrictionMiddleware) CheckIPRestriction(getUserMaxIPs func(userID i
 				logger.F("error", err),
 				logger.F("user_id", userID),
 				logger.F("ip", clientIP))
-			c.Next() // Allow on error to avoid blocking legitimate users
+			// Fail closed: deny access on error for security
+			c.AbortWithStatusJSON(http.StatusServiceUnavailable, gin.H{
+				"code":    "SERVICE_UNAVAILABLE",
+				"message": "IP restriction service temporarily unavailable",
+			})
 			return
 		}
 
@@ -163,7 +167,11 @@ func (m *IPRestrictionMiddleware) CheckSubscriptionIPRestriction(getSubscription
 				logger.F("error", err),
 				logger.F("subscription_id", subID),
 				logger.F("ip", clientIP))
-			c.Next()
+			// Fail closed: deny access on error for security
+			c.AbortWithStatusJSON(http.StatusServiceUnavailable, gin.H{
+				"code":    "SERVICE_UNAVAILABLE",
+				"message": "IP restriction service temporarily unavailable",
+			})
 			return
 		}
 

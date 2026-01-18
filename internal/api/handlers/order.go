@@ -46,22 +46,28 @@ type OrderResponse struct {
 
 // CreateOrderRequest represents a request to create an order.
 type CreateOrderRequest struct {
-	PlanID     int64  `json:"plan_id" binding:"required"`
+	PlanID     int64  `json:"plan_id" binding:"required,gt=0"`
 	CouponCode string `json:"coupon_code"`
 }
 
 
 // CreateOrder creates a new order.
 func (h *OrderHandler) CreateOrder(c *gin.Context) {
-	userID, exists := c.Get("userID")
+	userID, exists := c.Get("user_id")
 	if !exists {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
+		c.JSON(http.StatusUnauthorized, gin.H{
+			"code":    "UNAUTHORIZED",
+			"message": "Authentication required",
+		})
 		return
 	}
 
 	var req CreateOrderRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request body"})
+		c.JSON(http.StatusBadRequest, gin.H{
+			"code":    "VALIDATION_ERROR",
+			"message": "Invalid request body",
+		})
 		return
 	}
 
@@ -74,7 +80,10 @@ func (h *OrderHandler) CreateOrder(c *gin.Context) {
 	o, err := h.orderService.Create(c.Request.Context(), createReq)
 	if err != nil {
 		h.logger.Error("Failed to create order", logger.Err(err))
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{
+			"code":    "ORDER_ERROR",
+			"message": "Failed to create order",
+		})
 		return
 	}
 
@@ -85,21 +94,30 @@ func (h *OrderHandler) CreateOrder(c *gin.Context) {
 func (h *OrderHandler) GetOrder(c *gin.Context) {
 	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid order ID"})
+		c.JSON(http.StatusBadRequest, gin.H{
+			"code":    "VALIDATION_ERROR",
+			"message": "Invalid order ID",
+		})
 		return
 	}
 
 	o, err := h.orderService.GetByID(c.Request.Context(), id)
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "Order not found"})
+		c.JSON(http.StatusNotFound, gin.H{
+			"code":    "NOT_FOUND",
+			"message": "Order not found",
+		})
 		return
 	}
 
 	// Check if user owns this order (unless admin)
-	userID, _ := c.Get("userID")
+	userID, _ := c.Get("user_id")
 	role, _ := c.Get("role")
 	if role != "admin" && o.UserID != userID.(int64) {
-		c.JSON(http.StatusForbidden, gin.H{"error": "Access denied"})
+		c.JSON(http.StatusForbidden, gin.H{
+			"code":    "FORBIDDEN",
+			"message": "Access denied",
+		})
 		return
 	}
 
@@ -108,9 +126,12 @@ func (h *OrderHandler) GetOrder(c *gin.Context) {
 
 // ListUserOrders returns orders for the current user.
 func (h *OrderHandler) ListUserOrders(c *gin.Context) {
-	userID, exists := c.Get("userID")
+	userID, exists := c.Get("user_id")
 	if !exists {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
+		c.JSON(http.StatusUnauthorized, gin.H{
+			"code":    "UNAUTHORIZED",
+			"message": "Authentication required",
+		})
 		return
 	}
 
@@ -143,14 +164,20 @@ func (h *OrderHandler) CancelOrder(c *gin.Context) {
 	// Verify ownership
 	o, err := h.orderService.GetByID(c.Request.Context(), id)
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "Order not found"})
+		c.JSON(http.StatusNotFound, gin.H{
+			"code":    "NOT_FOUND",
+			"message": "Order not found",
+		})
 		return
 	}
 
-	userID, _ := c.Get("userID")
+	userID, _ := c.Get("user_id")
 	role, _ := c.Get("role")
 	if role != "admin" && o.UserID != userID.(int64) {
-		c.JSON(http.StatusForbidden, gin.H{"error": "Access denied"})
+		c.JSON(http.StatusForbidden, gin.H{
+			"code":    "FORBIDDEN",
+			"message": "Access denied",
+		})
 		return
 	}
 

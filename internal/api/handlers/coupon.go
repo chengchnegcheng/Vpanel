@@ -47,27 +47,36 @@ type CouponResponse struct {
 // ValidateCouponRequest represents a request to validate a coupon.
 type ValidateCouponRequest struct {
 	Code   string `json:"code" binding:"required"`
-	PlanID int64  `json:"plan_id" binding:"required"`
-	Amount int64  `json:"amount" binding:"required"`
+	PlanID int64  `json:"plan_id" binding:"required,gt=0"`
+	Amount int64  `json:"amount" binding:"required,gt=0"`
 }
 
 // ValidateCoupon validates a coupon code.
 func (h *CouponHandler) ValidateCoupon(c *gin.Context) {
-	userID, exists := c.Get("userID")
+	userID, exists := c.Get("user_id")
 	if !exists {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
+		c.JSON(http.StatusUnauthorized, gin.H{
+			"code":    "UNAUTHORIZED",
+			"message": "Authentication required",
+		})
 		return
 	}
 
 	var req ValidateCouponRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request body"})
+		c.JSON(http.StatusBadRequest, gin.H{
+			"code":    "VALIDATION_ERROR",
+			"message": "Invalid request body",
+		})
 		return
 	}
 
 	cp, discount, err := h.couponService.Validate(c.Request.Context(), req.Code, userID.(int64), req.PlanID, req.Amount)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{
+			"code":    "COUPON_ERROR",
+			"message": "Coupon validation failed",
+		})
 		return
 	}
 
@@ -121,11 +130,25 @@ func (h *CouponHandler) CreateCoupon(c *gin.Context) {
 
 	startAt, err := time.Parse("2006-01-02 15:04:05", req.StartAt)
 	if err != nil {
-		startAt, _ = time.Parse("2006-01-02", req.StartAt)
+		startAt, err = time.Parse("2006-01-02", req.StartAt)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid start_at format. Use YYYY-MM-DD or YYYY-MM-DD HH:MM:SS"})
+			return
+		}
 	}
 	expireAt, err := time.Parse("2006-01-02 15:04:05", req.ExpireAt)
 	if err != nil {
-		expireAt, _ = time.Parse("2006-01-02", req.ExpireAt)
+		expireAt, err = time.Parse("2006-01-02", req.ExpireAt)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid expire_at format. Use YYYY-MM-DD or YYYY-MM-DD HH:MM:SS"})
+			return
+		}
+	}
+	
+	// Validate time range
+	if expireAt.Before(startAt) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "expire_at must be after start_at"})
+		return
 	}
 
 	createReq := &coupon.CreateCouponRequest{

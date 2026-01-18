@@ -81,7 +81,7 @@ export const giftCardsApi = {
      * 获取礼品卡统计（管理员）
      * @returns {Promise<Object>} 统计数据
      */
-    getStats: () => api.get('/admin/gift-cards/stats'),
+    getStats: () => api.get('/gift-cards/stats'),
 
     /**
      * 获取批次统计（管理员）

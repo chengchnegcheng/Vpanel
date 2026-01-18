@@ -575,7 +575,8 @@ const getExpireStatusType = (expireDate) => {
 .details-content {
   margin: 10px 0;
   padding: 10px;
-  background-color: #fff;
+  background-color: var(--el-bg-color, #fff);
+  border: 1px solid var(--el-border-color, #eee);
   border-radius: 4px;
   white-space: pre-wrap;
   word-break: break-all;

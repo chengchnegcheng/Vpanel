@@ -71,7 +71,7 @@ CREATE TABLE IF NOT EXISTS logs (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     level VARCHAR(10),
     message TEXT,
-    source VARCHAR(50),
+    module VARCHAR(50),
     user_id INTEGER,
     ip VARCHAR(50),
     user_agent VARCHAR(255),
@@ -87,6 +87,6 @@ CREATE INDEX IF NOT EXISTS idx_traffic_user_id ON traffic(user_id);
 CREATE INDEX IF NOT EXISTS idx_traffic_proxy_id ON traffic(proxy_id);
 CREATE INDEX IF NOT EXISTS idx_traffic_recorded_at ON traffic(recorded_at);
 CREATE INDEX IF NOT EXISTS idx_logs_level ON logs(level);
-CREATE INDEX IF NOT EXISTS idx_logs_source ON logs(source);
+CREATE INDEX IF NOT EXISTS idx_logs_module ON logs(module);
 CREATE INDEX IF NOT EXISTS idx_logs_user_id ON logs(user_id);
 CREATE INDEX IF NOT EXISTS idx_logs_created_at ON logs(created_at);

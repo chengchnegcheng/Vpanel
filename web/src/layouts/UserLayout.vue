@@ -1,5 +1,5 @@
 <template>
-  <div class="user-portal" :class="{ 'dark-mode': isDarkMode }">
+  <div class="user-portal">
     <!-- 顶部导航栏 -->
     <header class="user-header">
       <div class="header-container">
@@ -289,25 +289,16 @@ onMounted(() => {
   min-height: 100vh;
   display: flex;
   flex-direction: column;
-  background-color: #f5f7fa;
-}
-
-.user-portal.dark-mode {
-  background-color: #1a1a2e;
+  background-color: var(--color-bg-page);
 }
 
 /* 顶部导航栏 */
 .user-header {
-  background-color: #fff;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  background-color: var(--color-bg-card);
+  box-shadow: var(--shadow-sm);
   position: sticky;
   top: 0;
   z-index: 100;
-}
-
-.dark-mode .user-header {
-  background-color: #16213e;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
 }
 
 .header-container {
@@ -348,29 +339,19 @@ onMounted(() => {
   padding: 8px 16px;
   border-radius: 6px;
   text-decoration: none;
-  color: #606266;
+  color: var(--color-text-regular);
   font-size: 14px;
   transition: all 0.2s;
 }
 
 .nav-item:hover {
-  background-color: #f5f7fa;
-  color: #409eff;
+  background-color: var(--color-border-light);
+  color: var(--color-primary);
 }
 
 .nav-item.active {
-  background-color: #ecf5ff;
-  color: #409eff;
-}
-
-.dark-mode .nav-item {
-  color: #a0a0a0;
-}
-
-.dark-mode .nav-item:hover,
-.dark-mode .nav-item.active {
-  background-color: #1f4068;
-  color: #409eff;
+  background-color: rgba(64, 158, 255, 0.1);
+  color: var(--color-primary);
 }
 
 .header-right {
@@ -394,25 +375,17 @@ onMounted(() => {
 }
 
 .user-dropdown-trigger:hover {
-  background-color: #f5f7fa;
-}
-
-.dark-mode .user-dropdown-trigger:hover {
-  background-color: #1f4068;
+  background-color: var(--color-border-light);
 }
 
 .user-avatar {
-  background-color: #409eff !important;
+  background-color: var(--color-primary) !important;
   color: #fff !important;
 }
 
 .username {
   font-size: 14px;
-  color: #303133;
-}
-
-.dark-mode .username {
-  color: #e0e0e0;
+  color: var(--color-text-primary);
 }
 
 .mobile-menu-btn {
@@ -430,14 +403,9 @@ onMounted(() => {
 
 /* 页脚 */
 .user-footer {
-  background-color: #fff;
-  border-top: 1px solid #ebeef5;
+  background-color: var(--color-bg-card);
+  border-top: 1px solid var(--color-border);
   padding: 20px 0;
-}
-
-.dark-mode .user-footer {
-  background-color: #16213e;
-  border-top-color: #2a2a4a;
 }
 
 .footer-container {
@@ -455,18 +423,18 @@ onMounted(() => {
 }
 
 .footer-links a {
-  color: #909399;
+  color: var(--color-text-secondary);
   text-decoration: none;
   font-size: 14px;
   transition: color 0.2s;
 }
 
 .footer-links a:hover {
-  color: #409eff;
+  color: var(--color-primary);
 }
 
 .footer-copyright {
-  color: #909399;
+  color: var(--color-text-secondary);
   font-size: 14px;
 }
 
@@ -476,18 +444,14 @@ onMounted(() => {
   align-items: center;
   gap: 12px;
   padding: 16px;
-  background-color: #f5f7fa;
+  background-color: var(--color-border-light);
   margin: -20px -20px 0;
-}
-
-.dark-mode .mobile-menu-header {
-  background-color: #1f4068;
 }
 
 .user-info .username {
   font-size: 16px;
   font-weight: 500;
-  color: #303133;
+  color: var(--color-text-primary);
 }
 
 .user-info .user-status {
@@ -496,15 +460,15 @@ onMounted(() => {
 }
 
 .user-status.active {
-  color: #67c23a;
+  color: var(--color-success);
 }
 
 .user-status.expired {
-  color: #f56c6c;
+  color: var(--color-danger);
 }
 
 .user-status.disabled {
-  color: #909399;
+  color: var(--color-info);
 }
 
 .mobile-menu-content {
@@ -522,21 +486,13 @@ onMounted(() => {
   gap: 12px;
   padding: 14px 16px;
   text-decoration: none;
-  color: #303133;
+  color: var(--color-text-primary);
   font-size: 15px;
   transition: background-color 0.2s;
 }
 
 .mobile-nav-item:hover {
-  background-color: #f5f7fa;
-}
-
-.dark-mode .mobile-nav-item {
-  color: #e0e0e0;
-}
-
-.dark-mode .mobile-nav-item:hover {
-  background-color: #1f4068;
+  background-color: var(--color-border-light);
 }
 
 .logout-btn {

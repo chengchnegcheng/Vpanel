@@ -99,10 +99,15 @@ func LoggerWithService(log logger.Logger, logService *logservice.Service) gin.Ha
 			logger.F("path", path),
 			logger.F("latency", latency.String()),
 			logger.F("ip", c.ClientIP()),
-			logger.F("user_agent", c.Request.UserAgent()),
 		}
 
-		if query != "" {
+		// Only log user agent for errors to reduce log noise
+		if status >= 400 {
+			fields = append(fields, logger.F("user_agent", c.Request.UserAgent()))
+		}
+
+		if query != "" && status >= 400 {
+			// Only log query params on errors to avoid logging sensitive data
 			fields = append(fields, logger.F("query", query))
 		}
 
@@ -180,16 +185,24 @@ func CORS(allowedOrigins []string) gin.HandlerFunc {
 		// Check if origin is allowed
 		allowed := false
 		for _, o := range allowedOrigins {
-			if o == "*" || o == origin {
+			if o == "*" {
+				// Only allow * in development
 				allowed = true
+				c.Header("Access-Control-Allow-Origin", "*")
+				break
+			} else if o == origin {
+				allowed = true
+				c.Header("Access-Control-Allow-Origin", origin)
 				break
 			}
 		}
 
-		if allowed {
-			c.Header("Access-Control-Allow-Origin", origin)
-		} else if len(allowedOrigins) > 0 {
-			c.Header("Access-Control-Allow-Origin", allowedOrigins[0])
+		if !allowed && len(allowedOrigins) > 0 && allowedOrigins[0] != "*" {
+			c.AbortWithStatusJSON(http.StatusForbidden, gin.H{
+				"code":    "FORBIDDEN",
+				"message": "Origin not allowed",
+			})
+			return
 		}
 
 		c.Header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS, PATCH")
@@ -221,17 +234,30 @@ func RequestID() gin.HandlerFunc {
 
 // RateLimit returns a simple rate limiting middleware.
 func RateLimit(requestsPerSecond int) gin.HandlerFunc {
-	// Simple token bucket implementation
+	// Simple token bucket implementation with memory limit
 	type client struct {
 		tokens    float64
 		lastCheck time.Time
 	}
 	clients := make(map[string]*client)
 	rate := float64(requestsPerSecond)
+	maxClients := 10000 // Prevent memory exhaustion
 
 	return func(c *gin.Context) {
 		ip := c.ClientIP()
 		now := time.Now()
+
+		// Evict old entries if map is too large
+		if len(clients) >= maxClients {
+			for k, v := range clients {
+				if now.Sub(v.lastCheck) > 5*time.Minute {
+					delete(clients, k)
+					if len(clients) < maxClients*9/10 {
+						break
+					}
+				}
+			}
+		}
 
 		cl, exists := clients[ip]
 		if !exists {
@@ -249,7 +275,8 @@ func RateLimit(requestsPerSecond int) gin.HandlerFunc {
 
 		if cl.tokens < 1 {
 			c.AbortWithStatusJSON(http.StatusTooManyRequests, gin.H{
-				"error": "Rate limit exceeded",
+				"code":    "RATE_LIMIT_EXCEEDED",
+				"message": "Too many requests, please try again later",
 			})
 			return
 		}
@@ -266,6 +293,8 @@ func SecureHeaders() gin.HandlerFunc {
 		c.Header("X-Frame-Options", "DENY")
 		c.Header("X-XSS-Protection", "1; mode=block")
 		c.Header("Referrer-Policy", "strict-origin-when-cross-origin")
+		c.Header("Content-Security-Policy", "default-src 'self'")
+		c.Header("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
 		c.Next()
 	}
 }

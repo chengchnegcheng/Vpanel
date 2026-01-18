@@ -54,14 +54,20 @@ type PaymentResponse struct {
 func (h *PaymentHandler) CreatePayment(c *gin.Context) {
 	var req CreatePaymentRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request body"})
+		c.JSON(http.StatusBadRequest, gin.H{
+			"code":    "VALIDATION_ERROR",
+			"message": "Invalid request body",
+		})
 		return
 	}
 
 	result, err := h.paymentService.CreatePayment(c.Request.Context(), req.OrderNo, req.Method)
 	if err != nil {
 		h.logger.Error("Failed to create payment", logger.Err(err))
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{
+			"code":    "PAYMENT_ERROR",
+			"message": "Failed to create payment",
+		})
 		return
 	}
 
@@ -112,11 +118,22 @@ func (h *PaymentHandler) HandleCallback(c *gin.Context) {
 // GetPaymentStatus returns the payment status for an order.
 func (h *PaymentHandler) GetPaymentStatus(c *gin.Context) {
 	orderNo := c.Param("orderNo")
+	
+	if orderNo == "" {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"code":    "VALIDATION_ERROR",
+			"message": "Order number is required",
+		})
+		return
+	}
 
 	status, err := h.paymentService.GetPaymentStatus(c.Request.Context(), orderNo)
 	if err != nil {
 		h.logger.Error("Failed to get payment status", logger.Err(err))
-		c.JSON(http.StatusNotFound, gin.H{"error": "Order not found"})
+		c.JSON(http.StatusNotFound, gin.H{
+			"code":    "NOT_FOUND",
+			"message": "Order not found",
+		})
 		return
 	}
 

@@ -3,6 +3,9 @@ package api
 
 import (
 	"context"
+	"net/http"
+	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
 
@@ -97,9 +100,11 @@ func NewRouter(
 func (r *Router) Setup() {
 	// Global middleware
 	r.engine.Use(middleware.Recovery(r.logger))
+	r.engine.Use(middleware.SecureHeaders())
 	r.engine.Use(middleware.LoggerWithService(r.logger, r.logService))
 	r.engine.Use(middleware.CORS(r.config.Server.CORSOrigins))
 	r.engine.Use(middleware.RequestID())
+	r.engine.Use(middleware.RateLimit(100)) // 100 requests per second per IP
 
 	// Create handlers
 	authHandler := handlers.NewAuthHandler(r.authService, r.repos.User, r.repos.LoginHistory, r.logger)
@@ -114,14 +119,23 @@ func (r *Router) Setup() {
 	logHandler := handlers.NewLogHandler(r.logService, r.logger)
 
 	// Create IP restriction service and handler
-	ipServiceConfig := &ip.ServiceConfig{}
+	ipServiceConfig := &ip.ServiceConfig{
+		GeoConfig: &ip.GeolocationConfig{
+			DatabasePath: "", // Disable GeoIP database to avoid initialization errors
+			CacheTTL:     24 * time.Hour,
+		},
+	}
 	ipService, err := ip.NewService(r.repos.DB(), ipServiceConfig)
 	if err != nil {
 		r.logger.Error("Failed to create IP service", logger.F("error", err))
+		// Continue without IP service - don't block application startup
+		ipService = nil
 	}
-	var ipRestrictionHandler *handlers.IPRestrictionHandler
-	if ipService != nil {
-		ipRestrictionHandler = handlers.NewIPRestrictionHandler(r.logger, ipService)
+	
+	// Always create handler - it will handle nil service gracefully
+	ipRestrictionHandler := handlers.NewIPRestrictionHandler(r.logger, ipService)
+	if ipService == nil {
+		r.logger.Warn("IP restriction service is disabled due to initialization failure")
 	}
 
 	// Create subscription service and handler
@@ -140,6 +154,10 @@ func (r *Router) Setup() {
 	couponService := coupon.NewService(r.repos.Coupon, r.logger)
 	orderService := order.NewService(r.repos.Order, r.repos.Plan, r.logger, nil)
 	paymentService := payment.NewService(orderService, r.logger)
+	
+	// Create payment retry service
+	retryService := payment.NewRetryService(r.repos.Order, paymentService, nil, r.logger)
+	
 	inviteService := invite.NewService(r.repos.Invite, r.logger, &invite.Config{BaseURL: r.config.GetBaseURL()})
 	commissionService := commission.NewService(r.repos.Invite, balanceService, r.logger, nil)
 	invoiceService := invoice.NewService(r.repos.Invoice, r.repos.Order, r.logger, nil)
@@ -176,7 +194,7 @@ func (r *Router) Setup() {
 	// Create commercial handlers
 	planHandler := handlers.NewPlanHandler(planService, r.logger)
 	orderHandler := handlers.NewOrderHandler(orderService, r.logger)
-	paymentHandler := handlers.NewPaymentHandler(paymentService, r.logger)
+	paymentHandler := handlers.NewPaymentHandlerWithRetry(paymentService, retryService, r.logger)
 	balanceHandler := handlers.NewBalanceHandler(balanceService, r.logger)
 	couponHandler := handlers.NewCouponHandler(couponService, r.logger)
 	inviteHandler := handlers.NewInviteHandler(inviteService, commissionService, r.logger)
@@ -220,6 +238,10 @@ func (r *Router) Setup() {
 	// API routes
 	api := r.engine.Group("/api")
 	{
+		// Error reporting endpoint (public)
+		errorReportHandler := handlers.NewErrorReportHandler(r.logger)
+		api.POST("/errors/report", errorReportHandler.ReportErrors)
+		
 		// Auth routes (public)
 		auth := api.Group("/auth")
 		{
@@ -667,55 +689,55 @@ func (r *Router) Setup() {
 			}
 
 			// Admin IP restriction routes
-			if ipRestrictionHandler != nil {
-				adminIPRestriction := protected.Group("/admin/ip-restrictions")
-				adminIPRestriction.Use(authMiddleware.RequireRole("admin"))
-				{
-					adminIPRestriction.GET("/stats", ipRestrictionHandler.GetStats)
-				}
-
-				adminIPWhitelist := protected.Group("/admin/ip-whitelist")
-				adminIPWhitelist.Use(authMiddleware.RequireRole("admin"))
-				{
-					adminIPWhitelist.GET("", ipRestrictionHandler.GetWhitelist)
-					adminIPWhitelist.POST("", ipRestrictionHandler.AddWhitelist)
-					adminIPWhitelist.DELETE("/:id", ipRestrictionHandler.DeleteWhitelist)
-					adminIPWhitelist.POST("/import", ipRestrictionHandler.ImportWhitelist)
-				}
-
-				adminIPBlacklist := protected.Group("/admin/ip-blacklist")
-				adminIPBlacklist.Use(authMiddleware.RequireRole("admin"))
-				{
-					adminIPBlacklist.GET("", ipRestrictionHandler.GetBlacklist)
-					adminIPBlacklist.POST("", ipRestrictionHandler.AddBlacklist)
-					adminIPBlacklist.DELETE("/:id", ipRestrictionHandler.DeleteBlacklist)
-				}
-
-				adminIPSettings := protected.Group("/admin/settings")
-				adminIPSettings.Use(authMiddleware.RequireRole("admin"))
-				{
-					adminIPSettings.GET("/ip-restriction", ipRestrictionHandler.GetIPRestrictionSettings)
-					adminIPSettings.PUT("/ip-restriction", ipRestrictionHandler.UpdateIPRestrictionSettings)
-				}
-
-				// Admin user IP routes
-				adminUsers := protected.Group("/admin/users")
-				adminUsers.Use(authMiddleware.RequireRole("admin"))
-				{
-					adminUsers.GET("/:id/online-ips", ipRestrictionHandler.GetUserOnlineIPs)
-					adminUsers.POST("/:id/kick-ip", ipRestrictionHandler.KickUserIP)
-				}
-
-				// User IP routes
-				userDevices := protected.Group("/user/devices")
-				{
-					userDevices.GET("", ipRestrictionHandler.GetUserDevices)
-					userDevices.POST("/:ip/kick", ipRestrictionHandler.KickUserDevice)
-				}
-
-				protected.GET("/user/ip-stats", ipRestrictionHandler.GetUserIPStats)
-				protected.GET("/user/ip-history", ipRestrictionHandler.GetUserIPHistory)
+			adminIPRestriction := protected.Group("/admin/ip-restrictions")
+			adminIPRestriction.Use(authMiddleware.RequireRole("admin"))
+			{
+				adminIPRestriction.GET("/stats", ipRestrictionHandler.GetStats)
+				adminIPRestriction.GET("/online", ipRestrictionHandler.GetAllOnlineIPs)
+				adminIPRestriction.GET("/history", ipRestrictionHandler.GetAllIPHistory)
 			}
+
+			adminIPWhitelist := protected.Group("/admin/ip-whitelist")
+			adminIPWhitelist.Use(authMiddleware.RequireRole("admin"))
+			{
+				adminIPWhitelist.GET("", ipRestrictionHandler.GetWhitelist)
+				adminIPWhitelist.POST("", ipRestrictionHandler.AddWhitelist)
+				adminIPWhitelist.DELETE("/:id", ipRestrictionHandler.DeleteWhitelist)
+				adminIPWhitelist.POST("/import", ipRestrictionHandler.ImportWhitelist)
+			}
+
+			adminIPBlacklist := protected.Group("/admin/ip-blacklist")
+			adminIPBlacklist.Use(authMiddleware.RequireRole("admin"))
+			{
+				adminIPBlacklist.GET("", ipRestrictionHandler.GetBlacklist)
+				adminIPBlacklist.POST("", ipRestrictionHandler.AddBlacklist)
+				adminIPBlacklist.DELETE("/:id", ipRestrictionHandler.DeleteBlacklist)
+			}
+
+			adminIPSettings := protected.Group("/admin/settings")
+			adminIPSettings.Use(authMiddleware.RequireRole("admin"))
+			{
+				adminIPSettings.GET("/ip-restriction", ipRestrictionHandler.GetIPRestrictionSettings)
+				adminIPSettings.PUT("/ip-restriction", ipRestrictionHandler.UpdateIPRestrictionSettings)
+			}
+
+			// Admin user IP routes
+			adminUsers := protected.Group("/admin/users")
+			adminUsers.Use(authMiddleware.RequireRole("admin"))
+			{
+				adminUsers.GET("/:id/online-ips", ipRestrictionHandler.GetUserOnlineIPs)
+				adminUsers.POST("/:id/kick-ip", ipRestrictionHandler.KickUserIP)
+			}
+
+			// User IP routes
+			userDevices := protected.Group("/user/devices")
+			{
+				userDevices.GET("", ipRestrictionHandler.GetUserDevices)
+				userDevices.POST("/:ip/kick", ipRestrictionHandler.KickUserDevice)
+			}
+
+			protected.GET("/user/ip-stats", ipRestrictionHandler.GetUserIPStats)
+			protected.GET("/user/ip-history", ipRestrictionHandler.GetUserIPHistory)
 		}
 
 		// Payment callback routes (public - no auth required)
@@ -741,8 +763,17 @@ func (r *Router) Setup() {
 		r.engine.Static("/assets", r.config.Server.StaticPath+"/assets")
 		// Serve favicon
 		r.engine.StaticFile("/favicon.ico", r.config.Server.StaticPath+"/favicon.ico")
-		// SPA fallback - serve index.html for all other routes
+		// SPA fallback - serve index.html for all other routes (except API routes)
 		r.engine.NoRoute(func(c *gin.Context) {
+			// Don't serve index.html for API routes
+			if strings.HasPrefix(c.Request.URL.Path, "/api/") {
+				c.JSON(http.StatusNotFound, gin.H{
+					"code":    404,
+					"message": "API endpoint not found",
+					"error":   "The requested API endpoint does not exist",
+				})
+				return
+			}
 			c.File(r.config.Server.StaticPath + "/index.html")
 		})
 	}

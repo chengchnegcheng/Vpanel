@@ -116,12 +116,17 @@ const api = axios.create({
 api.interceptors.request.use(
   config => {
     // 优先使用用户门户令牌，其次使用管理后台令牌
-    const userToken = localStorage.getItem('userToken')
-    const adminToken = localStorage.getItem('token')
+    const userToken = sessionStorage.getItem('userToken') || localStorage.getItem('userToken')
+    const adminToken = sessionStorage.getItem('token') || localStorage.getItem('token')
     const token = userToken || adminToken
     
     if (token) {
       config.headers['Authorization'] = `Bearer ${token}`
+    }
+    
+    // 添加请求ID用于追踪
+    if (!config.headers['X-Request-ID']) {
+      config.headers['X-Request-ID'] = generateErrorId()
     }
     
     // 支持请求取消
@@ -162,18 +167,23 @@ api.interceptors.response.use(
       // 根据当前路径决定清除哪个令牌和跳转到哪个登录页
       const currentPath = window.location.pathname
       if (currentPath.startsWith('/user')) {
+        sessionStorage.removeItem('userToken')
         localStorage.removeItem('userToken')
+        sessionStorage.removeItem('userInfo')
         localStorage.removeItem('userInfo')
         router.push('/user/login')
       } else {
+        sessionStorage.removeItem('token')
         localStorage.removeItem('token')
-        router.push('/login')
+        router.push('/user/login')
       }
     }
     
-    // 显示错误消息
-    const displayMessage = `${formattedError.message} (${formattedError.errorId})`
-    ElMessage.error(displayMessage)
+    // 只在非静默模式下显示错误消息
+    if (!error.config?.silent) {
+      const displayMessage = `${formattedError.message} (${formattedError.errorId})`
+      ElMessage.error(displayMessage)
+    }
     
     // 返回格式化的错误
     return Promise.reject(formattedError)

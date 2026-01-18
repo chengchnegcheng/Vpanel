@@ -87,7 +87,7 @@ const handleCommand = (command) => {
         }
       ).then(() => {
         userStore.logout()
-        router.push('/login')
+        router.push('/user/login')
       }).catch(() => {})
       break
   }
@@ -140,8 +140,8 @@ const handleCommand = (command) => {
 
 .header {
   height: 60px;
-  background-color: #fff;
-  border-bottom: 1px solid #e6e6e6;
+  background-color: var(--el-bg-color, #fff);
+  border-bottom: 1px solid var(--el-border-color, #e6e6e6);
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -158,7 +158,7 @@ const handleCommand = (command) => {
   align-items: center;
   cursor: pointer;
   font-size: 14px;
-  color: #333;
+  color: var(--el-text-color-primary, #333);
 }
 
 .content {

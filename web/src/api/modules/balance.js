@@ -61,7 +61,7 @@ export const balanceApi = {
      * 获取余额统计（管理员）
      * @returns {Promise<Object>} 余额统计
      */
-    getStats: () => api.get('/admin/balance/stats')
+    getStats: () => api.get('/balance/stats')
   }
 }
 

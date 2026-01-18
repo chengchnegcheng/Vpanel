@@ -35,6 +35,8 @@ function getSystemPreference() {
 function applyTheme(dark) {
   isDark.value = dark
   
+  if (typeof window === 'undefined') return
+  
   if (dark) {
     document.documentElement.classList.add('dark')
     document.documentElement.setAttribute('data-theme', 'dark')
@@ -42,16 +44,23 @@ function applyTheme(dark) {
     document.documentElement.classList.remove('dark')
     document.documentElement.setAttribute('data-theme', 'light')
   }
+  
+  console.log('[Theme] Applied:', dark ? 'dark' : 'light')
 }
 
 /**
  * 更新主题
  */
 function updateTheme() {
+  console.log('[Theme] updateTheme called, mode:', themeMode.value)
   if (themeMode.value === THEME_MODES.AUTO) {
-    applyTheme(getSystemPreference())
+    const systemDark = getSystemPreference()
+    console.log('[Theme] Auto mode, system preference:', systemDark)
+    applyTheme(systemDark)
   } else {
-    applyTheme(themeMode.value === THEME_MODES.DARK)
+    const shouldBeDark = themeMode.value === THEME_MODES.DARK
+    console.log('[Theme] Manual mode, should be dark:', shouldBeDark)
+    applyTheme(shouldBeDark)
   }
 }
 
@@ -81,19 +90,24 @@ function setupSystemThemeListener() {
  * 主题管理 Hook
  */
 export function useTheme() {
-  // 初始化
-  onMounted(() => {
-    // 从本地存储加载主题设置
+  // 从本地存储加载主题设置
+  if (typeof window !== 'undefined') {
     const savedTheme = localStorage.getItem(STORAGE_KEY)
     if (savedTheme && Object.values(THEME_MODES).includes(savedTheme)) {
       themeMode.value = savedTheme
     }
     
-    // 应用主题
+    // 立即应用主题
     updateTheme()
     
     // 监听系统主题变化
     setupSystemThemeListener()
+  }
+  
+  // 初始化
+  onMounted(() => {
+    // 确保主题已应用
+    updateTheme()
   })
   
   // 监听主题模式变化
@@ -130,11 +144,13 @@ export function useTheme() {
   }
   
   function toggleDarkMode() {
+    console.log('[Theme] Toggle dark mode, current isDark:', isDark.value)
     if (isDark.value) {
       themeMode.value = THEME_MODES.LIGHT
     } else {
       themeMode.value = THEME_MODES.DARK
     }
+    console.log('[Theme] New theme mode:', themeMode.value)
   }
   
   return {

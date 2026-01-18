@@ -254,38 +254,39 @@ const saveAndRestart = async () => {
 .title {
   font-size: 24px;
   font-weight: 500;
-  color: #333;
+  color: var(--el-text-color-primary, #333);
 }
 
 .settings-tabs {
-  background-color: #fff;
+  background-color: var(--el-bg-color, #fff);
   border-radius: 4px;
   box-shadow: 0 1px 4px rgba(0, 0, 0, 0.05);
   overflow: hidden;
+  border: 1px solid var(--el-border-color, #e8e8e8);
 }
 
 .tab-header {
   display: flex;
-  border-bottom: 1px solid #e8e8e8;
-  background-color: #fafafa;
+  border-bottom: 1px solid var(--el-border-color, #e8e8e8);
+  background-color: var(--el-fill-color-light, #fafafa);
 }
 
 .tab-item {
   padding: 12px 16px;
   font-size: 14px;
   cursor: pointer;
-  color: #666;
+  color: var(--el-text-color-regular, #666);
   transition: all 0.3s;
 }
 
 .tab-item:hover {
-  color: #1890ff;
+  color: var(--el-color-primary, #1890ff);
 }
 
 .tab-item.active {
-  color: #1890ff;
-  border-bottom: 2px solid #1890ff;
-  background-color: #fff;
+  color: var(--el-color-primary, #1890ff);
+  border-bottom: 2px solid var(--el-color-primary, #1890ff);
+  background-color: var(--el-bg-color, #fff);
 }
 
 .tab-content {
@@ -300,19 +301,19 @@ const saveAndRestart = async () => {
   font-size: 16px;
   font-weight: 500;
   margin-bottom: 20px;
-  color: #333;
+  color: var(--el-text-color-primary, #333);
 }
 
 .protocol-row {
   display: flex;
   align-items: center;
   padding: 12px 0;
-  border-bottom: 1px solid #f0f0f0;
+  border-bottom: 1px solid var(--el-border-color-lighter, #f0f0f0);
 }
 
 .protocol-label {
   width: 200px;
-  color: #333;
+  color: var(--el-text-color-primary, #333);
 }
 
 .protocol-switch {
@@ -321,7 +322,7 @@ const saveAndRestart = async () => {
 
 .protocol-desc {
   flex: 1;
-  color: #666;
+  color: var(--el-text-color-regular, #666);
   padding: 0 20px;
 }
 

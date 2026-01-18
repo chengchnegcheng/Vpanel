@@ -90,9 +90,10 @@ const handleLogin = async () => {
 .login-box {
   width: 350px;
   padding: 30px 20px;
-  background-color: #fff;
+  background-color: var(--el-bg-color, #fff);
   border-radius: 8px;
   box-shadow: 0 4px 20px 0 rgba(0, 0, 0, 0.1);
+  border: 1px solid var(--el-border-color, transparent);
   position: relative;
 }
 

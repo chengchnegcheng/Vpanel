@@ -47,4 +47,31 @@ html.dark a {
 
 html.dark a:hover {
   color: #a6d2ff;
+}
+
+/* macOS 显示模式兼容性修复 */
+/* 强制硬件加速，修复 SVG 渲染问题 */
+svg {
+  -webkit-transform: translateZ(0);
+  transform: translateZ(0);
+  -webkit-backface-visibility: hidden;
+  backface-visibility: hidden;
+}
+
+/* 修复高分辨率显示下的渲染问题 */
+@media (-webkit-min-device-pixel-ratio: 2), (min-resolution: 192dpi) {
+  svg {
+    shape-rendering: geometricPrecision;
+  }
+  
+  canvas {
+    image-rendering: -webkit-optimize-contrast;
+    image-rendering: crisp-edges;
+  }
+}
+
+/* 修复深色模式下的对比度 */
+html.dark {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 } 

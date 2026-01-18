@@ -506,10 +506,23 @@ const refreshStats = async () => {
   statsLoading.value = true
   try {
     const response = await api.get('/admin/ip-restrictions/stats')
-    Object.assign(stats, response)
+    // 后端返回格式: { code: 200, message: "success", data: {...} }
+    if (response.code === 200 && response.data) {
+      // 映射后端字段到前端字段
+      stats.activeDevices = response.data.total_active_ips || 0
+      stats.activeUsers = response.data.active_users || 0
+      stats.whitelistCount = response.data.total_whitelisted || 0
+      stats.blacklistCount = response.data.total_blacklisted || 0
+      stats.blockedToday = response.data.blocked_today || 0
+      stats.suspiciousCount = response.data.suspicious_count || 0
+      stats.countryStats = response.data.country_stats || []
+    } else {
+      // 兼容旧格式（直接返回数据）
+      Object.assign(stats, response)
+    }
   } catch (error) {
     console.error('Failed to fetch stats:', error)
-    ElMessage.error('获取统计数据失败')
+    ElMessage.error(`获取统计数据失败: ${error.message || '未知错误'}`)
   } finally {
     statsLoading.value = false
   }
@@ -553,7 +566,9 @@ const countryOptions = [
 const fetchSettings = async () => {
   try {
     const response = await api.get('/admin/settings/ip-restriction')
-    Object.assign(settingsForm, response)
+    // 处理新的API响应格式
+    const settings = response.code === 200 && response.data ? response.data : response
+    Object.assign(settingsForm, settings)
   } catch (error) {
     console.error('Failed to fetch settings:', error)
   }
@@ -628,8 +643,15 @@ const fetchWhitelist = async () => {
         pageSize: whitelistPageSize.value
       }
     })
-    whitelist.value = response.list || response || []
-    whitelistTotal.value = response.total || whitelist.value.length
+    // 处理新的API响应格式: {code:200, data:[...], message:"success"}
+    if (response.code === 200 && response.data) {
+      whitelist.value = Array.isArray(response.data) ? response.data : (response.data.list || [])
+      whitelistTotal.value = response.data.total || whitelist.value.length
+    } else {
+      // 兼容旧格式
+      whitelist.value = response.list || response || []
+      whitelistTotal.value = response.total || whitelist.value.length
+    }
   } catch (error) {
     console.error('Failed to fetch whitelist:', error)
     ElMessage.error('获取白名单失败')
@@ -781,8 +803,15 @@ const fetchBlacklist = async () => {
         pageSize: blacklistPageSize.value
       }
     })
-    blacklist.value = response.list || response || []
-    blacklistTotal.value = response.total || blacklist.value.length
+    // 处理新的API响应格式: {code:200, data:[...], message:"success"}
+    if (response.code === 200 && response.data) {
+      blacklist.value = Array.isArray(response.data) ? response.data : (response.data.list || [])
+      blacklistTotal.value = response.data.total || blacklist.value.length
+    } else {
+      // 兼容旧格式
+      blacklist.value = response.list || response || []
+      blacklistTotal.value = response.total || blacklist.value.length
+    }
   } catch (error) {
     console.error('Failed to fetch blacklist:', error)
     ElMessage.error('获取黑名单失败')
@@ -874,7 +903,12 @@ const fetchOnlineIPs = async () => {
   onlineLoading.value = true
   try {
     const response = await api.get('/admin/ip-restrictions/online')
-    onlineIPs.value = response || []
+    // 处理新的API响应格式
+    if (response.code === 200 && response.data) {
+      onlineIPs.value = Array.isArray(response.data) ? response.data : []
+    } else {
+      onlineIPs.value = response || []
+    }
   } catch (error) {
     console.error('Failed to fetch online IPs:', error)
     ElMessage.error('获取在线 IP 失败')
@@ -927,8 +961,14 @@ const fetchIPHistory = async () => {
     }
     
     const response = await api.get('/admin/ip-restrictions/history', { params })
-    ipHistory.value = response.list || response || []
-    historyTotal.value = response.total || ipHistory.value.length
+    // 处理新的API响应格式
+    if (response.code === 200 && response.data) {
+      ipHistory.value = Array.isArray(response.data) ? response.data : (response.data.list || [])
+      historyTotal.value = response.data.total || ipHistory.value.length
+    } else {
+      ipHistory.value = response.list || response || []
+      historyTotal.value = response.total || ipHistory.value.length
+    }
   } catch (error) {
     console.error('Failed to fetch IP history:', error)
     ElMessage.error('获取 IP 历史失败')
@@ -940,7 +980,8 @@ const fetchIPHistory = async () => {
 const fetchUsers = async () => {
   try {
     const response = await api.get('/users')
-    userOptions.value = Array.isArray(response) ? response : (response.list || response.users || [])
+    // /api/users 直接返回数组，不需要解包
+    userOptions.value = Array.isArray(response) ? response : (response.data || response.list || response.users || [])
   } catch (error) {
     console.error('Failed to fetch users:', error)
   }

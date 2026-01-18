@@ -15,6 +15,7 @@ type SubscriptionRateLimiter struct {
 	mu              sync.RWMutex
 	clients         map[string]*subscriptionClient
 	requestsPerHour int
+	maxClients      int
 	cleanupInterval time.Duration
 	stopCh          chan struct{}
 }
@@ -22,6 +23,7 @@ type SubscriptionRateLimiter struct {
 type subscriptionClient struct {
 	requests  int
 	windowEnd time.Time
+	lastSeen  time.Time
 }
 
 // NewSubscriptionRateLimiter creates a new subscription rate limiter.
@@ -34,7 +36,8 @@ func NewSubscriptionRateLimiter(requestsPerHour int) *SubscriptionRateLimiter {
 	rl := &SubscriptionRateLimiter{
 		clients:         make(map[string]*subscriptionClient),
 		requestsPerHour: requestsPerHour,
-		cleanupInterval: 10 * time.Minute,
+		maxClients:      10000, // Limit memory usage
+		cleanupInterval: 5 * time.Minute, // More frequent cleanup
 		stopCh:          make(chan struct{}),
 	}
 
@@ -76,20 +79,60 @@ func (rl *SubscriptionRateLimiter) allow(clientKey string) bool {
 	client, exists := rl.clients[clientKey]
 
 	if !exists || now.After(client.windowEnd) {
+		// Check if we need to evict old entries before adding new one
+		if !exists && len(rl.clients) >= rl.maxClients {
+			rl.evictOldest()
+		}
+		
 		// New window
 		rl.clients[clientKey] = &subscriptionClient{
 			requests:  1,
 			windowEnd: now.Add(time.Hour),
+			lastSeen:  now,
 		}
 		return true
 	}
 
 	if client.requests >= rl.requestsPerHour {
+		client.lastSeen = now
 		return false
 	}
 
 	client.requests++
+	client.lastSeen = now
 	return true
+}
+
+// evictOldest removes the oldest 10% of entries to prevent memory exhaustion.
+func (rl *SubscriptionRateLimiter) evictOldest() {
+	toRemove := len(rl.clients) / 10
+	if toRemove < 100 {
+		toRemove = 100
+	}
+	
+	type entry struct {
+		key      string
+		lastSeen time.Time
+	}
+	
+	entries := make([]entry, 0, len(rl.clients))
+	for key, client := range rl.clients {
+		entries = append(entries, entry{key: key, lastSeen: client.lastSeen})
+	}
+	
+	// Sort by lastSeen (oldest first)
+	for i := 0; i < len(entries)-1; i++ {
+		for j := i + 1; j < len(entries); j++ {
+			if entries[i].lastSeen.After(entries[j].lastSeen) {
+				entries[i], entries[j] = entries[j], entries[i]
+			}
+		}
+	}
+	
+	// Remove oldest entries
+	for i := 0; i < toRemove && i < len(entries); i++ {
+		delete(rl.clients, entries[i].key)
+	}
 }
 
 // cleanup periodically removes expired client entries.

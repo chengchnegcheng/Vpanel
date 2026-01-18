@@ -293,21 +293,56 @@ const viewUser = (userId) => {
 }
 
 const fetchReports = async () => {
-  // Mock data - replace with actual API call
-  stats.total_revenue = 1258900
-  stats.total_orders = 156
-  stats.paid_orders = 142
-  stats.total_refund = 12500
+  try {
+    // 获取日期范围
+    let startDate = ''
+    let endDate = ''
+    
+    if (dateRange.value && dateRange.value.length === 2) {
+      startDate = dateRange.value[0].toISOString().split('T')[0]
+      endDate = dateRange.value[1].toISOString().split('T')[0]
+    } else {
+      // 默认最近30天
+      const end = new Date()
+      const start = new Date()
+      start.setDate(start.getDate() - 30)
+      startDate = start.toISOString().split('T')[0]
+      endDate = end.toISOString().split('T')[0]
+    }
 
-  planRanking.value = [
-    { rank: 1, plan_name: '年度套餐', order_count: 45, revenue: 539400, percentage: 43 },
-    { rank: 2, plan_name: '季度套餐', order_count: 52, revenue: 415600, percentage: 33 },
-    { rank: 3, plan_name: '月度套餐', order_count: 59, revenue: 303900, percentage: 24 }
-  ]
+    // 获取收入报表
+    const revenueResponse = await api.get('/admin/reports/revenue', {
+      params: { start: startDate, end: endDate }
+    })
+    
+    if (revenueResponse.code === 200 && revenueResponse.data) {
+      stats.total_revenue = revenueResponse.data.revenue || 0
+      stats.total_orders = revenueResponse.data.order_count || 0
+    }
 
-  updateCharts()
-  fetchFailedPaymentStats()
-  fetchPauseStats()
+    // 获取订单统计
+    const orderStatsResponse = await api.get('/admin/reports/orders')
+    
+    if (orderStatsResponse.code === 200 && orderStatsResponse.data) {
+      stats.paid_orders = orderStatsResponse.data.paid || 0
+      stats.total_refund = orderStatsResponse.data.refunded || 0
+    }
+
+    // TODO: 获取套餐排名数据（需要后端 API）
+    // 暂时使用模拟数据
+    planRanking.value = [
+      { rank: 1, plan_name: '年度套餐', order_count: 45, revenue: 539400, percentage: 43 },
+      { rank: 2, plan_name: '季度套餐', order_count: 52, revenue: 415600, percentage: 33 },
+      { rank: 3, plan_name: '月度套餐', order_count: 59, revenue: 303900, percentage: 24 }
+    ]
+
+    updateCharts()
+    fetchFailedPaymentStats()
+    fetchPauseStats()
+  } catch (error) {
+    console.error('Failed to fetch reports:', error)
+    ElMessage.error(`获取报表数据失败: ${error.message || '未知错误'}`)
+  }
 }
 
 const updateCharts = () => {

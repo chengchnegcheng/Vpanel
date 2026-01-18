@@ -1,4 +1,3 @@
-// Package database provides database connection and management.
 package database
 
 import (
@@ -8,11 +7,13 @@ import (
 	"time"
 
 	"github.com/glebarez/sqlite"
+	"gorm.io/driver/mysql"
+	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
 
-	"v/internal/database/migrations"
 	"v/internal/database/repository"
+	"v/internal/ip"
 )
 
 // Config holds database configuration.
@@ -63,8 +64,12 @@ func New(cfg *Config) (*Database, error) {
 	switch cfg.Driver {
 	case "sqlite", "sqlite3", "":
 		dialector = sqlite.Open(cfg.DSN)
+	case "postgres", "postgresql":
+		dialector = postgres.Open(cfg.DSN)
+	case "mysql":
+		dialector = mysql.Open(cfg.DSN)
 	default:
-		return nil, fmt.Errorf("unsupported database driver: %s", cfg.Driver)
+		return nil, fmt.Errorf("unsupported database driver: %s (supported: sqlite, postgres, mysql)", cfg.Driver)
 	}
 
 	// Set default values
@@ -144,15 +149,8 @@ func (d *Database) Close() error {
 
 // AutoMigrate runs database migrations.
 func (d *Database) AutoMigrate() error {
-	ctx := context.Background()
-	
-	// First, run SQL migrations
-	migrator := migrations.NewMigrator(d.db)
-	if err := migrator.Migrate(ctx); err != nil {
-		return fmt.Errorf("failed to run SQL migrations: %w", err)
-	}
-	
-	// Then, run GORM auto migrations for models
+	// Only run GORM auto migrations
+	// SQL migrations are disabled for PostgreSQL compatibility
 	return d.db.AutoMigrate(
 		// Core models
 		&repository.User{},
@@ -198,6 +196,14 @@ func (d *Database) AutoMigrate() error {
 		&repository.HealthCheck{},
 		&repository.UserNodeAssignment{},
 		&repository.NodeTraffic{},
+		// IP Restriction models
+		&ip.IPWhitelist{},
+		&ip.IPBlacklist{},
+		&ip.ActiveIP{},
+		&ip.IPHistory{},
+		&ip.SubscriptionIPAccess{},
+		&ip.GeoCache{},
+		&ip.FailedAttempt{},
 	)
 }
 

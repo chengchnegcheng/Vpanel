@@ -684,7 +684,7 @@ onMounted(() => {
 const loadInbounds = async () => {
   loading.value = true
   try {
-    const response = await api.get('/api/proxies', {
+    const response = await api.get('/proxies', {
       params: {
         limit: pageSize.value,
         offset: (currentPage.value - 1) * pageSize.value
@@ -802,7 +802,7 @@ const saveInbound = async () => {
       
       // 提交到服务器
       try {
-        const response = await api.post('/api/proxies', submittingData)
+        const response = await api.post('/proxies', submittingData)
         
         if (response.data && response.data.success) {
           ElMessage.success('添加入站成功')
@@ -841,7 +841,7 @@ const toggleStatus = (row) => {
     type: 'warning'
   }).then(async () => {
     try {
-      const response = await api.post(`/api/proxies/${row.id}/toggle`)
+      const response = await api.post(`/proxies/${row.id}/toggle`)
       if (response.data && response.data.success) {
         row.enable = !row.enable
         ElMessage.success(`${action}入站成功`)
@@ -865,7 +865,7 @@ const deleteInbound = (row) => {
     type: 'warning'
   }).then(async () => {
     try {
-      const response = await api.delete(`/api/proxies/${row.id}`)
+      const response = await api.delete(`/proxies/${row.id}`)
       if (response.data && response.data.success) {
         ElMessage.success('删除入站成功')
         loadInbounds()
@@ -888,7 +888,7 @@ const copyLink = async (row) => {
     let link = '';
     // 使用API获取实际链接
     try {
-      const response = await api.get(`/api/proxies/${row.id}/link`)
+      const response = await api.get(`/proxies/${row.id}/link`)
       if (response.data && response.data.link) {
         link = response.data.link;
       } else {
@@ -1130,15 +1130,16 @@ const downloadQrCode = async () => {
   align-items: center;
   margin-bottom: 20px;
   padding: 10px 16px;
-  background-color: white;
+  background-color: var(--el-bg-color, white);
   border-radius: 4px;
   box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
+  border: 1px solid var(--el-border-color, transparent);
 }
 
 .title {
   font-size: 16px;
   font-weight: 500;
-  color: #333;
+  color: var(--el-text-color-primary, #333);
 }
 
 .add-btn {
@@ -1148,17 +1149,17 @@ const downloadQrCode = async () => {
 
 /* 表格调整 */
 :deep(.el-table) {
-  background-color: #fff;
+  background-color: var(--el-bg-color, #fff);
   box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
   border-radius: 4px;
   font-size: 13px;
 }
 
 :deep(.el-table th) {
-  background-color: #f5f7fa;
+  background-color: var(--el-fill-color-light, #f5f7fa);
   padding: 10px 0;
   font-weight: 500;
-  color: #606266;
+  color: var(--el-text-color-regular, #606266);
   font-size: 13px;
 }
 
@@ -1167,7 +1168,7 @@ const downloadQrCode = async () => {
 }
 
 :deep(.el-table--border) {
-  border: 1px solid #ebeef5;
+  border: 1px solid var(--el-border-color, #ebeef5);
 }
 
 :deep(.el-button--small) {
@@ -1287,7 +1288,7 @@ const downloadQrCode = async () => {
 }
 
 :deep(.el-table--striped .el-table__body tr.el-table__row--striped td) {
-  background-color: #fafafa;
+  background-color: var(--el-fill-color-lighter, #fafafa);
 }
 
 :deep(.el-table .cell) {
@@ -1301,7 +1302,7 @@ const downloadQrCode = async () => {
   display: flex;
   align-items: center;
   margin-bottom: 10px;
-  border: 1px dashed #dcdfe6;
+  border: 1px dashed var(--el-border-color, #dcdfe6);
   padding: 10px;
   border-radius: 4px;
 }
@@ -1316,7 +1317,7 @@ const downloadQrCode = async () => {
 .qrcode {
   margin-bottom: 15px;
   padding: 10px;
-  background: white;
+  background: var(--el-bg-color, white);
   border-radius: 4px;
   box-shadow: 0 2px 12px 0 rgba(0, 0, 0, 0.1);
   display: flex;
@@ -1328,12 +1329,12 @@ const downloadQrCode = async () => {
   font-size: 16px;
   font-weight: bold;
   margin-bottom: 5px;
-  color: #333;
+  color: var(--el-text-color-primary, #333);
 }
 
 .remark {
   font-size: 14px;
-  color: #666;
+  color: var(--el-text-color-regular, #666);
   margin-bottom: 10px;
 }
 

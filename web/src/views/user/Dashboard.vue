@@ -437,9 +437,9 @@ onMounted(() => {
   display: flex;
   align-items: center;
   padding: 20px;
-  background: #fff;
+  background: var(--color-bg-card);
   border-radius: 8px;
-  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.04);
+  box-shadow: var(--shadow-sm);
   margin-bottom: 20px;
 }
 
@@ -678,5 +678,43 @@ onMounted(() => {
   .quick-actions {
     grid-template-columns: repeat(2, 1fr);
   }
+}
+
+/* 深色模式适配 */
+.dark .status-card {
+  background: var(--color-bg-card);
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.3);
+}
+
+.dark .card-value {
+  color: var(--color-text-primary);
+}
+
+.dark .item-value {
+  color: var(--color-text-primary);
+}
+
+.dark .progress-value {
+  color: var(--color-text-primary);
+}
+
+.dark .announcement-title {
+  color: var(--color-text-primary);
+}
+
+.dark .action-item:hover {
+  background: var(--color-border-light);
+}
+
+.dark .announcement-item:hover {
+  background: var(--color-border-light);
+}
+
+.dark .traffic-item {
+  border-bottom: 1px solid var(--color-border);
+}
+
+.dark .announcement-item {
+  border-bottom: 1px solid var(--color-border);
 }
 </style>

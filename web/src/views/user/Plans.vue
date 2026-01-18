@@ -207,8 +207,8 @@ onMounted(async () => {
 
 .plan-card {
   position: relative;
-  background: #fff;
-  border: 1px solid #ebeef5;
+  background: var(--color-bg-card);
+  border: 1px solid var(--color-border);
   border-radius: 12px;
   padding: 32px 24px;
   text-align: center;
@@ -216,13 +216,13 @@ onMounted(async () => {
 }
 
 .plan-card:hover {
-  border-color: #409eff;
+  border-color: var(--color-primary);
   box-shadow: 0 4px 20px rgba(64, 158, 255, 0.15);
   transform: translateY(-4px);
 }
 
 .plan-card--popular {
-  border-color: #409eff;
+  border-color: var(--color-primary);
   box-shadow: 0 4px 20px rgba(64, 158, 255, 0.2);
 }
 

@@ -1,0 +1,392 @@
+/**
+ * 深色模式全局修复
+ * 为所有用户界面组件提供统一的深色模式支持
+ */
+
+/* 卡片和容器 */
+.dark .status-card,
+.dark .plan-card,
+.dark .client-card,
+.dark .article-item,
+.dark .featured-card,
+.dark .contact-card,
+.dark .announcement-card,
+.dark .ticket-card,
+.dark .stat-card {
+  background: var(--color-bg-card) !important;
+  border-color: var(--color-border) !important;
+  box-shadow: var(--shadow-sm) !important;
+}
+
+/* 登录/注册表单 */
+.dark .login-card,
+.dark .register-card,
+.dark .reset-password-card,
+.dark .forgot-password-card {
+  background: var(--color-bg-card) !important;
+  box-shadow: var(--shadow-md) !important;
+}
+
+/* 二维码容器 */
+.dark .qrcode-wrapper {
+  background: var(--color-bg-card) !important;
+  box-shadow: var(--shadow-sm) !important;
+}
+
+/* 列表项 */
+.dark .popular-list {
+  background: var(--color-bg-card) !important;
+  box-shadow: var(--shadow-sm) !important;
+}
+
+/* 消息内容 */
+.dark .message-content {
+  background: var(--color-bg-card) !important;
+}
+
+.dark .message-item.admin .message-content {
+  background: rgba(64, 158, 255, 0.1) !important;
+}
+
+/* 附件链接 */
+.dark .attachment-link {
+  background: var(--color-border-light) !important;
+}
+
+.dark .attachment-link:hover {
+  background: rgba(64, 158, 255, 0.1) !important;
+}
+
+/* 公告卡片渐变 */
+.dark .announcement-card.pinned {
+  background: linear-gradient(135deg, var(--color-bg-card) 0%, var(--color-border-light) 100%) !important;
+}
+
+/* 文本颜色修复 */
+.dark .plan-name,
+.dark .plan-price,
+.dark .article-title,
+.dark .ticket-title,
+.dark h1, .dark h2, .dark h3, .dark h4, .dark h5, .dark h6 {
+  color: var(--color-text-primary) !important;
+}
+
+/* 次要文本 */
+.dark .plan-description,
+.dark .article-excerpt,
+.dark .ticket-meta {
+  color: var(--color-text-secondary) !important;
+}
+
+/* 边框修复 */
+.dark .plan-card,
+.dark .client-card,
+.dark .article-item {
+  border-color: var(--color-border) !important;
+}
+
+.dark .plan-card:hover {
+  border-color: var(--color-primary) !important;
+}
+
+/* 进度条文本 */
+.dark .el-progress__text {
+  color: var(--color-text-primary) !important;
+}
+
+/* 输入框 */
+.dark .el-input__inner {
+  background-color: var(--color-bg-card) !important;
+  border-color: var(--color-border) !important;
+  color: var(--color-text-primary) !important;
+}
+
+/* 选择器 */
+.dark .el-select .el-input__inner {
+  background-color: var(--color-bg-card) !important;
+}
+
+/* 下拉菜单 */
+.dark .el-select-dropdown {
+  background-color: var(--color-bg-card) !important;
+  border-color: var(--color-border) !important;
+}
+
+.dark .el-select-dropdown__item {
+  color: var(--color-text-regular) !important;
+}
+
+.dark .el-select-dropdown__item:hover {
+  background-color: var(--color-border-light) !important;
+}
+
+/* 对话框 */
+.dark .el-dialog {
+  background-color: var(--color-bg-card) !important;
+}
+
+.dark .el-dialog__header {
+  border-bottom-color: var(--color-border) !important;
+}
+
+.dark .el-dialog__title {
+  color: var(--color-text-primary) !important;
+}
+
+/* 抽屉 */
+.dark .el-drawer {
+  background-color: var(--color-bg-card) !important;
+}
+
+.dark .el-drawer__header {
+  border-bottom-color: var(--color-border) !important;
+}
+
+.dark .el-drawer__title {
+  color: var(--color-text-primary) !important;
+}
+
+/* 消息框 */
+.dark .el-message-box {
+  background-color: var(--color-bg-card) !important;
+  border-color: var(--color-border) !important;
+}
+
+.dark .el-message-box__title {
+  color: var(--color-text-primary) !important;
+}
+
+.dark .el-message-box__content {
+  color: var(--color-text-regular) !important;
+}
+
+/* 通知 */
+.dark .el-notification {
+  background-color: var(--color-bg-card) !important;
+  border-color: var(--color-border) !important;
+}
+
+.dark .el-notification__title {
+  color: var(--color-text-primary) !important;
+}
+
+.dark .el-notification__content {
+  color: var(--color-text-regular) !important;
+}
+
+/* 分页 */
+.dark .el-pagination {
+  color: var(--color-text-regular) !important;
+}
+
+.dark .el-pagination button {
+  background-color: var(--color-bg-card) !important;
+  color: var(--color-text-regular) !important;
+}
+
+.dark .el-pagination .el-pager li {
+  background-color: var(--color-bg-card) !important;
+  color: var(--color-text-regular) !important;
+}
+
+.dark .el-pagination .el-pager li:hover {
+  color: var(--color-primary) !important;
+}
+
+.dark .el-pagination .el-pager li.is-active {
+  background-color: var(--color-primary) !important;
+  color: #fff !important;
+}
+
+/* 加载 */
+.dark .el-loading-mask {
+  background-color: rgba(0, 0, 0, 0.7) !important;
+}
+
+/* 空状态 */
+.dark .el-empty__description {
+  color: var(--color-text-secondary) !important;
+}
+
+/* 时间线 */
+.dark .el-timeline-item__timestamp {
+  color: var(--color-text-secondary) !important;
+}
+
+/* 步骤条 */
+.dark .el-step__title {
+  color: var(--color-text-primary) !important;
+}
+
+.dark .el-step__description {
+  color: var(--color-text-secondary) !important;
+}
+
+/* 面包屑 */
+.dark .el-breadcrumb__inner {
+  color: var(--color-text-regular) !important;
+}
+
+.dark .el-breadcrumb__inner:hover {
+  color: var(--color-primary) !important;
+}
+
+/* 菜单 */
+.dark .el-menu {
+  background-color: var(--color-bg-card) !important;
+  border-color: var(--color-border) !important;
+}
+
+.dark .el-menu-item {
+  color: var(--color-text-regular) !important;
+}
+
+.dark .el-menu-item:hover {
+  background-color: var(--color-border-light) !important;
+  color: var(--color-primary) !important;
+}
+
+.dark .el-menu-item.is-active {
+  color: var(--color-primary) !important;
+}
+
+/* 子菜单 */
+.dark .el-sub-menu__title {
+  color: var(--color-text-regular) !important;
+}
+
+.dark .el-sub-menu__title:hover {
+  background-color: var(--color-border-light) !important;
+  color: var(--color-primary) !important;
+}
+
+/* 描述列表 */
+.dark .el-descriptions__label {
+  color: var(--color-text-secondary) !important;
+}
+
+.dark .el-descriptions__content {
+  color: var(--color-text-primary) !important;
+}
+
+/* 结果页 */
+.dark .el-result__title {
+  color: var(--color-text-primary) !important;
+}
+
+.dark .el-result__subtitle {
+  color: var(--color-text-secondary) !important;
+}
+
+/* 骨架屏 */
+.dark .el-skeleton__item {
+  background: linear-gradient(90deg, var(--color-border-light) 25%, var(--color-border) 37%, var(--color-border-light) 63%) !important;
+}
+
+/* 代码块 */
+.dark pre,
+.dark code {
+  background: var(--color-border-light) !important;
+  color: var(--color-text-primary) !important;
+}
+
+/* 引用 */
+.dark blockquote {
+  border-left-color: var(--color-border-dark) !important;
+  color: var(--color-text-secondary) !important;
+}
+
+/* 链接 */
+.dark a {
+  color: var(--color-primary) !important;
+}
+
+.dark a:hover {
+  color: var(--color-primary-light) !important;
+}
+
+/* 分割线 */
+.dark hr,
+.dark .el-divider {
+  border-color: var(--color-border) !important;
+}
+
+/* 徽章 */
+.dark .el-badge__content {
+  background-color: var(--color-danger) !important;
+}
+
+/* 头像 */
+.dark .el-avatar {
+  background-color: var(--color-primary) !important;
+}
+
+/* 图片占位 */
+.dark .el-image__placeholder {
+  background-color: var(--color-border-light) !important;
+}
+
+/* 上传 */
+.dark .el-upload {
+  border-color: var(--color-border) !important;
+}
+
+.dark .el-upload:hover {
+  border-color: var(--color-primary) !important;
+}
+
+.dark .el-upload-dragger {
+  background-color: var(--color-bg-card) !important;
+  border-color: var(--color-border) !important;
+}
+
+.dark .el-upload-dragger:hover {
+  border-color: var(--color-primary) !important;
+}
+
+/* 穿梭框 */
+.dark .el-transfer-panel {
+  background-color: var(--color-bg-card) !important;
+  border-color: var(--color-border) !important;
+}
+
+.dark .el-transfer-panel__header {
+  background-color: var(--color-border-light) !important;
+}
+
+/* 日历 */
+.dark .el-calendar-table {
+  background-color: var(--color-bg-card) !important;
+}
+
+.dark .el-calendar-table td {
+  border-color: var(--color-border) !important;
+}
+
+.dark .el-calendar-day {
+  color: var(--color-text-regular) !important;
+}
+
+/* 回到顶部 */
+.dark .el-backtop {
+  background-color: var(--color-bg-card) !important;
+  box-shadow: var(--shadow-md) !important;
+}
+
+/* 页头 */
+.dark .el-page-header__title {
+  color: var(--color-text-primary) !important;
+}
+
+.dark .el-page-header__content {
+  color: var(--color-text-regular) !important;
+}
+
+/* 统计数值 */
+.dark .el-statistic__head {
+  color: var(--color-text-secondary) !important;
+}
+
+.dark .el-statistic__content {
+  color: var(--color-text-primary) !important;
+}

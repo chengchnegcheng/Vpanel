@@ -17,13 +17,13 @@ const (
 // IPWhitelist represents an IP address or CIDR range that is allowed to bypass restrictions.
 type IPWhitelist struct {
 	ID          uint      `json:"id" gorm:"primaryKey"`
-	IP          string    `json:"ip" gorm:"size:45;not null"`  // IPv4 or IPv6
-	CIDR        string    `json:"cidr" gorm:"size:50"`         // CIDR range, e.g., 192.168.1.0/24
-	UserID      *uint     `json:"user_id" gorm:"index"`        // nil means global whitelist
-	Description string    `json:"description" gorm:"size:255"`
-	CreatedBy   uint      `json:"created_by"`
-	CreatedAt   time.Time `json:"created_at"`
-	UpdatedAt   time.Time `json:"updated_at"`
+	IP          string    `json:"ip" gorm:"column:ip;size:45;not null"`
+	CIDR        string    `json:"cidr" gorm:"column:cidr;size:50"`
+	UserID      *uint     `json:"user_id" gorm:"column:user_id;index"`
+	Description string    `json:"description" gorm:"column:description;size:255"`
+	CreatedBy   uint      `json:"created_by" gorm:"column:created_by"`
+	CreatedAt   time.Time `json:"created_at" gorm:"column:created_at"`
+	UpdatedAt   time.Time `json:"updated_at" gorm:"column:updated_at"`
 }
 
 // TableName returns the table name for IPWhitelist.
@@ -34,14 +34,14 @@ func (IPWhitelist) TableName() string {
 // IPBlacklist represents an IP address or CIDR range that is blocked from access.
 type IPBlacklist struct {
 	ID          uint       `json:"id" gorm:"primaryKey"`
-	IP          string     `json:"ip" gorm:"size:45;not null"`
-	CIDR        string     `json:"cidr" gorm:"size:50"`
-	UserID      *uint      `json:"user_id" gorm:"index"`        // nil means global blacklist
-	Reason      string     `json:"reason" gorm:"size:255"`
-	ExpiresAt   *time.Time `json:"expires_at"`                  // nil means permanent
-	IsAutomatic bool       `json:"is_automatic"`                // whether automatically added
-	CreatedBy   *uint      `json:"created_by"`
-	CreatedAt   time.Time  `json:"created_at"`
+	IP          string     `json:"ip" gorm:"column:ip;size:45;not null"`
+	CIDR        string     `json:"cidr" gorm:"column:cidr;size:50"`
+	UserID      *uint      `json:"user_id" gorm:"column:user_id;index"`
+	Reason      string     `json:"reason" gorm:"column:reason;size:255"`
+	ExpiresAt   *time.Time `json:"expires_at" gorm:"column:expires_at"`
+	IsAutomatic bool       `json:"is_automatic" gorm:"column:is_automatic"`
+	CreatedBy   *uint      `json:"created_by" gorm:"column:created_by"`
+	CreatedAt   time.Time  `json:"created_at" gorm:"column:created_at"`
 }
 
 // TableName returns the table name for IPBlacklist.

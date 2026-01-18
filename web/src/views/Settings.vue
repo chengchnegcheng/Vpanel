@@ -1855,7 +1855,7 @@ const loadVersionDetails = async (version) => {
   try {
     xraySettings.loading = true
     
-    const response = await api.get(`/api/xray/version/${version}/details`)
+    const response = await api.get(`/xray/version/${version}/details`)
     
     if (response.data) {
       xraySettings.versionDetails = {

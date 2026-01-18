@@ -299,4 +299,17 @@ onMounted(() => {
 .pause-warning-list li {
   margin: 4px 0;
 }
+
+/* 深色模式适配 */
+.dark .status-info h4 {
+  color: var(--color-text-primary);
+}
+
+.dark .detail-item .value {
+  color: var(--color-text-primary);
+}
+
+.dark .pause-details {
+  background: var(--color-border-light);
+}
 </style>

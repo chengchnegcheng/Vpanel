@@ -158,7 +158,7 @@ const handleCommand = async (command) => {
     router.push('/profile')
   } else if (command === 'logout') {
     await userStore.logout()
-    router.push('/login')
+    router.push('/user/login')
   }
 }
 </script>

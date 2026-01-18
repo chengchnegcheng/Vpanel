@@ -190,6 +190,14 @@ func (h *GiftCardHandler) AdminListGiftCards(c *gin.Context) {
 	status := c.Query("status")
 	batchID := c.Query("batch_id")
 
+	// 验证分页参数
+	if page < 1 {
+		page = 1
+	}
+	if pageSize < 1 || pageSize > 100 {
+		pageSize = 20
+	}
+
 	filter := giftcard.GiftCardFilter{
 		Status:  status,
 		BatchID: batchID,
@@ -197,16 +205,28 @@ func (h *GiftCardHandler) AdminListGiftCards(c *gin.Context) {
 
 	giftCards, total, err := h.giftCardService.List(c.Request.Context(), filter, page, pageSize)
 	if err != nil {
-		h.logger.Error("Failed to list gift cards", logger.Err(err))
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to list gift cards"})
+		h.logger.Error("Failed to list gift cards", logger.Err(err),
+			logger.F("page", page),
+			logger.F("pageSize", pageSize),
+			logger.F("status", status),
+			logger.F("batchID", batchID))
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"code":    500,
+			"message": "Failed to retrieve gift card list",
+			"error":   "Database query failed",
+		})
 		return
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"gift_cards": giftCards,
-		"total":      total,
-		"page":       page,
-		"page_size":  pageSize,
+		"code":    200,
+		"message": "success",
+		"data": gin.H{
+			"gift_cards": giftCards,
+			"total":      total,
+			"page":       page,
+			"page_size":  pageSize,
+		},
 	})
 }
 

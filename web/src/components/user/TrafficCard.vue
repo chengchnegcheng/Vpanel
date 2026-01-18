@@ -201,4 +201,17 @@ function formatDate(dateStr) {
     gap: 20px;
   }
 }
+
+/* 深色模式适配 */
+.dark .progress-value {
+  color: var(--color-text-primary);
+}
+
+.dark .detail-value {
+  color: var(--color-text-primary);
+}
+
+.dark .detail-item {
+  border-bottom: 1px solid var(--color-border);
+}
 </style>

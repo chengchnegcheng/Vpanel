@@ -13,7 +13,7 @@ type Log struct {
 	ID        int64     `json:"id" gorm:"primaryKey;autoIncrement"`
 	Level     string    `json:"level" gorm:"size:10;index"`
 	Message   string    `json:"message" gorm:"type:text"`
-	Source    string    `json:"source" gorm:"column:module;size:50;index"` // Maps to 'module' column in existing DB
+	Source    string    `json:"source" gorm:"column:module;size:50;index:idx_logs_module"` // Maps to 'module' column in existing DB
 	UserID    *int64    `json:"user_id" gorm:"index"`
 	Username  string    `json:"username" gorm:"size:50"`
 	IP        string    `json:"ip" gorm:"size:50"`

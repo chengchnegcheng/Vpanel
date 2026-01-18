@@ -430,15 +430,16 @@ onUnmounted(() => {
 }
 
 .panel-box {
-  background-color: #fff;
+  background-color: var(--el-bg-color, #fff);
   border-radius: 4px;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
   margin-bottom: 20px;
+  border: 1px solid var(--el-border-color, #eee);
 }
 
 .panel-header {
   padding: 15px 20px;
-  border-bottom: 1px solid #eee;
+  border-bottom: 1px solid var(--el-border-color, #eee);
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -447,7 +448,7 @@ onUnmounted(() => {
 .panel-title {
   font-size: 16px;
   font-weight: bold;
-  color: #333;
+  color: var(--el-text-color-primary, #333);
 }
 
 .stats-cards,
@@ -473,18 +474,36 @@ onUnmounted(() => {
   display: flex;
   justify-content: center;
   padding: 20px 0;
+  /* macOS 显示模式兼容性修复 */
+  -webkit-transform: translateZ(0);
+  transform: translateZ(0);
+}
+
+.stats-progress :deep(.el-progress) {
+  -webkit-transform: translateZ(0);
+  transform: translateZ(0);
+}
+
+.stats-progress :deep(.el-progress svg) {
+  -webkit-transform: translateZ(0);
+  transform: translateZ(0);
+  shape-rendering: geometricPrecision;
+}
+
+.stats-progress :deep(.el-progress__text) {
+  font-weight: bold;
 }
 
 .stats-details {
   text-align: center;
   padding: 10px 0;
-  border-top: 1px solid #eee;
+  border-top: 1px solid var(--el-border-color, #eee);
   margin-top: 10px;
 }
 
 .stats-details p {
   margin: 5px 0;
-  color: #606266;
+  color: var(--el-text-color-regular, #606266);
   font-size: 12px;
 }
 
@@ -522,7 +541,7 @@ onUnmounted(() => {
 
 .traffic-label {
   font-size: 14px;
-  color: #666;
+  color: var(--el-text-color-regular, #666);
 }
 
 .traffic-details {
@@ -537,7 +556,7 @@ onUnmounted(() => {
 }
 
 .traffic-item-label {
-  color: #666;
+  color: var(--el-text-color-regular, #666);
 }
 
 .traffic-item-value {
@@ -550,7 +569,7 @@ onUnmounted(() => {
 
 .up-down-ratio {
   height: 20px;
-  background-color: #f5f7fa;
+  background-color: var(--el-fill-color, #f5f7fa);
   border-radius: 10px;
   overflow: hidden;
   display: flex;
@@ -606,7 +625,7 @@ onUnmounted(() => {
 
 .bar-container {
   height: 20px;
-  background-color: #f5f7fa;
+  background-color: var(--el-fill-color, #f5f7fa);
   border-radius: 10px;
   overflow: hidden;
 }
@@ -620,6 +639,6 @@ onUnmounted(() => {
   text-align: right;
   font-size: 12px;
   margin-top: 2px;
-  color: #666;
+  color: var(--el-text-color-regular, #666);
 }
 </style>

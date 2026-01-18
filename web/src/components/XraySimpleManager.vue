@@ -134,15 +134,7 @@ export default defineComponent({
     // 更新设置
     const updateSettings = async () => {
       try {
-        const response = await fetch('/api/xray/settings', {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ autoUpdate: autoUpdate.value })
-        })
-        
-        if (!response.ok) {
-          throw new Error('更新设置失败')
-        }
+        await api.put('/settings/xray', { autoUpdate: autoUpdate.value })
         
         ElMessage.success(`自动更新已${autoUpdate.value ? '启用' : '禁用'}`)
       } catch (error) {

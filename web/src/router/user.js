@@ -326,23 +326,13 @@ export function userRouteGuard(to, from, next) {
     document.title = `${to.meta.title} - V Panel`
   }
   
-  // 如果是管理员且已登录，访问用户门户时跳转到管理后台
-  if (isAdminAuthenticated && userRole === 'admin' && to.path.startsWith('/user')) {
-    // 允许管理员访问用户门户的登录/注册页面（可能是要切换账号）
-    if (!to.meta.guest) {
-      console.log('Admin user detected, redirecting to admin dashboard')
-      next('/admin/dashboard')
-      return
-    }
-  }
-  
   // 需要用户认证的页面
   if (to.meta.requiresUserAuth && !isUserAuthenticated) {
     next({ name: 'UserLogin', query: { redirect: to.fullPath } })
     return
   }
   
-  // 已登录用户访问登录/注册页面
+  // 已登录用户访问登录/注册页面，跳转到用户仪表板
   if (to.meta.guest && isUserAuthenticated && to.path.startsWith('/user/')) {
     next('/user/dashboard')
     return

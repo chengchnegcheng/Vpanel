@@ -46,6 +46,15 @@ export const useUserPortalStore = defineStore('userPortal', () => {
       user.value = response.user
       localStorage.setItem('userToken', response.token)
       localStorage.setItem('userInfo', JSON.stringify(response.user))
+      
+      // 检查用户角色，如果是管理员，同时设置管理员 token
+      if (response.user && response.user.role === 'admin') {
+        localStorage.setItem('token', response.token)
+        localStorage.setItem('userRole', 'admin')
+      } else {
+        localStorage.setItem('userRole', 'user')
+      }
+      
       return response
     } catch (err) {
       error.value = err.message || '登录失败'

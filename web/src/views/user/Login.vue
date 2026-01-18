@@ -195,9 +195,15 @@ async function handleLogin() {
     
     ElMessage.success('登录成功')
     
-    // 跳转到目标页面或仪表板
-    const redirect = route.query.redirect || '/user/dashboard'
-    router.push(redirect)
+    // 根据用户角色跳转
+    if (response.user && response.user.role === 'admin') {
+      // 管理员用户跳转到管理后台
+      router.push('/admin/dashboard')
+    } else {
+      // 普通用户跳转到用户门户
+      const redirect = route.query.redirect || '/user/dashboard'
+      router.push(redirect)
+    }
   } catch (error) {
     const message = error.response?.data?.message || error.message || '登录失败'
     ElMessage.error(message)
@@ -222,8 +228,15 @@ async function handle2FAVerify() {
     
     ElMessage.success('登录成功')
     
-    const redirect = route.query.redirect || '/user/dashboard'
-    router.push(redirect)
+    // 根据用户角色跳转
+    if (response.user && response.user.role === 'admin') {
+      // 管理员用户跳转到管理后台
+      router.push('/admin/dashboard')
+    } else {
+      // 普通用户跳转到用户门户
+      const redirect = route.query.redirect || '/user/dashboard'
+      router.push(redirect)
+    }
   } catch (error) {
     const message = error.response?.data?.message || error.message || '验证失败'
     ElMessage.error(message)

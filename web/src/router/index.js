@@ -10,10 +10,6 @@ import { userRoutes, userRouteGuard } from './user'
 // 布局组件 - 预加载
 const MainLayout = () => import(/* webpackChunkName: "layout" */ '../layouts/MainLayout.vue')
 
-// 认证相关 - 独立 chunk
-const Login = () => import(/* webpackChunkName: "auth" */ '../views/Login.vue')
-const Register = () => import(/* webpackChunkName: "auth" */ '../views/Register.vue')
-
 // 核心页面 - 优先加载
 const Dashboard = () => import(/* webpackChunkName: "core" */ '../views/Dashboard.vue')
 const Profile = () => import(/* webpackChunkName: "core" */ '../views/Profile.vue')
@@ -62,18 +58,26 @@ const NodeComparison = () => import(/* webpackChunkName: "node-admin" */ '../vie
 const NotFound = () => import(/* webpackChunkName: "error" */ '../views/NotFound.vue')
 
 const routes = [
-  // 根路径 - 由路由守卫根据登录状态和角色智能跳转
+  // 根路径 - 默认跳转到用户门户
   {
     path: '/',
     name: 'Home',
     redirect: () => {
-      // 这个重定向作为后备，实际跳转逻辑在路由守卫中处理
       const isAuthenticated = localStorage.getItem('token')
+      const isUserAuthenticated = localStorage.getItem('userToken')
       const userRole = localStorage.getItem('userRole') || 'user'
       
+      // 管理员已登录，跳转到管理后台
       if (isAuthenticated && userRole === 'admin') {
         return '/admin/dashboard'
       }
+      
+      // 普通用户已登录，跳转到用户门户
+      if (isUserAuthenticated) {
+        return '/user/dashboard'
+      }
+      
+      // 未登录，跳转到用户门户登录页
       return '/user/login'
     }
   },
@@ -387,26 +391,6 @@ const routes = [
     ]
   },
   
-  // 认证页面
-  {
-    path: '/login',
-    name: 'Login',
-    component: Login,
-    meta: { 
-      title: '登录',
-      guest: true
-    }
-  },
-  {
-    path: '/register',
-    name: 'Register',
-    component: Register,
-    meta: { 
-      title: '注册',
-      guest: true
-    }
-  },
-  
   // 404 页面
   {
     path: '/:pathMatch(.*)*',
@@ -437,18 +421,21 @@ router.beforeEach((to, from, next) => {
   // 处理根路径 - 根据登录状态和角色智能跳转
   if (to.path === '/') {
     if (isAuthenticated && userRole === 'admin') {
-      // admin 用户跳转到管理后台
       next('/admin/dashboard')
       return
     } else if (isUserAuthenticated) {
-      // 普通用户跳转到用户门户
       next('/user/dashboard')
       return
     } else {
-      // 未登录用户跳转到用户登录页
       next('/user/login')
       return
     }
+  }
+  
+  // 阻止直接访问旧的管理员登录页面，重定向到用户登录页
+  if (to.path === '/login' || to.path === '/register') {
+    next('/user/login')
+    return
   }
   
   // 用户前台路由使用专门的守卫
@@ -462,27 +449,21 @@ router.beforeEach((to, from, next) => {
     document.title = `${to.meta.title} - V Panel`
   }
   
-  // 需要认证的页面
+  // 需要认证的管理后台页面
   if (to.meta.requiresAuth && !isAuthenticated) {
-    next({ name: 'Login', query: { redirect: to.fullPath } })
-    return
-  }
-  
-  // 已登录用户访问登录/注册页面
-  if (to.meta.guest && isAuthenticated) {
-    // 根据角色跳转到对应的仪表盘
-    if (userRole === 'admin') {
-      next('/admin/dashboard')
-    } else {
-      next('/user/dashboard')
-    }
+    // 未登录访问管理后台，跳转到用户登录页
+    next({ name: 'UserLogin', query: { redirect: to.fullPath } })
     return
   }
   
   // 角色权限检查
   if (to.meta.roles && !to.meta.roles.includes(userRole)) {
-    // 非管理员访问管理后台，跳转到用户门户
-    next('/user/dashboard')
+    // 非管理员访问管理后台，跳转到用户门户或登录页
+    if (isUserAuthenticated) {
+      next('/user/dashboard')
+    } else {
+      next('/user/login')
+    }
     return
   }
   

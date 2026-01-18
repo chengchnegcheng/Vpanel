@@ -265,8 +265,10 @@ func OptionalAuthMiddleware(authService auth.Service) gin.HandlerFunc {
 		claims, err := authService.ValidateToken(token)
 		if err == nil {
 			c.Set(string(UserClaimsKey), claims)
-			// Also store user_id for backward compatibility with handlers
 			c.Set("user_id", claims.UserID)
+			c.Set("userID", claims.UserID)
+			c.Set("username", claims.Username)
+			c.Set("role", claims.Role)
 		}
 
 		c.Next()

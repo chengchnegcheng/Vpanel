@@ -63,13 +63,18 @@ type ServiceConfig struct {
 // NewService creates a new IP restriction service.
 func NewService(db *gorm.DB, config *ServiceConfig) (*Service, error) {
 	var geoConfig *GeolocationConfig
+	var notifier NotificationSender
+	
 	if config != nil {
 		geoConfig = config.GeoConfig
+		notifier = config.Notifier
 	}
 
+	// Create geolocation service - it will work even without GeoIP database
 	geoService, err := NewGeolocationService(db, geoConfig)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create geolocation service: %w", err)
+		// Log warning but continue - geolocation is optional
+		geoService = nil
 	}
 
 	return &Service{
@@ -78,7 +83,7 @@ func NewService(db *gorm.DB, config *ServiceConfig) (*Service, error) {
 		tracker:    NewTracker(db),
 		geoService: geoService,
 		settings:   DefaultIPRestrictionSettings(),
-		notifier:   config.Notifier,
+		notifier:   notifier,
 	}, nil
 }
 

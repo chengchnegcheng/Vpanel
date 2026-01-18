@@ -168,15 +168,15 @@ const latencyClass = computed(() => {
 <style scoped>
 .node-card {
   position: relative;
-  background: #fff;
+  background: var(--color-bg-card);
   border-radius: 12px;
-  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.04);
+  box-shadow: var(--shadow-sm);
   overflow: hidden;
   transition: all 0.3s;
 }
 
 .node-card:hover {
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
+  box-shadow: var(--shadow-md);
   transform: translateY(-2px);
 }
 
@@ -190,7 +190,7 @@ const latencyClass = computed(() => {
   justify-content: space-between;
   align-items: center;
   padding: 16px;
-  border-bottom: 1px solid #ebeef5;
+  border-bottom: 1px solid var(--color-border);
 }
 
 .node-info {
@@ -206,13 +206,13 @@ const latencyClass = computed(() => {
 .node-name {
   font-size: 16px;
   font-weight: 600;
-  color: #303133;
+  color: var(--color-text-primary);
   margin: 0 0 4px 0;
 }
 
 .node-region {
   font-size: 13px;
-  color: #909399;
+  color: var(--color-text-secondary);
 }
 
 /* 卡片内容 */
@@ -233,7 +233,7 @@ const latencyClass = computed(() => {
 
 .info-label {
   font-size: 14px;
-  color: #909399;
+  color: var(--color-text-secondary);
 }
 
 .load-bar {
@@ -250,7 +250,7 @@ const latencyClass = computed(() => {
 
 .load-text {
   font-size: 12px;
-  color: #606266;
+  color: var(--color-text-regular);
   min-width: 36px;
   text-align: right;
 }
@@ -259,27 +259,27 @@ const latencyClass = computed(() => {
   display: flex;
   align-items: center;
   gap: 4px;
-  color: #409eff;
+  color: var(--color-primary);
   font-size: 14px;
 }
 
 .latency-good {
-  color: #67c23a;
+  color: var(--color-success);
   font-weight: 500;
 }
 
 .latency-fair {
-  color: #e6a23c;
+  color: var(--color-warning);
   font-weight: 500;
 }
 
 .latency-poor {
-  color: #f56c6c;
+  color: var(--color-danger);
   font-weight: 500;
 }
 
 .latency-unknown {
-  color: #c0c4cc;
+  color: var(--color-text-placeholder);
   font-size: 14px;
 }
 
@@ -288,8 +288,8 @@ const latencyClass = computed(() => {
   display: flex;
   gap: 8px;
   padding: 12px 16px;
-  background: #fafafa;
-  border-top: 1px solid #ebeef5;
+  background: var(--color-border-light);
+  border-top: 1px solid var(--color-border);
 }
 
 .card-footer .el-button {
@@ -303,13 +303,13 @@ const latencyClass = computed(() => {
   left: 0;
   right: 0;
   bottom: 0;
-  background: rgba(255, 255, 255, 0.9);
+  background: var(--color-bg-overlay);
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   gap: 8px;
-  color: #e6a23c;
+  color: var(--color-warning);
   font-size: 16px;
 }
 
