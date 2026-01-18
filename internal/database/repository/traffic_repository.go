@@ -165,7 +165,7 @@ func (r *trafficRepository) GetTrafficByUser(ctx context.Context, start, end tim
 		Joins("JOIN users u ON t.user_id = u.id").
 		Where("t.recorded_at BETWEEN ? AND ?", start, end).
 		Group("t.user_id, u.username").
-		Order("(upload + download) DESC")
+		Order("(COALESCE(SUM(t.upload), 0) + COALESCE(SUM(t.download), 0)) DESC")
 
 	if limit > 0 {
 		query = query.Limit(limit)
@@ -182,21 +182,21 @@ func (r *trafficRepository) GetTrafficByUser(ctx context.Context, start, end tim
 func (r *trafficRepository) GetTrafficTimeline(ctx context.Context, start, end time.Time, interval string) ([]*TrafficTimelinePoint, error) {
 	var results []*TrafficTimelinePoint
 
-	// SQLite date formatting based on interval
+	// PostgreSQL date formatting based on interval
 	var dateFormat string
 	switch interval {
 	case "hour":
-		dateFormat = "%Y-%m-%d %H:00:00"
+		dateFormat = "YYYY-MM-DD HH24:00:00"
 	case "day":
-		dateFormat = "%Y-%m-%d"
+		dateFormat = "YYYY-MM-DD"
 	case "month":
-		dateFormat = "%Y-%m"
+		dateFormat = "YYYY-MM"
 	default:
-		dateFormat = "%Y-%m-%d %H:00:00"
+		dateFormat = "YYYY-MM-DD HH24:00:00"
 	}
 
-	selectClause := "strftime('" + dateFormat + "', recorded_at) as time, COALESCE(SUM(upload), 0) as upload, COALESCE(SUM(download), 0) as download"
-	groupClause := "strftime('" + dateFormat + "', recorded_at)"
+	selectClause := "TO_CHAR(recorded_at, '" + dateFormat + "') as time, COALESCE(SUM(upload), 0) as upload, COALESCE(SUM(download), 0) as download"
+	groupClause := "TO_CHAR(recorded_at, '" + dateFormat + "')"
 
 	err := r.db.WithContext(ctx).
 		Table("traffic").

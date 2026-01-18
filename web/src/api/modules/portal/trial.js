@@ -10,7 +10,7 @@ import request from '@/api/base'
  */
 export function getTrialStatus() {
   return request({
-    url: '/api/trial',
+    url: '/trial',
     method: 'get'
   })
 }
@@ -21,7 +21,7 @@ export function getTrialStatus() {
  */
 export function activateTrial() {
   return request({
-    url: '/api/trial/activate',
+    url: '/trial/activate',
     method: 'post'
   })
 }
