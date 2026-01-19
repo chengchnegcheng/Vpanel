@@ -126,7 +126,7 @@
     </el-card>
     
     <!-- 订阅链接访问 IP -->
-    <el-card style="margin-top: 20px;" v-if="subscriptionIPs.length > 0">
+    <el-card style="margin-top: 20px;" v-if="false">
       <template #header>
         <div class="card-header">
           <span>订阅链接访问 IP</span>
@@ -136,7 +136,7 @@
         </div>
       </template>
       
-      <el-table :data="subscriptionIPs" border>
+      <el-table :data="[]" border>
         <el-table-column prop="ip" label="IP 地址" width="150"></el-table-column>
         <el-table-column prop="country" label="国家/地区" width="120"></el-table-column>
         <el-table-column prop="lastAccess" label="最后访问" width="180"></el-table-column>
@@ -164,9 +164,6 @@ const ipHistory = ref([])
 const historyPage = ref(1)
 const historyPageSize = ref(10)
 const historyTotal = ref(0)
-
-// 订阅 IP
-const subscriptionIPs = ref([])
 
 // 计算属性
 const deviceUsagePercent = computed(() => {
@@ -246,23 +243,12 @@ const fetchIPHistory = async () => {
   }
 }
 
-// 获取订阅 IP
-const fetchSubscriptionIPs = async () => {
-  try {
-    const response = await api.get('/user/subscription-ips')
-    subscriptionIPs.value = response || []
-  } catch (error) {
-    console.error('Failed to fetch subscription IPs:', error)
-  }
-}
-
 // 自动刷新
 let refreshInterval = null
 
 onMounted(() => {
   fetchDevices()
   fetchIPHistory()
-  fetchSubscriptionIPs()
   
   // 每30秒自动刷新设备列表
   refreshInterval = setInterval(fetchDevices, 30000)

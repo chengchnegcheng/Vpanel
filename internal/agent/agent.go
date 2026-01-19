@@ -155,6 +155,13 @@ func (a *Agent) Start(ctx context.Context) error {
 	a.ctx, a.cancel = context.WithCancel(ctx)
 	a.mu.Unlock()
 
+	// Ensure Xray is installed
+	installer := NewXrayInstaller(a.logger)
+	if err := installer.EnsureXrayInstalled(ctx, a.config.Xray.ConfigPath); err != nil {
+		a.logger.Error("failed to ensure xray installation", logger.F("error", err.Error()))
+		// Continue anyway - Xray might be installed in a custom location
+	}
+
 	// Start health server
 	if err := a.healthServer.Start(); err != nil {
 		return fmt.Errorf("failed to start health server: %w", err)

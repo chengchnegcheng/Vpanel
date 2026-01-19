@@ -79,6 +79,17 @@
                 <el-option label="HTTP" value="http" />
               </el-select>
             </el-form-item>
+            <el-form-item label="部署节点" prop="node_id">
+              <el-select v-model="proxyForm.node_id" placeholder="请选择部署节点" style="width: 100%" clearable>
+                <el-option 
+                  v-for="node in nodesList" 
+                  :key="node.id" 
+                  :label="`${node.name} (${node.address})`" 
+                  :value="node.id"
+                />
+              </el-select>
+              <div class="form-tip">选择代理将部署到哪个节点服务器</div>
+            </el-form-item>
             <el-form-item label="监听IP" prop="listen">
               <el-input v-model="proxyForm.listen" placeholder="默认为 0.0.0.0" />
             </el-form-item>
@@ -303,6 +314,7 @@ import { proxies as proxiesApi } from '@/api'
 
 // 协议列表
 const proxiesList = ref([])
+const nodesList = ref([]) // 节点列表
 const loading = ref(false)
 const dialogVisible = ref(false)
 const viewDialogVisible = ref(false)
@@ -330,6 +342,7 @@ const proxyForm = reactive({
   id: null,
   name: '',
   type: '',
+  node_id: null, // 节点 ID
   port: 10000,
   listen: '0.0.0.0',
   enabled: true,
@@ -385,7 +398,26 @@ const proxyForm = reactive({
 // 生命周期钩子
 onMounted(() => {
   fetchProxies()
+  fetchNodes()
 })
+
+// 获取节点列表
+const fetchNodes = async () => {
+  try {
+    // 调用节点列表 API
+    const response = await fetch('/api/admin/nodes', {
+      headers: {
+        'Authorization': `Bearer ${localStorage.getItem('token')}`
+      }
+    })
+    if (response.ok) {
+      const data = await response.json()
+      nodesList.value = data.data || []
+    }
+  } catch (error) {
+    console.error('获取节点列表失败:', error)
+  }
+}
 
 // 获取协议列表
 const fetchProxies = async () => {
@@ -415,6 +447,7 @@ const resetForm = () => {
     id: null,
     name: '',
     type: '',
+    node_id: null, // 重置节点选择
     port: 10000,
     listen: '0.0.0.0',
     enabled: true,
@@ -588,6 +621,12 @@ const getProtocolType = (type) => {
   display: flex;
   justify-content: space-between;
   align-items: center;
+}
+
+.form-tip {
+  font-size: 12px;
+  color: #909399;
+  margin-top: 4px;
 }
 
 .cert-input {

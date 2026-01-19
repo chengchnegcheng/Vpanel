@@ -63,6 +63,7 @@ func (User) TableName() string {
 type Proxy struct {
 	ID        int64          `gorm:"primaryKey;autoIncrement"`
 	UserID    int64          `gorm:"index;not null"`
+	NodeID    *int64         `gorm:"index"` // 代理所属节点
 	Name      string         `gorm:"size:100;not null"`
 	Protocol  string         `gorm:"size:20;not null"`
 	Port      int            `gorm:"not null;index"`
@@ -72,6 +73,9 @@ type Proxy struct {
 	Remark    string         `gorm:"size:255"`
 	CreatedAt time.Time      `gorm:"autoCreateTime"`
 	UpdatedAt time.Time      `gorm:"autoUpdateTime"`
+	
+	// Relations
+	Node *Node `gorm:"foreignKey:NodeID"`
 }
 
 // TableName returns the table name for Proxy.
@@ -137,6 +141,8 @@ type ProxyRepository interface {
 	GetByUserID(ctx context.Context, userID int64, limit, offset int) ([]*Proxy, error)
 	CountByUserID(ctx context.Context, userID int64) (int64, error)
 	GetByPort(ctx context.Context, port int) (*Proxy, error)
+	// Node-related methods
+	GetByNodeID(ctx context.Context, nodeID int64) ([]*Proxy, error)
 	// Batch operations
 	EnableByUserID(ctx context.Context, userID int64) error
 	DisableByUserID(ctx context.Context, userID int64) error
@@ -167,6 +173,7 @@ type TrafficRepository interface {
 	GetTrafficByProtocol(ctx context.Context, start, end time.Time) ([]*ProtocolTrafficStats, error)
 	GetTrafficByUser(ctx context.Context, start, end time.Time, limit int) ([]*UserTrafficStats, error)
 	GetTrafficTimeline(ctx context.Context, start, end time.Time, interval string) ([]*TrafficTimelinePoint, error)
+	GetTrafficTimelineByUser(ctx context.Context, userID int64, start, end time.Time, interval string) ([]*TrafficTimelinePoint, error)
 }
 
 // ProtocolTrafficStats represents traffic statistics by protocol.

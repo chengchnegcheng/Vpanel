@@ -188,7 +188,7 @@ const updateCharts = () => {
 const refreshData = async () => {
   loading.value = true
   try {
-    const response = await api.get('/traffic/monitor')
+    const response = await api.get('/stats/traffic')
     const data = response.data || response
     trafficData.value = data.list || []
     

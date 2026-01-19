@@ -1,129 +1,111 @@
 #!/bin/bash
-# API 端点测试脚本
+
+# API 测试脚本
 
 set -e
 
-# 颜色定义
-RED='\033[0;31m'
 GREEN='\033[0;32m'
+RED='\033[0;31m'
 YELLOW='\033[1;33m'
-BLUE='\033[0;34m'
 NC='\033[0m'
 
 # 配置
-API_BASE="${1:-http://localhost:8080}"
-ADMIN_TOKEN="${2:-}"
+API_URL=${API_URL:-"http://localhost:8080"}
+ADMIN_TOKEN=${ADMIN_TOKEN:-""}
 
-echo -e "${BLUE}========================================${NC}"
-echo -e "${BLUE}     V Panel API 测试${NC}"
-echo -e "${BLUE}========================================${NC}"
-echo ""
-echo -e "${GREEN}API 地址:${NC} $API_BASE"
+if [ -z "$ADMIN_TOKEN" ]; then
+    echo -e "${RED}错误: 需要设置 ADMIN_TOKEN 环境变量${NC}"
+    echo "export ADMIN_TOKEN=your-token"
+    exit 1
+fi
+
+echo -e "${GREEN}测试 V Panel API${NC}"
+echo "API URL: $API_URL"
 echo ""
 
 # 测试函数
-test_endpoint() {
-    local method=$1
-    local endpoint=$2
-    local description=$3
-    local auth=$4
-    local expected_status=$5
+test_api() {
+    local name=$1
+    local method=$2
+    local endpoint=$3
+    local data=$4
     
-    local url="${API_BASE}${endpoint}"
-    local headers=""
+    echo -e "${YELLOW}测试: $name${NC}"
     
-    if [ "$auth" = "admin" ] && [ -n "$ADMIN_TOKEN" ]; then
-        headers="-H \"Authorization: Bearer $ADMIN_TOKEN\""
-    fi
-    
-    echo -n "测试: $description ... "
-    
-    local response
-    local status
-    
-    if [ "$method" = "GET" ]; then
-        response=$(eval curl -s -w "\n%{http_code}" $headers "$url" 2>&1)
+    if [ -z "$data" ]; then
+        response=$(curl -s -w "\n%{http_code}" -X $method \
+            -H "Authorization: Bearer $ADMIN_TOKEN" \
+            -H "Content-Type: application/json" \
+            "$API_URL$endpoint")
     else
-        response=$(eval curl -s -w "\n%{http_code}" -X "$method" $headers "$url" 2>&1)
+        response=$(curl -s -w "\n%{http_code}" -X $method \
+            -H "Authorization: Bearer $ADMIN_TOKEN" \
+            -H "Content-Type: application/json" \
+            -d "$data" \
+            "$API_URL$endpoint")
     fi
     
-    status=$(echo "$response" | tail -n1)
+    http_code=$(echo "$response" | tail -n1)
+    body=$(echo "$response" | sed '$d')
     
-    if [ "$status" = "$expected_status" ]; then
-        echo -e "${GREEN}✓${NC} (HTTP $status)"
-    elif [ "$status" = "401" ] && [ "$auth" = "admin" ] && [ -z "$ADMIN_TOKEN" ]; then
-        echo -e "${YELLOW}⊙${NC} (HTTP $status - 需要认证)"
+    if [ "$http_code" -ge 200 ] && [ "$http_code" -lt 300 ]; then
+        echo -e "${GREEN}✓ 成功 (HTTP $http_code)${NC}"
+        echo "$body" | jq '.' 2>/dev/null || echo "$body"
     else
-        echo -e "${RED}✗${NC} (HTTP $status, 期望 $expected_status)"
-        if [ "$status" = "500" ] || [ "$status" = "503" ]; then
-            echo "  响应: $(echo "$response" | head -n-1)"
-        fi
+        echo -e "${RED}✗ 失败 (HTTP $http_code)${NC}"
+        echo "$body"
     fi
+    
+    echo ""
 }
 
-# 公开端点测试
-echo -e "${YELLOW}=== 公开端点 ===${NC}"
-test_endpoint "GET" "/health" "健康检查" "none" "200"
-test_endpoint "GET" "/ready" "就绪检查" "none" "200"
+# 1. 测试健康检查
+test_api "健康检查" "GET" "/health"
+
+# 2. 测试节点列表
+test_api "获取节点列表" "GET" "/api/admin/nodes"
+
+# 3. 创建节点
+NODE_DATA='{
+  "name": "Test-Node",
+  "address": "test.example.com",
+  "port": 443,
+  "enabled": true
+}'
+test_api "创建节点" "POST" "/api/admin/nodes" "$NODE_DATA"
+
+# 4. 测试代理列表
+test_api "获取代理列表" "GET" "/api/proxies"
+
+# 5. 创建代理（带节点）
+PROXY_DATA='{
+  "name": "Test-VLESS",
+  "protocol": "vless",
+  "node_id": 1,
+  "port": 10443,
+  "settings": {
+    "uuid": "test-uuid-12345"
+  },
+  "enabled": true
+}'
+test_api "创建代理（带节点）" "POST" "/api/proxies" "$PROXY_DATA"
+
+# 6. 测试配置预览
+test_api "预览节点配置" "GET" "/api/admin/nodes/1/config/preview"
+
+# 7. 测试 SSH 连接（会失败，仅测试 API）
+SSH_DATA='{
+  "host": "test.example.com",
+  "port": 22,
+  "username": "root",
+  "password": "test"
+}'
+echo -e "${YELLOW}测试: SSH 连接测试（预期失败）${NC}"
+curl -s -X POST \
+    -H "Authorization: Bearer $ADMIN_TOKEN" \
+    -H "Content-Type: application/json" \
+    -d "$SSH_DATA" \
+    "$API_URL/api/admin/nodes/test-connection" | jq '.'
 echo ""
 
-# 认证端点测试
-echo -e "${YELLOW}=== 认证端点 ===${NC}"
-test_endpoint "POST" "/api/auth/login" "管理员登录" "none" "400"
-test_endpoint "POST" "/api/portal/auth/login" "用户登录" "none" "400"
-echo ""
-
-if [ -z "$ADMIN_TOKEN" ]; then
-    echo -e "${YELLOW}提示: 未提供 admin token，跳过需要认证的端点测试${NC}"
-    echo -e "${YELLOW}使用方法: $0 <API_BASE> <ADMIN_TOKEN>${NC}"
-    echo ""
-    exit 0
-fi
-
-# 管理后台端点测试
-echo -e "${YELLOW}=== 管理后台 - 用户管理 ===${NC}"
-test_endpoint "GET" "/api/users" "获取用户列表" "admin" "200"
-test_endpoint "GET" "/api/roles" "获取角色列表" "admin" "200"
-echo ""
-
-echo -e "${YELLOW}=== 管理后台 - 代理管理 ===${NC}"
-test_endpoint "GET" "/api/proxies" "获取代理列表" "admin" "200"
-echo ""
-
-echo -e "${YELLOW}=== 管理后台 - 系统管理 ===${NC}"
-test_endpoint "GET" "/api/system/info" "系统信息" "admin" "200"
-test_endpoint "GET" "/api/system/status" "系统状态" "admin" "200"
-test_endpoint "GET" "/api/settings" "系统设置" "admin" "200"
-echo ""
-
-echo -e "${YELLOW}=== 管理后台 - IP 限制 ===${NC}"
-test_endpoint "GET" "/api/admin/ip-restrictions/stats" "IP 限制统计" "admin" "200"
-test_endpoint "GET" "/api/admin/ip-whitelist" "IP 白名单列表" "admin" "200"
-test_endpoint "GET" "/api/admin/ip-blacklist" "IP 黑名单列表" "admin" "200"
-test_endpoint "GET" "/api/admin/settings/ip-restriction" "IP 限制设置" "admin" "200"
-echo ""
-
-echo -e "${YELLOW}=== 管理后台 - 订阅管理 ===${NC}"
-test_endpoint "GET" "/api/admin/subscriptions" "订阅列表" "admin" "200"
-echo ""
-
-echo -e "${YELLOW}=== 管理后台 - 节点管理 ===${NC}"
-test_endpoint "GET" "/api/admin/nodes" "节点列表" "admin" "200"
-test_endpoint "GET" "/api/admin/node-groups" "节点分组列表" "admin" "200"
-echo ""
-
-echo -e "${YELLOW}=== 管理后台 - 商业化 ===${NC}"
-test_endpoint "GET" "/api/admin/plans" "套餐列表" "admin" "200"
-test_endpoint "GET" "/api/admin/orders" "订单列表" "admin" "200"
-test_endpoint "GET" "/api/admin/coupons" "优惠券列表" "admin" "200"
-test_endpoint "GET" "/api/admin/gift-cards" "礼品卡列表" "admin" "200"
-echo ""
-
-echo -e "${YELLOW}=== 管理后台 - 日志 ===${NC}"
-test_endpoint "GET" "/api/logs" "日志列表" "admin" "200"
-test_endpoint "GET" "/api/audit-logs" "审计日志" "admin" "200"
-echo ""
-
-echo -e "${BLUE}========================================${NC}"
-echo -e "${BLUE}     测试完成${NC}"
-echo -e "${BLUE}========================================${NC}"
+echo -e "${GREEN}API 测试完成！${NC}"

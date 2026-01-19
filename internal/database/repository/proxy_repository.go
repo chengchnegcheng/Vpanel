@@ -187,3 +187,19 @@ func (r *proxyRepository) CountByProtocol(ctx context.Context) ([]*ProtocolCount
 	}
 	return results, nil
 }
+
+// GetByNodeID retrieves all enabled proxies for a specific node.
+func (r *proxyRepository) GetByNodeID(ctx context.Context, nodeID int64) ([]*Proxy, error) {
+	var proxies []*Proxy
+	
+	// 直接通过 node_id 查询启用的代理
+	result := r.db.WithContext(ctx).
+		Where("node_id = ? AND enabled = ?", nodeID, true).
+		Find(&proxies)
+	
+	if result.Error != nil {
+		return nil, errors.NewDatabaseError("failed to get proxies by node ID", result.Error)
+	}
+	
+	return proxies, nil
+}

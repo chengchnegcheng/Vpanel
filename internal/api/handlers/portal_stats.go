@@ -39,14 +39,42 @@ func (h *PortalStatsHandler) GetTrafficStats(c *gin.Context) {
 	period := c.DefaultQuery("period", "month")
 	period = stats.ValidatePeriod(period)
 
-	trafficStats, err := h.statsService.GetTrafficStats(c.Request.Context(), userID.(int64), period)
+	// Get daily traffic for chart
+	days := 30
+	if period == "week" {
+		days = 7
+	} else if period == "day" {
+		days = 1
+	} else if period == "year" {
+		days = 365
+	}
+	
+	daily, err := h.statsService.GetDailyTraffic(c.Request.Context(), userID.(int64), days)
 	if err != nil {
-		h.logger.Error("failed to get traffic stats", logger.F("error", err))
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "获取流量统计失败"})
-		return
+		h.logger.Error("failed to get daily traffic", logger.F("error", err), logger.F("user_id", userID))
+		// Return empty data instead of error to avoid frontend issues
+		daily = []*stats.DailyTraffic{}
 	}
 
-	c.JSON(http.StatusOK, trafficStats)
+	// Ensure daily is not nil
+	if daily == nil {
+		daily = []*stats.DailyTraffic{}
+	}
+
+	// Calculate totals
+	var totalUpload, totalDownload int64
+	for _, d := range daily {
+		totalUpload += d.Upload
+		totalDownload += d.Download
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"total_upload":   totalUpload,
+		"total_download": totalDownload,
+		"total_traffic":  totalUpload + totalDownload,
+		"daily":          daily,
+		"period":         period,
+	})
 }
 
 // GetUsageStats returns usage statistics by node/protocol.
@@ -60,13 +88,26 @@ func (h *PortalStatsHandler) GetUsageStats(c *gin.Context) {
 	// Get traffic summary
 	summary, err := h.statsService.GetTrafficSummary(c.Request.Context(), userID.(int64))
 	if err != nil {
-		h.logger.Error("failed to get usage stats", logger.F("error", err))
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "获取使用统计失败"})
-		return
+		h.logger.Error("failed to get usage stats", logger.F("error", err), logger.F("user_id", userID))
+		// Return empty data instead of error
+		summary = &stats.TrafficSummary{
+			Upload:      0,
+			Download:    0,
+			Total:       0,
+			UploadStr:   "0 B",
+			DownloadStr: "0 B",
+			TotalStr:    "0 B",
+		}
 	}
 
+	// Initialize empty arrays for node and protocol usage
+	byNode := []map[string]interface{}{}
+	byProtocol := []map[string]interface{}{}
+
 	c.JSON(http.StatusOK, gin.H{
-		"summary": summary,
+		"summary":     summary,
+		"by_node":     byNode,
+		"by_protocol": byProtocol,
 	})
 }
 

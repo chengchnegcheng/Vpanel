@@ -35,6 +35,7 @@ export const useUserPortalStore = defineStore('userPortal', () => {
     return Math.ceil(diff / (1000 * 60 * 60 * 24))
   })
   const twoFactorEnabled = computed(() => user.value?.two_factor_enabled || false)
+  const availableNodes = computed(() => user.value?.available_nodes || 0)
 
   // 方法
   async function login(credentials) {
@@ -195,6 +196,7 @@ export const useUserPortalStore = defineStore('userPortal', () => {
     isExpired,
     daysUntilExpiry,
     twoFactorEnabled,
+    availableNodes,
     // 方法
     login,
     register,

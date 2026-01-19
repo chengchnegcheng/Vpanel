@@ -251,7 +251,7 @@ export default {
     // 方法
     const fetchStats = async () => {
       try {
-        const response = await api.get('/monitor/stats')
+        const response = await api.get('/system/stats')
         const data = response.data || response
         
         // 更新统计数据

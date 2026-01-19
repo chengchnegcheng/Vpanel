@@ -372,7 +372,7 @@ func (h *SubscriptionHandler) AdminList(c *gin.Context) {
 		return
 	}
 
-	// Build response
+	// Build response with user information
 	items := make([]AdminSubscriptionItem, len(subscriptions))
 	for i, sub := range subscriptions {
 		items[i] = AdminSubscriptionItem{
@@ -384,6 +384,12 @@ func (h *SubscriptionHandler) AdminList(c *gin.Context) {
 			AccessCount: sub.AccessCount,
 			LastIP:      sub.LastIP,
 		}
+		
+		// Add username if User relation is loaded
+		if sub.User != nil {
+			items[i].Username = sub.User.Username
+		}
+		
 		if sub.LastAccessAt != nil {
 			items[i].LastAccessAt = sub.LastAccessAt.Format("2006-01-02T15:04:05Z")
 		}

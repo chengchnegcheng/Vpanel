@@ -104,7 +104,8 @@ func (r *Router) Setup() {
 	r.engine.Use(middleware.LoggerWithService(r.logger, r.logService))
 	r.engine.Use(middleware.CORS(r.config.Server.CORSOrigins))
 	r.engine.Use(middleware.RequestID())
-	r.engine.Use(middleware.RateLimit(100)) // 100 requests per second per IP
+	// Removed global rate limit - too restrictive for development
+	// r.engine.Use(middleware.RateLimit(100)) // 100 requests per second per IP
 
 	// Create handlers
 	authHandler := handlers.NewAuthHandler(r.authService, r.repos.User, r.repos.LoginHistory, r.logger)
@@ -184,12 +185,18 @@ func (r *Router) Setup() {
 	nodeGroupService := node.NewGroupService(r.repos.NodeGroup, r.repos.Node, r.logger)
 	nodeHealthChecker := node.NewHealthChecker(nil, r.repos.Node, r.repos.HealthCheck, r.logger)
 	nodeTrafficService := node.NewTrafficService(r.repos.NodeTraffic, r.repos.NodeGroup, r.logger)
+	nodeDeployService := node.NewRemoteDeployService(r.logger)
 
 	// Create node management handlers
 	nodeHandler := handlers.NewNodeHandler(nodeService, r.logger)
 	nodeGroupHandler := handlers.NewNodeGroupHandler(nodeGroupService, r.logger)
 	nodeHealthHandler := handlers.NewNodeHealthHandler(nodeHealthChecker, r.repos.HealthCheck, r.repos.Node, r.logger)
 	nodeStatsHandler := handlers.NewNodeStatsHandler(nodeTrafficService, nodeService, nodeGroupService, r.logger)
+	nodeDeployHandler := handlers.NewNodeDeployHandler(nodeDeployService, nodeService, r.logger)
+
+	// Create Xray config generator for nodes
+	configGenerator := xray.NewConfigGenerator(r.repos.Proxy, r.logger)
+	nodeConfigTestHandler := handlers.NewNodeConfigTestHandler(configGenerator, r.logger)
 
 	// Create commercial handlers
 	planHandler := handlers.NewPlanHandler(planService, r.logger)
@@ -571,6 +578,7 @@ func (r *Router) Setup() {
 				adminReports.GET("/revenue", reportHandler.GetRevenueReport)
 				adminReports.GET("/orders", reportHandler.GetOrderStats)
 				adminReports.GET("/failed-payments", paymentHandler.GetFailedPaymentStats)
+				adminReports.GET("/pause-stats", pauseHandler.AdminGetPauseStats)
 			}
 
 			// Admin trial routes
@@ -605,6 +613,12 @@ func (r *Router) Setup() {
 				adminGiftCards.GET("/batch/:batch_id/stats", giftCardHandler.AdminGetBatchStats)
 			}
 
+			// User gift card stats (for compatibility)
+			giftCardStats := protected.Group("/gift-cards")
+			{
+				giftCardStats.GET("/stats", giftCardHandler.AdminGetStats)
+			}
+
 			// ==================== Node Management Routes ====================
 
 			// Admin node routes
@@ -624,6 +638,14 @@ func (r *Router) Setup() {
 				adminNodes.POST("/:id/token", nodeHandler.GenerateToken)
 				adminNodes.POST("/:id/token/rotate", nodeHandler.RotateToken)
 				adminNodes.POST("/:id/token/revoke", nodeHandler.RevokeToken)
+
+				// Config preview (for testing)
+				adminNodes.GET("/:id/config/preview", nodeConfigTestHandler.PreviewConfig)
+
+				// Remote deployment
+				adminNodes.POST("/:id/deploy", nodeDeployHandler.DeployAgent)
+				adminNodes.GET("/:id/deploy/script", nodeDeployHandler.GetDeployScript)
+				adminNodes.POST("/test-connection", nodeDeployHandler.TestConnection)
 
 				// Health check routes
 				adminNodes.POST("/:id/health-check", nodeHealthHandler.CheckNode)
@@ -744,7 +766,7 @@ func (r *Router) Setup() {
 		api.POST("/payments/callback/:method", paymentHandler.HandleCallback)
 
 		// Node Agent routes (token-based auth, no user auth required)
-		nodeAgentHandler := handlers.NewNodeAgentHandler(nodeService, r.repos.Node, r.logger)
+		nodeAgentHandler := handlers.NewNodeAgentHandler(nodeService, r.repos.Node, configGenerator, r.logger)
 		nodeAgent := api.Group("/node")
 		{
 			nodeAgent.POST("/register", nodeAgentHandler.Register)
@@ -795,7 +817,7 @@ func (r *Router) setupPortalRoutes(api *gin.RouterGroup) {
 	statsService := stats.NewService(r.repos.Traffic, r.repos.User)
 
 	// Create portal handlers
-	portalAuthHandler := handlers.NewPortalAuthHandler(portalAuthService, r.authService, r.repos.User, r.logger)
+	portalAuthHandler := handlers.NewPortalAuthHandler(portalAuthService, r.authService, r.repos.User, r.repos.Proxy, r.logger)
 	portalDashboardHandler := handlers.NewPortalDashboardHandler(r.repos.User, statsService, announcementService, r.logger)
 	portalNodeHandler := handlers.NewPortalNodeHandler(portalNodeService, r.logger)
 	portalTicketHandler := handlers.NewPortalTicketHandler(ticketService, r.logger)

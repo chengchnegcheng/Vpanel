@@ -4,6 +4,7 @@ package handlers
 import (
 	"net/http"
 	"runtime"
+	"strconv"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -11,25 +12,29 @@ import (
 	"v/internal/database/repository"
 	"v/internal/logger"
 	"v/internal/node"
+	"v/internal/xray"
 )
 
 // NodeAgentHandler handles Node Agent API requests.
 type NodeAgentHandler struct {
-	nodeService *node.Service
-	nodeRepo    repository.NodeRepository
-	logger      logger.Logger
+	nodeService     *node.Service
+	nodeRepo        repository.NodeRepository
+	configGenerator *xray.ConfigGenerator
+	logger          logger.Logger
 }
 
 // NewNodeAgentHandler creates a new NodeAgentHandler.
 func NewNodeAgentHandler(
 	nodeService *node.Service,
 	nodeRepo repository.NodeRepository,
+	configGenerator *xray.ConfigGenerator,
 	log logger.Logger,
 ) *NodeAgentHandler {
 	return &NodeAgentHandler{
-		nodeService: nodeService,
-		nodeRepo:    nodeRepo,
-		logger:      log,
+		nodeService:     nodeService,
+		nodeRepo:        nodeRepo,
+		configGenerator: configGenerator,
+		logger:          log,
 	}
 }
 
@@ -290,15 +295,65 @@ func (h *NodeAgentHandler) GetConfig(c *gin.Context) {
 		return
 	}
 
-	// TODO: Build and return node configuration
-	// This would include proxy configurations, etc.
+	// Get node ID from URL parameter
+	nodeIDStr := c.Param("id")
+	nodeID, err := strconv.ParseInt(nodeIDStr, 10, 64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"success": false,
+			"message": "Invalid node ID",
+		})
+		return
+	}
+
+	// Verify node ID matches token
+	if nodeData.ID != nodeID {
+		h.logger.Warn("Config request failed: node ID mismatch",
+			logger.F("expected_node_id", nodeData.ID),
+			logger.F("requested_node_id", nodeID))
+		c.JSON(http.StatusUnauthorized, gin.H{
+			"success": false,
+			"message": "Node ID does not match token",
+		})
+		return
+	}
+
+	// Generate Xray configuration
+	config, err := h.configGenerator.GenerateForNode(c.Request.Context(), nodeID)
+	if err != nil {
+		h.logger.Error("Failed to generate node config",
+			logger.F("node_id", nodeID),
+			logger.F("error", err.Error()))
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"success": false,
+			"message": "Failed to generate configuration",
+		})
+		return
+	}
+
+	// Convert to JSON
+	configJSON, err := config.ToJSON()
+	if err != nil {
+		h.logger.Error("Failed to serialize config",
+			logger.F("node_id", nodeID),
+			logger.F("error", err.Error()))
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"success": false,
+			"message": "Failed to serialize configuration",
+		})
+		return
+	}
+
+	h.logger.Info("Node config generated",
+		logger.F("node_id", nodeID),
+		logger.F("inbound_count", len(config.Inbounds)))
 
 	c.JSON(http.StatusOK, gin.H{
 		"success":   true,
-		"node_id":   nodeData.ID,
+		"node_id":   nodeID,
 		"version":   "1.0",
 		"timestamp": time.Now().Unix(),
-		"proxies":   []any{},
+		"config":    string(configJSON),
 	})
 }
 

@@ -82,8 +82,8 @@ func (s *Service) GetDailyTraffic(ctx context.Context, userID int64, days int) (
 	end := time.Now()
 	start := end.AddDate(0, 0, -days)
 
-	// Get traffic timeline
-	timeline, err := s.trafficRepo.GetTrafficTimeline(ctx, start, end, "day")
+	// Get traffic timeline filtered by user ID
+	timeline, err := s.trafficRepo.GetTrafficTimelineByUser(ctx, userID, start, end, "day")
 	if err != nil {
 		return nil, err
 	}

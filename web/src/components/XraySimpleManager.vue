@@ -114,7 +114,7 @@ export default defineComponent({
     // 更新设置
     const updateSettings = async () => {
       try {
-        await api.put('/xray/settings', { autoUpdate: autoUpdate.value })
+        await api.post('/settings/xray', { autoUpdate: autoUpdate.value })
         ElMessage.success(`自动更新已${autoUpdate.value ? '启用' : '禁用'}`)
       } catch (error) {
         console.error('更新设置失败:', error)

@@ -350,7 +350,7 @@ const loadProtocols = async () => {
   loading.value = true
   
   try {
-    const response = await api.get('/protocols')
+    const response = await api.get('/settings/protocols')
     const data = response.data || response
     protocols.value = data.list || (Array.isArray(data) ? data : [])
   } catch (error) {

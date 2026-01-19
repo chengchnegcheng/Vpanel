@@ -18,6 +18,7 @@ type PortalAuthHandler struct {
 	portalAuthService *portalauth.Service
 	authService       *auth.Service
 	userRepo          repository.UserRepository
+	proxyRepo         repository.ProxyRepository
 	rateLimiter       *portalauth.RateLimiter
 	rateLimitConfig   portalauth.RateLimitConfig
 	logger            logger.Logger
@@ -28,12 +29,14 @@ func NewPortalAuthHandler(
 	portalAuthService *portalauth.Service,
 	authService *auth.Service,
 	userRepo repository.UserRepository,
+	proxyRepo repository.ProxyRepository,
 	log logger.Logger,
 ) *PortalAuthHandler {
 	return &PortalAuthHandler{
 		portalAuthService: portalAuthService,
 		authService:       authService,
 		userRepo:          userRepo,
+		proxyRepo:         proxyRepo,
 		rateLimiter:       portalauth.NewRateLimiter(),
 		rateLimitConfig:   portalauth.DefaultRateLimitConfig(),
 		logger:            log,
@@ -239,6 +242,19 @@ func (h *PortalAuthHandler) GetProfile(c *gin.Context) {
 		status = "expired"
 	}
 
+	// Get available nodes count (enabled proxies)
+	availableNodes := 0
+	if h.proxyRepo != nil {
+		proxies, err := h.proxyRepo.GetByUserID(c.Request.Context(), userID.(int64), 1000, 0)
+		if err == nil {
+			for _, proxy := range proxies {
+				if proxy.Enabled {
+					availableNodes++
+				}
+			}
+		}
+	}
+
 	c.JSON(http.StatusOK, gin.H{
 		"id":                 user.ID,
 		"username":           user.Username,
@@ -250,6 +266,7 @@ func (h *PortalAuthHandler) GetProfile(c *gin.Context) {
 		"traffic_used":       user.TrafficUsed,
 		"expires_at":         user.ExpiresAt,
 		"two_factor_enabled": user.TwoFactorEnabled,
+		"available_nodes":    availableNodes,
 		"created_at":         user.CreatedAt,
 	})
 }

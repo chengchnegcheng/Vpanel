@@ -278,7 +278,7 @@ export default {
           endTime: dateRange.value && dateRange.value[1] ? dateRange.value[1].toISOString() : undefined
         }
         
-        const response = await api.get('/traffic', { params })
+        const response = await api.get('/stats/user', { params })
         const data = response.data || response
         userTraffic.value = data.users || []
         

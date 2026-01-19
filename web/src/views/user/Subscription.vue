@@ -188,19 +188,21 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, nextTick } from 'vue'
+import { ref, computed, onMounted, nextTick, watch } from 'vue'
 import { useRouter } from 'vue-router'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { 
   Refresh, CopyDocument, Download, ArrowRight,
   Monitor, Iphone, Apple, TrendCharts, ShoppingCart
 } from '@element-plus/icons-vue'
 import { useUserPortalStore } from '@/stores/userPortal'
+import { useSubscriptionStore } from '@/stores/subscription'
 import PauseCard from '@/components/user/PauseCard.vue'
 import QRCode from 'qrcode'
 
 const router = useRouter()
 const userStore = useUserPortalStore()
+const subscriptionStore = useSubscriptionStore()
 
 // 引用
 const qrcodeCanvas = ref(null)
@@ -209,28 +211,32 @@ const qrcodeCanvas = ref(null)
 const selectedFormat = ref('clash')
 const showResetDialog = ref(false)
 const resetting = ref(false)
-const subscriptionToken = ref('abc123xyz') // 从 API 获取
+const loading = ref(false)
 
 // 订阅格式
 const formats = [
   { value: 'clash', label: 'Clash' },
-  { value: 'v2ray', label: 'V2Ray' },
+  { value: 'clashmeta', label: 'Clash Meta' },
+  { value: 'v2rayn', label: 'V2Ray' },
   { value: 'shadowrocket', label: 'Shadowrocket' },
   { value: 'surge', label: 'Surge' },
-  { value: 'quantumult', label: 'Quantumult X' }
+  { value: 'quantumultx', label: 'Quantumult X' },
+  { value: 'singbox', label: 'Sing-box' }
 ]
 
 // 推荐客户端
 const recommendedClients = [
-  { name: 'Clash Verge', platform: 'Windows / macOS / Linux', icon: Monitor, url: '#' },
-  { name: 'Shadowrocket', platform: 'iOS', icon: Iphone, url: '#' },
-  { name: 'ClashX Pro', platform: 'macOS', icon: Apple, url: '#' }
+  { name: 'Clash Verge', platform: 'Windows / macOS / Linux', icon: Monitor, url: 'https://github.com/clash-verge-rev/clash-verge-rev' },
+  { name: 'Shadowrocket', platform: 'iOS', icon: Iphone, url: 'https://apps.apple.com/app/shadowrocket/id932747118' },
+  { name: 'ClashX Pro', platform: 'macOS', icon: Apple, url: 'https://install.appcenter.ms/users/clashx/apps/clashx-pro/distribution_groups/public' }
 ]
 
 // 计算属性
 const subscriptionUrl = computed(() => {
-  const baseUrl = window.location.origin
-  return `${baseUrl}/api/subscription/${subscriptionToken.value}?format=${selectedFormat.value}`
+  if (!subscriptionStore.link) return ''
+  const url = new URL(subscriptionStore.link)
+  url.searchParams.set('format', selectedFormat.value)
+  return url.toString()
 })
 
 const subscriptionStatus = computed(() => {
@@ -246,11 +252,9 @@ const expiresAt = computed(() => {
 })
 
 const daysUntilExpiry = computed(() => userStore.daysUntilExpiry)
-
 const trafficUsed = computed(() => userStore.trafficUsed)
 const trafficLimit = computed(() => userStore.trafficLimit)
-const lastUpdated = ref(null)
-const availableNodes = ref(0)
+const availableNodes = computed(() => userStore.availableNodes || 0)
 
 // 方法
 function formatTraffic(bytes) {
@@ -265,9 +269,22 @@ function formatTraffic(bytes) {
   return `${size.toFixed(2)} ${units[i]}`
 }
 
+async function loadSubscription() {
+  loading.value = true
+  try {
+    await subscriptionStore.fetchLink()
+    await generateQRCode()
+  } catch (error) {
+    console.error('加载订阅失败:', error)
+    ElMessage.error('加载订阅信息失败')
+  } finally {
+    loading.value = false
+  }
+}
+
 async function generateQRCode() {
   await nextTick()
-  if (qrcodeCanvas.value) {
+  if (qrcodeCanvas.value && subscriptionUrl.value) {
     try {
       await QRCode.toCanvas(qrcodeCanvas.value, subscriptionUrl.value, {
         width: 200,
@@ -278,18 +295,30 @@ async function generateQRCode() {
         }
       })
     } catch (error) {
-      console.error('Failed to generate QR code:', error)
+      console.error('生成二维码失败:', error)
     }
   }
 }
 
 function copyUrl() {
+  if (!subscriptionUrl.value) {
+    ElMessage.warning('订阅链接未加载')
+    return
+  }
+  
   navigator.clipboard.writeText(subscriptionUrl.value)
     .then(() => {
       ElMessage.success('订阅链接已复制')
     })
     .catch(() => {
-      ElMessage.error('复制失败')
+      // Fallback
+      const textarea = document.createElement('textarea')
+      textarea.value = subscriptionUrl.value
+      document.body.appendChild(textarea)
+      textarea.select()
+      document.execCommand('copy')
+      document.body.removeChild(textarea)
+      ElMessage.success('订阅链接已复制')
     })
 }
 
@@ -311,14 +340,13 @@ function resetSubscription() {
 async function confirmReset() {
   resetting.value = true
   try {
-    // 调用 API 重置订阅
-    // await api.resetSubscription()
-    subscriptionToken.value = 'new_token_' + Date.now()
+    await subscriptionStore.regenerate()
     showResetDialog.value = false
     ElMessage.success('订阅链接已重置')
-    generateQRCode()
+    await generateQRCode()
   } catch (error) {
-    ElMessage.error('重置失败')
+    console.error('重置订阅失败:', error)
+    ElMessage.error(error?.message || '重置失败')
   } finally {
     resetting.value = false
   }
@@ -329,7 +357,7 @@ function goToDownload() {
 }
 
 function goToPlanUpgrade() {
-  router.push('/user/plan-upgrade')
+  router.push('/user/plan-change')
 }
 
 function goToPlans() {
@@ -345,13 +373,12 @@ function openClientLink(client) {
 }
 
 // 监听格式变化重新生成二维码
-import { watch } from 'vue'
 watch(selectedFormat, () => {
   generateQRCode()
 })
 
 onMounted(() => {
-  generateQRCode()
+  loadSubscription()
 })
 </script>
 

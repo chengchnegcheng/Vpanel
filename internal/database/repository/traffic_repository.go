@@ -180,7 +180,14 @@ func (r *trafficRepository) GetTrafficByUser(ctx context.Context, start, end tim
 
 // GetTrafficTimeline retrieves traffic data points for timeline charts.
 func (r *trafficRepository) GetTrafficTimeline(ctx context.Context, start, end time.Time, interval string) ([]*TrafficTimelinePoint, error) {
-	var results []*TrafficTimelinePoint
+	// Use a temporary struct to scan string time values
+	type tempResult struct {
+		TimeStr  string `gorm:"column:time"`
+		Upload   int64
+		Download int64
+	}
+	
+	var tempResults []*tempResult
 
 	// PostgreSQL date formatting based on interval
 	var dateFormat string
@@ -204,9 +211,111 @@ func (r *trafficRepository) GetTrafficTimeline(ctx context.Context, start, end t
 		Where("recorded_at BETWEEN ? AND ?", start, end).
 		Group(groupClause).
 		Order("time ASC").
-		Scan(&results).Error
+		Scan(&tempResults).Error
 	if err != nil {
 		return nil, errors.NewDatabaseError("failed to get traffic timeline", err)
 	}
+
+	// Convert string times to time.Time
+	results := make([]*TrafficTimelinePoint, len(tempResults))
+	for i, temp := range tempResults {
+		// Parse the time string based on the format
+		var parsedTime time.Time
+		var parseErr error
+		
+		switch interval {
+		case "hour":
+			parsedTime, parseErr = time.Parse("2006-01-02 15:00:00", temp.TimeStr)
+		case "day":
+			parsedTime, parseErr = time.Parse("2006-01-02", temp.TimeStr)
+		case "month":
+			parsedTime, parseErr = time.Parse("2006-01", temp.TimeStr+"-01")
+		default:
+			parsedTime, parseErr = time.Parse("2006-01-02 15:00:00", temp.TimeStr)
+		}
+		
+		if parseErr != nil {
+			// If parsing fails, use a zero time
+			parsedTime = time.Time{}
+		}
+		
+		results[i] = &TrafficTimelinePoint{
+			Time:     parsedTime,
+			Upload:   temp.Upload,
+			Download: temp.Download,
+		}
+	}
+	
+	return results, nil
+}
+
+// GetTrafficTimelineByUser retrieves traffic data points for timeline charts filtered by user ID.
+func (r *trafficRepository) GetTrafficTimelineByUser(ctx context.Context, userID int64, start, end time.Time, interval string) ([]*TrafficTimelinePoint, error) {
+	// Use a temporary struct to scan string time values
+	type tempResult struct {
+		TimeStr  string `gorm:"column:time"`
+		Upload   int64
+		Download int64
+	}
+	
+	var tempResults []*tempResult
+
+	// PostgreSQL date formatting based on interval
+	var dateFormat string
+	switch interval {
+	case "hour":
+		dateFormat = "YYYY-MM-DD HH24:00:00"
+	case "day":
+		dateFormat = "YYYY-MM-DD"
+	case "month":
+		dateFormat = "YYYY-MM"
+	default:
+		dateFormat = "YYYY-MM-DD HH24:00:00"
+	}
+
+	selectClause := "TO_CHAR(recorded_at, '" + dateFormat + "') as time, COALESCE(SUM(upload), 0) as upload, COALESCE(SUM(download), 0) as download"
+	groupClause := "TO_CHAR(recorded_at, '" + dateFormat + "')"
+
+	err := r.db.WithContext(ctx).
+		Table("traffic").
+		Select(selectClause).
+		Where("user_id = ? AND recorded_at BETWEEN ? AND ?", userID, start, end).
+		Group(groupClause).
+		Order("time ASC").
+		Scan(&tempResults).Error
+	if err != nil {
+		return nil, errors.NewDatabaseError("failed to get traffic timeline by user", err)
+	}
+
+	// Convert string times to time.Time
+	results := make([]*TrafficTimelinePoint, len(tempResults))
+	for i, temp := range tempResults {
+		// Parse the time string based on the format
+		var parsedTime time.Time
+		var parseErr error
+		
+		switch interval {
+		case "hour":
+			parsedTime, parseErr = time.Parse("2006-01-02 15:00:00", temp.TimeStr)
+		case "day":
+			parsedTime, parseErr = time.Parse("2006-01-02", temp.TimeStr)
+		case "month":
+			parsedTime, parseErr = time.Parse("2006-01", temp.TimeStr+"-01")
+		default:
+			parsedTime, parseErr = time.Parse("2006-01-02 15:00:00", temp.TimeStr)
+		}
+		
+		if parseErr != nil {
+			// If parsing fails, use a zero time
+			parsedTime = time.Time{}
+		}
+		
+		results[i] = &TrafficTimelinePoint{
+			Time:     parsedTime,
+			Upload:   temp.Upload,
+			Download: temp.Download,
+		}
+	}
+	
 	return results, nil
 }

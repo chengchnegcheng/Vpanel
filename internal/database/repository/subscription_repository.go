@@ -244,8 +244,8 @@ func (r *subscriptionRepository) ListAll(ctx context.Context, filter *Subscripti
 		}
 	}
 
-	// Fetch results
-	if err := query.Order("created_at DESC").Find(&subscriptions).Error; err != nil {
+	// Preload User relation and fetch results
+	if err := query.Preload("User").Order("created_at DESC").Find(&subscriptions).Error; err != nil {
 		return nil, 0, errors.NewDatabaseError("failed to list subscriptions", err)
 	}
 

@@ -197,7 +197,21 @@ func (c *PanelClient) SyncConfig(ctx context.Context, nodeID int64) (json.RawMes
 		return nil, fmt.Errorf("failed to read response: %w", err)
 	}
 
-	return json.RawMessage(bodyBytes), nil
+	// Parse the response to extract the config field
+	var response struct {
+		Success bool   `json:"success"`
+		Config  string `json:"config"`
+		Message string `json:"message"`
+	}
+	if err := json.Unmarshal(bodyBytes, &response); err != nil {
+		return nil, fmt.Errorf("failed to parse response: %w", err)
+	}
+
+	if !response.Success {
+		return nil, fmt.Errorf("config sync failed: %s", response.Message)
+	}
+
+	return json.RawMessage(response.Config), nil
 }
 
 // doRequest performs an HTTP request with retry logic.

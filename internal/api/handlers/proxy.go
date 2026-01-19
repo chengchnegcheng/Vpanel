@@ -40,6 +40,7 @@ func NewProxyHandlerWithTraffic(proxyManager proxy.Manager, proxyRepo repository
 type ProxyResponse struct {
 	ID        int64          `json:"id"`
 	UserID    int64          `json:"user_id"`
+	NodeID    *int64         `json:"node_id,omitempty"` // 节点 ID
 	Name      string         `json:"name"`
 	Protocol  string         `json:"protocol"`
 	Port      int            `json:"port"`
@@ -100,6 +101,7 @@ func (h *ProxyHandler) List(c *gin.Context) {
 		response[i] = ProxyResponse{
 			ID:        p.ID,
 			UserID:    p.UserID,
+			NodeID:    p.NodeID,
 			Name:      p.Name,
 			Protocol:  p.Protocol,
 			Port:      p.Port,
@@ -120,6 +122,7 @@ type CreateProxyRequest struct {
 	Protocol string         `json:"protocol" binding:"required"`
 	Port     int            `json:"port" binding:"required,min=1,max=65535"`
 	Host     string         `json:"host"`
+	NodeID   *int64         `json:"node_id"` // 节点 ID
 	Settings map[string]any `json:"settings"`
 	Enabled  bool           `json:"enabled"`
 	Remark   string         `json:"remark"`
@@ -181,6 +184,7 @@ func (h *ProxyHandler) Create(c *gin.Context) {
 
 	proxyModel := &repository.Proxy{
 		UserID:   userID,
+		NodeID:   req.NodeID, // 设置节点 ID
 		Name:     req.Name,
 		Protocol: req.Protocol,
 		Port:     req.Port,
@@ -201,6 +205,7 @@ func (h *ProxyHandler) Create(c *gin.Context) {
 	c.JSON(http.StatusCreated, ProxyResponse{
 		ID:        proxyModel.ID,
 		UserID:    proxyModel.UserID,
+		NodeID:    proxyModel.NodeID,
 		Name:      proxyModel.Name,
 		Protocol:  proxyModel.Protocol,
 		Port:      proxyModel.Port,
@@ -242,6 +247,7 @@ func (h *ProxyHandler) Get(c *gin.Context) {
 	c.JSON(http.StatusOK, ProxyResponse{
 		ID:        p.ID,
 		UserID:    p.UserID,
+		NodeID:    p.NodeID,
 		Name:      p.Name,
 		Protocol:  p.Protocol,
 		Port:      p.Port,
@@ -258,6 +264,7 @@ type UpdateProxyRequest struct {
 	Name     string         `json:"name"`
 	Port     int            `json:"port"`
 	Host     string         `json:"host"`
+	NodeID   *int64         `json:"node_id"` // 节点 ID
 	Settings map[string]any `json:"settings"`
 	Enabled  *bool          `json:"enabled"`
 	Remark   string         `json:"remark"`
@@ -324,6 +331,9 @@ func (h *ProxyHandler) Update(c *gin.Context) {
 	if req.Host != "" {
 		p.Host = req.Host
 	}
+	if req.NodeID != nil {
+		p.NodeID = req.NodeID
+	}
 	if req.Settings != nil {
 		p.Settings = req.Settings
 	}
@@ -342,6 +352,7 @@ func (h *ProxyHandler) Update(c *gin.Context) {
 	c.JSON(http.StatusOK, ProxyResponse{
 		ID:        p.ID,
 		UserID:    p.UserID,
+		NodeID:    p.NodeID,
 		Name:      p.Name,
 		Protocol:  p.Protocol,
 		Port:      p.Port,

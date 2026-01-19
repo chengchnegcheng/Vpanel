@@ -1,0 +1,117 @@
+.PHONY: help build agent run dev test lint clean migrate install
+
+# 默认目标
+.DEFAULT_GOAL := help
+
+# 变量
+VERSION ?= 1.0.0
+BUILD_DIR = build
+PANEL_BINARY = vpanel
+AGENT_BINARY = vpanel-agent
+
+help: ## 显示帮助信息
+	@echo "V Panel - 可用命令:"
+	@echo ""
+	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-15s\033[0m %s\n", $$1, $$2}'
+
+build: ## 编译 Panel
+	@echo "编译 Panel..."
+	@go build -ldflags "-X main.Version=$(VERSION) -s -w" -o $(PANEL_BINARY) ./cmd/v/main.go
+	@echo "✓ 编译完成: $(PANEL_BINARY)"
+
+agent: ## 编译 Agent
+	@echo "编译 Agent..."
+	@go build -ldflags "-X main.Version=$(VERSION) -s -w" -o $(AGENT_BINARY) ./cmd/agent/main.go
+	@echo "✓ 编译完成: $(AGENT_BINARY)"
+
+build-all: build agent ## 编译 Panel 和 Agent
+
+agent-multi: ## 编译多平台 Agent
+	@./scripts/build-agent.sh
+
+run: build ## 运行 Panel
+	@./$(PANEL_BINARY)
+
+dev: ## 开发模式（热重载）
+	@if command -v air > /dev/null; then \
+		air; \
+	else \
+		echo "air 未安装，使用普通模式..."; \
+		go run ./cmd/v/main.go; \
+	fi
+
+test: ## 运行测试
+	@echo "运行测试..."
+	@go test -v -race -coverprofile=coverage.out ./...
+	@echo "✓ 测试完成"
+
+test-coverage: test ## 查看测试覆盖率
+	@go tool cover -html=coverage.out
+
+lint: ## 代码检查
+	@echo "运行代码检查..."
+	@if command -v golangci-lint > /dev/null; then \
+		golangci-lint run; \
+	else \
+		echo "golangci-lint 未安装，跳过检查"; \
+	fi
+
+fmt: ## 格式化代码
+	@echo "格式化代码..."
+	@go fmt ./...
+	@echo "✓ 格式化完成"
+
+clean: ## 清理构建文件
+	@echo "清理构建文件..."
+	@rm -f $(PANEL_BINARY) $(AGENT_BINARY)
+	@rm -rf $(BUILD_DIR)
+	@rm -f coverage.out
+	@echo "✓ 清理完成"
+
+migrate: ## 运行数据库迁移
+	@echo "运行数据库迁移..."
+	@./$(PANEL_BINARY) migrate || (make build && ./$(PANEL_BINARY) migrate)
+
+migrate-verify: ## 验证数据库迁移
+	@./scripts/verify-migration.sh
+
+install: ## 安装开发工具
+	@echo "安装开发工具..."
+	@go install github.com/cosmtrek/air@latest
+	@go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
+	@echo "✓ 安装完成"
+
+deps: ## 下载依赖
+	@echo "下载依赖..."
+	@go mod download
+	@go mod tidy
+	@echo "✓ 依赖下载完成"
+
+docker-build: ## 构建 Docker 镜像
+	@echo "构建 Docker 镜像..."
+	@docker build -t vpanel:$(VERSION) .
+	@echo "✓ Docker 镜像构建完成"
+
+deploy-panel: build ## 部署 Panel
+	@./scripts/quick-deploy.sh panel
+
+deploy-agent: agent ## 部署 Agent (需要参数: PANEL_URL, NODE_TOKEN)
+	@if [ -z "$(PANEL_URL)" ] || [ -z "$(NODE_TOKEN)" ]; then \
+		echo "错误: 需要设置 PANEL_URL 和 NODE_TOKEN"; \
+		echo "示例: make deploy-agent PANEL_URL=https://panel.example.com NODE_TOKEN=token"; \
+		exit 1; \
+	fi
+	@./scripts/quick-deploy.sh agent $(PANEL_URL) $(NODE_TOKEN)
+
+api-test: ## 测试 API (需要 ADMIN_TOKEN)
+	@if [ -z "$(ADMIN_TOKEN)" ]; then \
+		echo "错误: 需要设置 ADMIN_TOKEN"; \
+		echo "示例: make api-test ADMIN_TOKEN=your-token"; \
+		exit 1; \
+	fi
+	@export ADMIN_TOKEN=$(ADMIN_TOKEN) && ./scripts/test-api.sh
+
+setup: deps install ## 设置开发环境
+	@./scripts/dev-setup.sh
+
+all: clean deps build agent ## 完整构建流程

@@ -275,29 +275,31 @@ function handleCustomRange(range) {
 async function loadStats() {
   loading.value = true
   try {
-    const params = { range: timeRange.value }
+    const params = { period: timeRange.value }
     if (timeRange.value === 'custom' && customRange.value) {
-      params.start_date = customRange.value[0].toISOString()
-      params.end_date = customRange.value[1].toISOString()
+      params.start_date = customRange.value[0].toISOString().split('T')[0]
+      params.end_date = customRange.value[1].toISOString().split('T')[0]
     }
 
     const data = await statsStore.fetchStats(params)
     
-    stats.upload = data.summary?.upload || 0
-    stats.download = data.summary?.download || 0
-    stats.total = data.summary?.total || 0
-    stats.connections = data.summary?.connections || 0
+    // 安全地提取数据
+    stats.upload = data?.summary?.upload || 0
+    stats.download = data?.summary?.download || 0
+    stats.total = data?.summary?.total || 0
+    stats.connections = data?.summary?.connections || 0
     
-    nodeUsage.value = data.node_usage || []
-    protocolUsage.value = data.protocol_usage || []
-    records.value = data.records || []
-    chartData.value = data.chart_data || { labels: [], upload: [], download: [] }
+    nodeUsage.value = Array.isArray(data?.node_usage) ? data.node_usage : []
+    protocolUsage.value = Array.isArray(data?.protocol_usage) ? data.protocol_usage : []
+    records.value = Array.isArray(data?.records) ? data.records : []
+    chartData.value = data?.chart_data || { labels: [], upload: [], download: [] }
 
     await nextTick()
     renderTrafficChart()
     renderProtocolChart()
   } catch (error) {
-    ElMessage.error('加载统计数据失败')
+    console.error('加载统计数据失败:', error)
+    ElMessage.error(error?.message || '加载统计数据失败，请稍后重试')
   } finally {
     loading.value = false
   }

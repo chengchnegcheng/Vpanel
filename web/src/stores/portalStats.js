@@ -18,18 +18,20 @@ export const usePortalStatsStore = defineStore('portalStats', () => {
   const period = ref('day') // day, week, month
 
   // 计算属性
-  const totalUpload = computed(() => 
-    trafficStats.value.reduce((sum, item) => sum + (item.upload || 0), 0)
-  )
+  const totalUpload = computed(() => {
+    if (!Array.isArray(trafficStats.value)) return 0
+    return trafficStats.value.reduce((sum, item) => sum + (item.upload || 0), 0)
+  })
 
-  const totalDownload = computed(() => 
-    trafficStats.value.reduce((sum, item) => sum + (item.download || 0), 0)
-  )
+  const totalDownload = computed(() => {
+    if (!Array.isArray(trafficStats.value)) return 0
+    return trafficStats.value.reduce((sum, item) => sum + (item.download || 0), 0)
+  })
 
   const totalTraffic = computed(() => totalUpload.value + totalDownload.value)
 
   const peakUsage = computed(() => {
-    if (!trafficStats.value.length) return null
+    if (!Array.isArray(trafficStats.value) || !trafficStats.value.length) return null
     return trafficStats.value.reduce((max, item) => {
       const total = (item.upload || 0) + (item.download || 0)
       return total > max.total ? { ...item, total } : max
@@ -37,6 +39,53 @@ export const usePortalStatsStore = defineStore('portalStats', () => {
   })
 
   // 方法
+  async function fetchStats(params = {}) {
+    loading.value = true
+    error.value = null
+    try {
+      // 并行获取流量统计和使用统计
+      const [trafficResponse, usageResponse] = await Promise.all([
+        statsApi.getTrafficStats(params).catch(err => {
+          console.error('获取流量统计失败:', err)
+          return { total_upload: 0, total_download: 0, total_traffic: 0, daily: [] }
+        }),
+        statsApi.getUsageStats(params).catch(err => {
+          console.error('获取使用统计失败:', err)
+          return { by_node: [], by_protocol: [] }
+        })
+      ])
+      
+      // 安全地提取数据
+      const daily = Array.isArray(trafficResponse?.daily) ? trafficResponse.daily : []
+      
+      // 组合数据
+      const data = {
+        summary: {
+          upload: trafficResponse?.total_upload || 0,
+          download: trafficResponse?.total_download || 0,
+          total: trafficResponse?.total_traffic || 0,
+          connections: trafficResponse?.total_connections || 0
+        },
+        node_usage: Array.isArray(usageResponse?.by_node) ? usageResponse.by_node : [],
+        protocol_usage: Array.isArray(usageResponse?.by_protocol) ? usageResponse.by_protocol : [],
+        records: daily,
+        chart_data: {
+          labels: daily.map(d => d?.date || ''),
+          upload: daily.map(d => d?.upload || 0),
+          download: daily.map(d => d?.download || 0)
+        }
+      }
+      
+      return data
+    } catch (err) {
+      console.error('获取统计数据失败:', err)
+      error.value = err?.message || '获取统计数据失败'
+      throw err
+    } finally {
+      loading.value = false
+    }
+  }
+
   async function fetchTrafficStats(params = {}) {
     loading.value = true
     error.value = null
@@ -45,10 +94,13 @@ export const usePortalStatsStore = defineStore('portalStats', () => {
         period: period.value,
         ...params
       })
-      trafficStats.value = response.data || response
+      // 确保 trafficStats 是数组
+      const data = response.data || response
+      trafficStats.value = Array.isArray(data?.daily) ? data.daily : []
       return response
     } catch (err) {
       error.value = err.message || '获取流量统计失败'
+      trafficStats.value = []
       throw err
     } finally {
       loading.value = false
@@ -67,6 +119,7 @@ export const usePortalStatsStore = defineStore('portalStats', () => {
       return response
     } catch (err) {
       error.value = err.message || '获取使用统计失败'
+      usageStats.value = { by_node: [], by_protocol: [] }
       throw err
     } finally {
       loading.value = false
@@ -82,6 +135,7 @@ export const usePortalStatsStore = defineStore('portalStats', () => {
       return response
     } catch (err) {
       error.value = err.message || '获取仪表板统计失败'
+      dashboardStats.value = null
       throw err
     } finally {
       loading.value = false
@@ -123,18 +177,19 @@ export const usePortalStatsStore = defineStore('portalStats', () => {
   }
 
   function getChartData() {
+    const stats = Array.isArray(trafficStats.value) ? trafficStats.value : []
     return {
-      labels: trafficStats.value.map(item => item.date || item.time),
+      labels: stats.map(item => item.date || item.time),
       datasets: [
         {
           label: '上传',
-          data: trafficStats.value.map(item => item.upload || 0),
+          data: stats.map(item => item.upload || 0),
           borderColor: '#67c23a',
           backgroundColor: 'rgba(103, 194, 58, 0.1)'
         },
         {
           label: '下载',
-          data: trafficStats.value.map(item => item.download || 0),
+          data: stats.map(item => item.download || 0),
           borderColor: '#409eff',
           backgroundColor: 'rgba(64, 158, 255, 0.1)'
         }
@@ -156,6 +211,7 @@ export const usePortalStatsStore = defineStore('portalStats', () => {
     totalTraffic,
     peakUsage,
     // 方法
+    fetchStats,
     fetchTrafficStats,
     fetchUsageStats,
     fetchDashboardStats,
