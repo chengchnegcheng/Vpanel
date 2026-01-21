@@ -7,6 +7,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 
+	"v/internal/config"
 	"v/internal/logger"
 	"v/internal/node"
 )
@@ -15,6 +16,7 @@ import (
 type NodeDeployHandler struct {
 	deployService *node.RemoteDeployService
 	nodeService   *node.Service
+	config        *config.Config
 	logger        logger.Logger
 }
 
@@ -22,11 +24,13 @@ type NodeDeployHandler struct {
 func NewNodeDeployHandler(
 	deployService *node.RemoteDeployService,
 	nodeService *node.Service,
+	cfg *config.Config,
 	log logger.Logger,
 ) *NodeDeployHandler {
 	return &NodeDeployHandler{
 		deployService: deployService,
 		nodeService:   nodeService,
+		config:        cfg,
 		logger:        log,
 	}
 }
@@ -86,7 +90,7 @@ func (h *NodeDeployHandler) DeployAgent(c *gin.Context) {
 
 	// Generate token if not exists
 	if nodeData.Token == "" {
-		token, err := node.GenerateToken()
+		token, err := h.nodeService.GenerateNodeToken(c.Request.Context(), nodeID)
 		if err != nil {
 			h.logger.Error("Failed to generate token",
 				logger.F("node_id", nodeID),
@@ -97,15 +101,16 @@ func (h *NodeDeployHandler) DeployAgent(c *gin.Context) {
 			})
 			return
 		}
-		// Update node with token
 		nodeData.Token = token
-		// TODO: Save token to database
 	}
 
-	// Get panel URL from request or config
-	panelURL := c.Request.Header.Get("X-Panel-URL")
+	// Get panel URL from config, request header, or construct from request
+	panelURL := h.config.Server.PublicURL
 	if panelURL == "" {
-		// Use the request host as panel URL
+		panelURL = c.Request.Header.Get("X-Panel-URL")
+	}
+	if panelURL == "" {
+		// 最后才使用请求的 Host（可能是 localhost）
 		scheme := "http"
 		if c.Request.TLS != nil {
 			scheme = "https"
@@ -135,7 +140,9 @@ func (h *NodeDeployHandler) DeployAgent(c *gin.Context) {
 		h.logger.Error("Agent deployment failed",
 			logger.F("node_id", nodeID),
 			logger.F("error", err.Error()))
-		c.JSON(http.StatusInternalServerError, gin.H{
+		
+		// 返回 200 状态码，但 success 为 false，这样前端可以正确显示错误信息和日志
+		c.JSON(http.StatusOK, gin.H{
 			"success": false,
 			"message": result.Message,
 			"steps":   result.Steps,
@@ -181,7 +188,7 @@ func (h *NodeDeployHandler) GetDeployScript(c *gin.Context) {
 
 	// Generate token if not exists
 	if nodeData.Token == "" {
-		token, err := node.GenerateToken()
+		token, err := h.nodeService.GenerateNodeToken(c.Request.Context(), nodeID)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{
 				"success": false,
@@ -190,11 +197,13 @@ func (h *NodeDeployHandler) GetDeployScript(c *gin.Context) {
 			return
 		}
 		nodeData.Token = token
-		// TODO: Save token to database
 	}
 
-	// Get panel URL
-	panelURL := c.Query("panel_url")
+	// Get panel URL from config or query parameter
+	panelURL := h.config.Server.PublicURL
+	if queryURL := c.Query("panel_url"); queryURL != "" {
+		panelURL = queryURL
+	}
 	if panelURL == "" {
 		scheme := "http"
 		if c.Request.TLS != nil {

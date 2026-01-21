@@ -21,8 +21,29 @@ build: ## 编译 Panel
 
 agent: ## 编译 Agent
 	@echo "编译 Agent..."
-	@go build -ldflags "-X main.Version=$(VERSION) -s -w" -o $(AGENT_BINARY) ./cmd/agent/main.go
-	@echo "✓ 编译完成: $(AGENT_BINARY)"
+	@mkdir -p bin
+	@go build -ldflags "-X main.Version=$(VERSION) -s -w" -o bin/$(AGENT_BINARY)-amd64 ./cmd/agent/main.go
+	@echo "✓ 编译完成: bin/$(AGENT_BINARY)-amd64"
+
+agent-linux-amd64: ## 编译 Linux amd64 Agent
+	@echo "编译 Linux amd64 Agent..."
+	@mkdir -p bin
+	@GOOS=linux GOARCH=amd64 go build -ldflags "-X main.Version=$(VERSION) -s -w" -o bin/$(AGENT_BINARY)-amd64 ./cmd/agent/main.go
+	@echo "✓ 编译完成: bin/$(AGENT_BINARY)-amd64"
+
+agent-linux-arm64: ## 编译 Linux arm64 Agent
+	@echo "编译 Linux arm64 Agent..."
+	@mkdir -p bin
+	@GOOS=linux GOARCH=arm64 go build -ldflags "-X main.Version=$(VERSION) -s -w" -o bin/$(AGENT_BINARY)-arm64 ./cmd/agent/main.go
+	@echo "✓ 编译完成: bin/$(AGENT_BINARY)-arm64"
+
+agent-linux-arm: ## 编译 Linux arm Agent
+	@echo "编译 Linux arm Agent..."
+	@mkdir -p bin
+	@GOOS=linux GOARCH=arm go build -ldflags "-X main.Version=$(VERSION) -s -w" -o bin/$(AGENT_BINARY)-arm ./cmd/agent/main.go
+	@echo "✓ 编译完成: bin/$(AGENT_BINARY)-arm"
+
+agent-all: agent-linux-amd64 agent-linux-arm64 agent-linux-arm ## 编译所有平台 Agent
 
 build-all: build agent ## 编译 Panel 和 Agent
 

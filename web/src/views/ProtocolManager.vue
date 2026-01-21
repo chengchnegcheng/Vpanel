@@ -153,6 +153,30 @@
           />
         </el-form-item>
         
+        <el-form-item label="节点" prop="node_id">
+          <el-select 
+            v-model="protocolForm.node_id" 
+            placeholder="选择节点（可选）" 
+            clearable
+            style="width: 100%"
+          >
+            <el-option 
+              v-for="node in nodeList" 
+              :key="node.id" 
+              :label="node.name" 
+              :value="node.id"
+            >
+              <span>{{ node.name }}</span>
+              <span style="float: right; color: var(--el-text-color-secondary); font-size: 13px">
+                {{ node.address }}
+              </span>
+            </el-option>
+          </el-select>
+          <div style="color: var(--el-text-color-secondary); font-size: 12px; margin-top: 4px">
+            不选择节点时，协议将在主服务器上运行
+          </div>
+        </el-form-item>
+        
         <!-- Trojan Specific Settings -->
         <template v-if="protocolForm.type === 'trojan'">
           <el-divider content-position="left">Trojan 协议设置</el-divider>
@@ -297,6 +321,7 @@ import api from '@/api/index'
 
 // 协议列表
 const protocols = ref([])
+const nodeList = ref([])
 const loading = ref(false)
 const saving = ref(false)
 
@@ -319,6 +344,7 @@ const protocolForm = reactive({
   name: '',
   server: '',
   port: 443,
+  node_id: null,
   password: '',
   security: 'tls',
   sni: '',
@@ -359,6 +385,18 @@ const loadProtocols = async () => {
     protocols.value = []
   } finally {
     loading.value = false
+  }
+}
+
+// 加载节点列表
+const loadNodes = async () => {
+  try {
+    const response = await api.get('/admin/nodes')
+    const data = response.data || response
+    nodeList.value = data.list || (Array.isArray(data) ? data : [])
+  } catch (error) {
+    console.error('加载节点列表失败:', error)
+    nodeList.value = []
   }
 }
 
@@ -674,6 +712,7 @@ const copyShareLink = async (protocol) => {
 // 组件挂载时加载协议列表
 onMounted(() => {
   loadProtocols()
+  loadNodes()
 })
 </script>
 

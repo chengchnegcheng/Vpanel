@@ -75,6 +75,30 @@
           <el-input-number v-model="proxyForm.port" :min="1" :max="65535" style="width: 100%" />
         </el-form-item>
 
+        <el-form-item label="节点" prop="node_id">
+          <el-select 
+            v-model="proxyForm.node_id" 
+            placeholder="选择节点（可选）" 
+            clearable
+            style="width: 100%"
+          >
+            <el-option 
+              v-for="node in nodeList" 
+              :key="node.id" 
+              :label="node.name" 
+              :value="node.id"
+            >
+              <span>{{ node.name }}</span>
+              <span style="float: right; color: var(--el-text-color-secondary); font-size: 13px">
+                {{ node.address }}
+              </span>
+            </el-option>
+          </el-select>
+          <div style="color: var(--el-text-color-secondary); font-size: 12px; margin-top: 4px">
+            不选择节点时，代理将在主服务器上运行
+          </div>
+        </el-form-item>
+
         <template v-if="proxyForm.protocol === 'shadowsocks'">
           <el-form-item label="密码" prop="password">
             <el-input v-model="proxyForm.password" type="password" show-password placeholder="请输入密码" />
@@ -149,6 +173,7 @@ import api from '@/api/index'
 
 // 代理列表
 const proxyList = ref([])
+const nodeList = ref([])
 const loading = ref(true)
 const error = ref('')
 
@@ -166,6 +191,7 @@ const proxyForm = reactive({
   protocol: 'shadowsocks',
   server: '',
   port: 443,
+  node_id: null,
   password: '',
   method: 'aes-256-gcm',
   uuid: '',
@@ -222,6 +248,20 @@ const fetchProxyList = async () => {
     proxyList.value = []
   } finally {
     loading.value = false
+  }
+}
+
+// 加载节点列表
+const loadNodes = async () => {
+  try {
+    const response = await api.get('/admin/nodes')
+    const data = response.data || response
+    nodeList.value = data.list || (Array.isArray(data) ? data : [])
+  } catch (error) {
+    console.error('加载节点列表失败:', error)
+    nodeList.value = []
+  }
+}
   }
 }
 
@@ -322,6 +362,7 @@ const handleDeleteProxy = async (id) => {
 // 页面加载时获取代理列表
 onMounted(() => {
   fetchProxyList()
+  loadNodes()
 })
 </script>
 

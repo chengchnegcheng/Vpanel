@@ -28,8 +28,50 @@ type Node struct {
 	SyncStatus   string     `gorm:"size:32;default:pending"` // synced, pending, failed
 	SyncedAt     *time.Time `gorm:""`
 	IPWhitelist  string     `gorm:"type:text"` // JSON array of allowed IPs
-	CreatedAt    time.Time  `gorm:"autoCreateTime"`
-	UpdatedAt    time.Time  `gorm:"autoUpdateTime"`
+	
+	// 流量统计
+	TrafficUp      int64 `gorm:"default:0"` // 上传流量 (bytes)
+	TrafficDown    int64 `gorm:"default:0"` // 下载流量 (bytes)
+	TrafficTotal   int64 `gorm:"default:0"` // 总流量 (bytes)
+	TrafficLimit   int64 `gorm:"default:0"` // 流量限制 (bytes), 0 = 无限制
+	TrafficResetAt *time.Time `gorm:""` // 流量重置时间
+	
+	// 负载信息
+	CPUUsage    float64 `gorm:"default:0"` // CPU 使用率 (0-100)
+	MemoryUsage float64 `gorm:"default:0"` // 内存使用率 (0-100)
+	DiskUsage   float64 `gorm:"default:0"` // 磁盘使用率 (0-100)
+	NetSpeed    int64   `gorm:"default:0"` // 当前网速 (bytes/s)
+	
+	// 速率限制
+	SpeedLimit int64 `gorm:"default:0"` // 速率限制 (bytes/s), 0 = 无限制
+	
+	// 协议支持
+	Protocols string `gorm:"type:text"` // JSON array: ["vless", "vmess", "trojan", "shadowsocks"]
+	
+	// TLS 配置
+	TLSEnabled bool   `gorm:"default:false"`
+	TLSDomain  string `gorm:"size:256"`
+	TLSCertPath string `gorm:"size:512"`
+	TLSKeyPath  string `gorm:"size:512"`
+	
+	// 节点分组
+	GroupID *int64 `gorm:"index"` // 节点组 ID
+	
+	// 排序和优先级
+	Priority int `gorm:"default:0"` // 优先级，数字越大优先级越高
+	Sort     int `gorm:"default:0"` // 排序序号
+	
+	// 告警配置
+	AlertTrafficThreshold float64 `gorm:"default:80"` // 流量告警阈值 (%)
+	AlertCPUThreshold     float64 `gorm:"default:80"` // CPU 告警阈值 (%)
+	AlertMemoryThreshold  float64 `gorm:"default:80"` // 内存告警阈值 (%)
+	
+	// 备注和描述
+	Description string `gorm:"type:text"` // 节点描述
+	Remarks     string `gorm:"type:text"` // 管理员备注
+	
+	CreatedAt time.Time  `gorm:"autoCreateTime"`
+	UpdatedAt time.Time  `gorm:"autoUpdateTime"`
 }
 
 // TableName returns the table name for Node.

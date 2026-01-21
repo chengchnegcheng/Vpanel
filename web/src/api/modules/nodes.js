@@ -151,7 +151,46 @@ export const nodesApi = {
    * 获取集群健康状态
    * @returns {Promise<Object>} 集群健康概览
    */
-  getClusterHealth: () => api.get('/admin/nodes/cluster-health')
+  getClusterHealth: () => api.get('/admin/nodes/cluster-health'),
+
+  /**
+   * 远程部署 Agent
+   * @param {number|string} id - 节点 ID
+   * @param {Object} data - 部署配置
+   * @param {string} data.host - 远程服务器 IP/域名
+   * @param {number} data.port - SSH 端口 (默认 22)
+   * @param {string} data.username - SSH 用户名
+   * @param {string} data.password - SSH 密码 (可选)
+   * @param {string} data.private_key - SSH 私钥 (可选)
+   * @returns {Promise<Object>} 部署结果
+   */
+  deployAgent: (id, data) => api.post(`/admin/nodes/${id}/deploy`, data),
+
+  /**
+   * 获取部署脚本
+   * @param {number|string} id - 节点 ID
+   * @param {string} panelUrl - 面板 URL (可选)
+   * @returns {Promise<Blob>} 脚本文件
+   */
+  getDeployScript: (id, panelUrl) => {
+    const params = panelUrl ? { panel_url: panelUrl } : {}
+    return api.get(`/admin/nodes/${id}/deploy/script`, { 
+      params,
+      responseType: 'blob'
+    })
+  },
+
+  /**
+   * 测试 SSH 连接
+   * @param {Object} data - 连接配置
+   * @param {string} data.host - 远程服务器 IP/域名
+   * @param {number} data.port - SSH 端口 (默认 22)
+   * @param {string} data.username - SSH 用户名
+   * @param {string} data.password - SSH 密码 (可选)
+   * @param {string} data.private_key - SSH 私钥 (可选)
+   * @returns {Promise<Object>} 测试结果
+   */
+  testConnection: (data) => api.post('/admin/nodes/test-connection', data)
 }
 
 export default nodesApi

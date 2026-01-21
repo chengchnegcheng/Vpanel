@@ -36,87 +36,141 @@ pause() {
     read -p "按回车键继续..."
 }
 
+# 执行 docker compose 命令
+docker_compose_cmd() {
+    if docker compose version &> /dev/null; then
+        docker compose "$@"
+    else
+        docker-compose "$@"
+    fi
+}
+
+# 检查容器状态
+check_container_status() {
+    cd "$DOCKER_DIR"
+    if docker_compose_cmd ps | grep -q "v-panel.*Up"; then
+        return 0
+    else
+        return 1
+    fi
+}
+
 # Docker 相关操作
 docker_menu() {
     while true; do
         show_header
         echo -e "${GREEN}Docker 部署管理${NC}"
         echo ""
+        
+        # 显示当前状态
+        cd "$DOCKER_DIR"
+        if check_container_status; then
+            echo -e "当前状态: ${GREEN}运行中${NC}"
+        else
+            echo -e "当前状态: ${YELLOW}已停止${NC}"
+        fi
+        echo ""
+        
         echo "  1) 启动服务"
         echo "  2) 停止服务"
         echo "  3) 重启服务"
-        echo "  4) 查看日志"
-        echo "  5) 查看状态"
-        echo "  6) 清理数据 (危险操作)"
+        echo "  4) 重新构建并启动"
+        echo "  5) 查看日志 (实时)"
+        echo "  6) 查看日志 (最近 100 行)"
+        echo "  7) 查看状态"
+        echo "  8) 进入容器 Shell"
+        echo "  9) 清理数据 (危险)"
         echo "  0) 返回主菜单"
         echo ""
-        read -p "请选择操作 [0-6]: " choice
+        read -p "请选择操作 [0-9]: " choice
 
         case $choice in
             1)
-                echo -e "${GREEN}启动 V Panel...${NC}"
-                cd "$DOCKER_DIR"
-                if docker compose version &> /dev/null; then
-                    docker compose up -d --build
+                if check_container_status; then
+                    echo -e "${YELLOW}服务已在运行中${NC}"
                 else
-                    docker-compose up -d --build
+                    echo -e "${GREEN}启动 V Panel...${NC}"
+                    cd "$DOCKER_DIR"
+                    docker_compose_cmd up -d
+                    echo -e "${GREEN}V Panel 启动成功！${NC}"
+                    echo -e "访问地址: ${YELLOW}http://localhost:8080${NC}"
+                    echo -e "默认账号: ${CYAN}admin / admin123${NC}"
                 fi
-                echo -e "${GREEN}V Panel 启动成功！${NC}"
-                echo -e "访问地址: ${YELLOW}http://localhost:8080${NC}"
                 pause
                 ;;
             2)
-                echo -e "${YELLOW}停止 V Panel...${NC}"
-                cd "$DOCKER_DIR"
-                if docker compose version &> /dev/null; then
-                    docker compose down
+                if ! check_container_status; then
+                    echo -e "${YELLOW}服务未运行${NC}"
                 else
-                    docker-compose down
+                    echo -e "${YELLOW}停止 V Panel...${NC}"
+                    cd "$DOCKER_DIR"
+                    docker_compose_cmd down
+                    echo -e "${GREEN}V Panel 已停止${NC}"
                 fi
-                echo -e "${GREEN}V Panel 已停止${NC}"
                 pause
                 ;;
             3)
                 echo -e "${YELLOW}重启 V Panel...${NC}"
                 cd "$DOCKER_DIR"
-                if docker compose version &> /dev/null; then
-                    docker compose down
-                    docker compose up -d --build
-                else
-                    docker-compose down
-                    docker-compose up -d --build
-                fi
+                docker_compose_cmd restart
                 echo -e "${GREEN}V Panel 已重启${NC}"
                 pause
                 ;;
             4)
+                echo -e "${YELLOW}重新构建并启动...${NC}"
                 cd "$DOCKER_DIR"
-                if docker compose version &> /dev/null; then
-                    docker compose logs -f
-                else
-                    docker-compose logs -f
-                fi
-                ;;
-            5)
-                cd "$DOCKER_DIR"
-                if docker compose version &> /dev/null; then
-                    docker compose ps
-                else
-                    docker-compose ps
-                fi
+                docker_compose_cmd down
+                docker_compose_cmd build --no-cache
+                docker_compose_cmd up -d
+                echo -e "${GREEN}重新构建完成！${NC}"
                 pause
                 ;;
+            5)
+                echo -e "${CYAN}查看实时日志 (Ctrl+C 退出)${NC}"
+                cd "$DOCKER_DIR"
+                docker_compose_cmd logs -f
+                ;;
             6)
-                echo -e "${RED}警告: 这将删除所有数据！${NC}"
-                read -p "确认删除? (y/N): " confirm
-                if [ "$confirm" = "y" ] || [ "$confirm" = "Y" ]; then
+                echo -e "${CYAN}最近 100 行日志:${NC}"
+                cd "$DOCKER_DIR"
+                docker_compose_cmd logs --tail=100
+                pause
+                ;;
+            7)
+                cd "$DOCKER_DIR"
+                echo -e "${CYAN}容器状态:${NC}"
+                docker_compose_cmd ps
+                echo ""
+                echo -e "${CYAN}资源使用:${NC}"
+                docker stats --no-stream v-panel 2>/dev/null || echo "容器未运行"
+                pause
+                ;;
+            8)
+                if ! check_container_status; then
+                    echo -e "${RED}错误: 容器未运行${NC}"
+                    pause
+                else
+                    echo -e "${CYAN}进入容器 Shell (输入 exit 退出)${NC}"
+                    docker exec -it v-panel sh
+                fi
+                ;;
+            9)
+                echo ""
+                echo -e "${RED}========================================${NC}"
+                echo -e "${RED}        警告: 危险操作！${NC}"
+                echo -e "${RED}========================================${NC}"
+                echo -e "${RED}这将删除:${NC}"
+                echo -e "  - 所有容器"
+                echo -e "  - 所有数据卷 (数据库、日志等)"
+                echo -e "  - 所有配置"
+                echo ""
+                read -p "确认删除所有数据? 输入 'yes' 确认: " confirm
+                if [ "$confirm" = "yes" ]; then
                     cd "$DOCKER_DIR"
-                    if docker compose version &> /dev/null; then
-                        docker compose down -v
-                    else
-                        docker-compose down -v
-                    fi
+                    docker_compose_cmd down -v
                     echo -e "${GREEN}已清理所有容器和数据卷${NC}"
+                else
+                    echo -e "${YELLOW}已取消操作${NC}"
                 fi
                 pause
                 ;;
@@ -137,47 +191,90 @@ dev_menu() {
         show_header
         echo -e "${GREEN}本地开发环境${NC}"
         echo ""
-        echo "  1) 编译并启动服务"
-        echo "  2) 仅编译"
-        echo "  3) 直接运行 (go run)"
-        echo "  4) 运行测试"
-        echo "  5) 启动前端开发服务器"
-        echo "  6) 安装所有依赖"
+        
+        # 检查编译文件
+        if [ -f "$PROJECT_ROOT/vpanel" ]; then
+            echo -e "编译状态: ${GREEN}已编译${NC}"
+        else
+            echo -e "编译状态: ${YELLOW}未编译${NC}"
+        fi
+        echo ""
+        
+        echo "  1) 编译 Panel"
+        echo "  2) 编译 Agent (所有平台)"
+        echo "  3) 编译 Panel + Agent"
+        echo "  4) 运行 Panel (go run)"
+        echo "  5) 运行已编译的 Panel"
+        echo "  6) 运行测试"
+        echo "  7) 代码格式化"
+        echo "  8) 前端开发服务器"
+        echo "  9) 编译前端"
+        echo " 10) 安装所有依赖"
         echo "  0) 返回主菜单"
         echo ""
-        read -p "请选择操作 [0-6]: " choice
+        read -p "请选择操作 [0-10]: " choice
 
         cd "$PROJECT_ROOT"
 
         case $choice in
             1)
-                echo -e "${GREEN}编译并启动 V Panel...${NC}"
-                go build -o v ./cmd/v/main.go
-                echo -e "${GREEN}启动服务...${NC}"
-                ./v
+                echo -e "${GREEN}编译 Panel...${NC}"
+                make build
+                echo -e "${GREEN}编译完成: ./vpanel${NC}"
+                pause
                 ;;
             2)
-                echo -e "${GREEN}编译 V Panel...${NC}"
-                go build -o v ./cmd/v/main.go
-                echo -e "${GREEN}编译完成: ./v${NC}"
+                echo -e "${GREEN}编译 Agent (所有平台)...${NC}"
+                make agent-all
+                echo -e "${GREEN}编译完成，文件位于 bin/ 目录${NC}"
+                ls -lh bin/
                 pause
                 ;;
             3)
-                echo -e "${GREEN}直接运行 (不编译)...${NC}"
-                go run ./cmd/v/main.go
-                ;;
-            4)
-                echo -e "${GREEN}运行测试...${NC}"
-                go test ./... -v
+                echo -e "${GREEN}编译 Panel + Agent...${NC}"
+                make build-all
+                echo -e "${GREEN}编译完成${NC}"
                 pause
                 ;;
+            4)
+                echo -e "${GREEN}运行 Panel (开发模式)...${NC}"
+                go run ./cmd/v/main.go
+                ;;
             5)
+                if [ ! -f "$PROJECT_ROOT/vpanel" ]; then
+                    echo -e "${RED}错误: 未找到编译文件，请先编译${NC}"
+                    pause
+                else
+                    echo -e "${GREEN}运行 Panel...${NC}"
+                    ./vpanel
+                fi
+                ;;
+            6)
+                echo -e "${GREEN}运行测试...${NC}"
+                make test
+                pause
+                ;;
+            7)
+                echo -e "${GREEN}格式化代码...${NC}"
+                make fmt
+                echo -e "${GREEN}格式化完成${NC}"
+                pause
+                ;;
+            8)
                 echo -e "${GREEN}启动前端开发服务器...${NC}"
                 cd web && npm run dev
                 ;;
-            6)
+            9)
+                echo -e "${GREEN}编译前端...${NC}"
+                cd web && npm run build
+                echo -e "${GREEN}前端编译完成${NC}"
+                pause
+                ;;
+            10)
                 echo -e "${GREEN}安装依赖...${NC}"
+                echo -e "${CYAN}安装 Go 依赖...${NC}"
                 go mod download
+                echo -e "${CYAN}安装前端依赖...${NC}"
                 cd web && npm install
                 echo -e "${GREEN}依赖安装完成${NC}"
                 pause
@@ -320,15 +417,27 @@ system_check() {
 main_menu() {
     while true; do
         show_header
+        
+        # 显示快速状态
+        echo -e "${CYAN}快速状态:${NC}"
+        if check_container_status 2>/dev/null; then
+            echo -e "  Docker: ${GREEN}运行中${NC} | 访问: ${YELLOW}http://localhost:8080${NC}"
+        else
+            echo -e "  Docker: ${YELLOW}已停止${NC}"
+        fi
+        echo ""
+        
         echo -e "${BLUE}请选择操作:${NC}"
         echo ""
         echo "  1) Docker 部署管理"
         echo "  2) 本地开发环境"
         echo "  3) 配置管理"
         echo "  4) 系统环境检查"
+        echo "  5) 快速启动 (Docker)"
+        echo "  6) 快速停止 (Docker)"
         echo "  0) 退出"
         echo ""
-        read -p "请选择 [0-4]: " choice
+        read -p "请选择 [0-6]: " choice
 
         case $choice in
             1)
@@ -342,6 +451,21 @@ main_menu() {
                 ;;
             4)
                 system_check
+                ;;
+            5)
+                echo -e "${GREEN}快速启动 Docker 服务...${NC}"
+                cd "$DOCKER_DIR"
+                docker_compose_cmd up -d
+                echo -e "${GREEN}启动完成！${NC}"
+                echo -e "访问地址: ${YELLOW}http://localhost:8080${NC}"
+                pause
+                ;;
+            6)
+                echo -e "${YELLOW}快速停止 Docker 服务...${NC}"
+                cd "$DOCKER_DIR"
+                docker_compose_cmd down
+                echo -e "${GREEN}已停止${NC}"
+                pause
                 ;;
             0)
                 echo -e "${GREEN}再见！${NC}"

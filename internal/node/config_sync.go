@@ -2,10 +2,13 @@
 package node
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
+	"net/http"
 	"sync"
 	"time"
 
@@ -572,7 +575,6 @@ func (s *configSync) syncWithRetry(ctx context.Context, node *repository.Node, c
 }
 
 // performSync performs the actual sync operation to a node.
-// In a real implementation, this would communicate with the Node Agent.
 func (s *configSync) performSync(ctx context.Context, node *repository.Node, config *NodeConfig) error {
 	// Create a context with timeout
 	syncCtx, cancel := context.WithTimeout(ctx, s.config.SyncTimeout)
@@ -581,24 +583,48 @@ func (s *configSync) performSync(ctx context.Context, node *repository.Node, con
 	// Serialize config to JSON
 	configJSON, err := json.Marshal(config)
 	if err != nil {
-		return fmt.Errorf("failed to serialize config: %w", err)
+		return fmt.Errorf("配置序列化失败: %w", err)
 	}
 
-	// In a real implementation, this would:
-	// 1. Connect to the Node Agent at node.Address:node.Port
-	// 2. Send the configuration via gRPC or HTTP
-	// 3. Wait for acknowledgment
-	// For now, we simulate the sync operation
-	_ = syncCtx
-	_ = configJSON
+	// 构建 Node Agent 的配置同步 API 地址
+	url := fmt.Sprintf("http://%s:%d/config/sync", node.Address, node.Port)
 
-	s.logger.Debug("Performing sync to node",
+	s.logger.Debug("向节点同步配置",
 		logger.F("node_id", node.ID),
 		logger.F("node_address", node.Address),
+		logger.F("url", url),
 		logger.F("config_size", len(configJSON)))
 
-	// Simulate successful sync
-	// In production, this would be replaced with actual network communication
+	// 创建 HTTP 请求
+	req, err := http.NewRequestWithContext(syncCtx, http.MethodPost, url, bytes.NewReader(configJSON))
+	if err != nil {
+		return fmt.Errorf("创建请求失败: %w", err)
+	}
+
+	// 设置请求头
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", node.Token))
+
+	// 发送请求
+	client := &http.Client{
+		Timeout: s.config.SyncTimeout,
+	}
+	resp, err := client.Do(req)
+	if err != nil {
+		return fmt.Errorf("配置同步请求失败: %w", err)
+	}
+	defer resp.Body.Close()
+
+	// 检查响应状态
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("配置同步失败，状态码: %d, 响应: %s", resp.StatusCode, string(body))
+	}
+
+	s.logger.Info("配置同步成功",
+		logger.F("node_id", node.ID),
+		logger.F("node_name", node.Name))
+
 	return nil
 }
 

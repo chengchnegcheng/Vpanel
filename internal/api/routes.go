@@ -192,7 +192,8 @@ func (r *Router) Setup() {
 	nodeGroupHandler := handlers.NewNodeGroupHandler(nodeGroupService, r.logger)
 	nodeHealthHandler := handlers.NewNodeHealthHandler(nodeHealthChecker, r.repos.HealthCheck, r.repos.Node, r.logger)
 	nodeStatsHandler := handlers.NewNodeStatsHandler(nodeTrafficService, nodeService, nodeGroupService, r.logger)
-	nodeDeployHandler := handlers.NewNodeDeployHandler(nodeDeployService, nodeService, r.logger)
+	nodeDeployHandler := handlers.NewNodeDeployHandler(nodeDeployService, nodeService, r.config, r.logger)
+	agentDownloadHandler := handlers.NewAgentDownloadHandler(r.logger)
 
 	// Create Xray config generator for nodes
 	configGenerator := xray.NewConfigGenerator(r.repos.Proxy, r.logger)
@@ -629,6 +630,11 @@ func (r *Router) Setup() {
 				adminNodes.GET("", nodeHandler.List)
 				adminNodes.POST("", nodeHandler.Create)
 				adminNodes.GET("/statistics", nodeHandler.GetStatistics)
+				
+				// Remote deployment (必须在 /:id 之前，避免被参数路由匹配)
+				adminNodes.GET("/agent/download", agentDownloadHandler.DownloadAgent)
+				adminNodes.POST("/test-connection", nodeDeployHandler.TestConnection)
+				
 				adminNodes.GET("/:id", nodeHandler.Get)
 				adminNodes.PUT("/:id", nodeHandler.Update)
 				adminNodes.DELETE("/:id", nodeHandler.Delete)
@@ -645,7 +651,6 @@ func (r *Router) Setup() {
 				// Remote deployment
 				adminNodes.POST("/:id/deploy", nodeDeployHandler.DeployAgent)
 				adminNodes.GET("/:id/deploy/script", nodeDeployHandler.GetDeployScript)
-				adminNodes.POST("/test-connection", nodeDeployHandler.TestConnection)
 
 				// Health check routes
 				adminNodes.POST("/:id/health-check", nodeHealthHandler.CheckNode)

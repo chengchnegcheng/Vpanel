@@ -42,8 +42,48 @@ type NodeResponse struct {
 	SyncStatus   string   `json:"sync_status"`
 	SyncedAt     string   `json:"synced_at,omitempty"`
 	IPWhitelist  []string `json:"ip_whitelist,omitempty"`
-	CreatedAt    string   `json:"created_at"`
-	UpdatedAt    string   `json:"updated_at"`
+	
+	// 流量统计
+	TrafficUp      int64  `json:"traffic_up"`
+	TrafficDown    int64  `json:"traffic_down"`
+	TrafficTotal   int64  `json:"traffic_total"`
+	TrafficLimit   int64  `json:"traffic_limit"`
+	TrafficResetAt string `json:"traffic_reset_at,omitempty"`
+	
+	// 负载信息
+	CPUUsage    float64 `json:"cpu_usage"`
+	MemoryUsage float64 `json:"memory_usage"`
+	DiskUsage   float64 `json:"disk_usage"`
+	NetSpeed    int64   `json:"net_speed"`
+	
+	// 速率限制
+	SpeedLimit int64 `json:"speed_limit"`
+	
+	// 协议支持
+	Protocols []string `json:"protocols,omitempty"`
+	
+	// TLS 配置
+	TLSEnabled bool   `json:"tls_enabled"`
+	TLSDomain  string `json:"tls_domain,omitempty"`
+	
+	// 节点分组
+	GroupID *int64 `json:"group_id,omitempty"`
+	
+	// 排序和优先级
+	Priority int `json:"priority"`
+	Sort     int `json:"sort"`
+	
+	// 告警配置
+	AlertTrafficThreshold float64 `json:"alert_traffic_threshold"`
+	AlertCPUThreshold     float64 `json:"alert_cpu_threshold"`
+	AlertMemoryThreshold  float64 `json:"alert_memory_threshold"`
+	
+	// 备注和描述
+	Description string `json:"description,omitempty"`
+	Remarks     string `json:"remarks,omitempty"`
+	
+	CreatedAt string `json:"created_at"`
+	UpdatedAt string `json:"updated_at"`
 }
 
 // NodeWithTokenResponse includes the token (only returned on create).
@@ -62,6 +102,33 @@ type CreateNodeRequest struct {
 	Weight      int      `json:"weight"`
 	MaxUsers    int      `json:"max_users"`
 	IPWhitelist []string `json:"ip_whitelist"`
+	
+	// 流量和速率
+	TrafficLimit int64 `json:"traffic_limit"`
+	SpeedLimit   int64 `json:"speed_limit"`
+	
+	// 协议支持
+	Protocols []string `json:"protocols"`
+	
+	// TLS 配置
+	TLSEnabled bool   `json:"tls_enabled"`
+	TLSDomain  string `json:"tls_domain"`
+	
+	// 节点分组
+	GroupID *int64 `json:"group_id"`
+	
+	// 排序和优先级
+	Priority int `json:"priority"`
+	Sort     int `json:"sort"`
+	
+	// 告警配置
+	AlertTrafficThreshold float64 `json:"alert_traffic_threshold"`
+	AlertCPUThreshold     float64 `json:"alert_cpu_threshold"`
+	AlertMemoryThreshold  float64 `json:"alert_memory_threshold"`
+	
+	// 备注和描述
+	Description string `json:"description"`
+	Remarks     string `json:"remarks"`
 }
 
 // UpdateNodeRequest represents a request to update a node.
@@ -74,6 +141,33 @@ type UpdateNodeRequest struct {
 	Weight      *int      `json:"weight"`
 	MaxUsers    *int      `json:"max_users"`
 	IPWhitelist *[]string `json:"ip_whitelist"`
+	
+	// 流量和速率
+	TrafficLimit *int64 `json:"traffic_limit"`
+	SpeedLimit   *int64 `json:"speed_limit"`
+	
+	// 协议支持
+	Protocols *[]string `json:"protocols"`
+	
+	// TLS 配置
+	TLSEnabled *bool   `json:"tls_enabled"`
+	TLSDomain  *string `json:"tls_domain"`
+	
+	// 节点分组
+	GroupID *int64 `json:"group_id"`
+	
+	// 排序和优先级
+	Priority *int `json:"priority"`
+	Sort     *int `json:"sort"`
+	
+	// 告警配置
+	AlertTrafficThreshold *float64 `json:"alert_traffic_threshold"`
+	AlertCPUThreshold     *float64 `json:"alert_cpu_threshold"`
+	AlertMemoryThreshold  *float64 `json:"alert_memory_threshold"`
+	
+	// 备注和描述
+	Description *string `json:"description"`
+	Remarks     *string `json:"remarks"`
 }
 
 // toNodeResponse converts a node to API response format.
@@ -92,8 +186,47 @@ func toNodeResponse(n *node.Node) *NodeResponse {
 		Latency:      n.Latency,
 		SyncStatus:   n.SyncStatus,
 		IPWhitelist:  n.IPWhitelist,
-		CreatedAt:    n.CreatedAt.Format("2006-01-02T15:04:05Z"),
-		UpdatedAt:    n.UpdatedAt.Format("2006-01-02T15:04:05Z"),
+		
+		// 流量统计
+		TrafficUp:    n.TrafficUp,
+		TrafficDown:  n.TrafficDown,
+		TrafficTotal: n.TrafficTotal,
+		TrafficLimit: n.TrafficLimit,
+		
+		// 负载信息
+		CPUUsage:    n.CPUUsage,
+		MemoryUsage: n.MemoryUsage,
+		DiskUsage:   n.DiskUsage,
+		NetSpeed:    n.NetSpeed,
+		
+		// 速率限制
+		SpeedLimit: n.SpeedLimit,
+		
+		// 协议支持
+		Protocols: n.Protocols,
+		
+		// TLS 配置
+		TLSEnabled: n.TLSEnabled,
+		TLSDomain:  n.TLSDomain,
+		
+		// 节点分组
+		GroupID: n.GroupID,
+		
+		// 排序和优先级
+		Priority: n.Priority,
+		Sort:     n.Sort,
+		
+		// 告警配置
+		AlertTrafficThreshold: n.AlertTrafficThreshold,
+		AlertCPUThreshold:     n.AlertCPUThreshold,
+		AlertMemoryThreshold:  n.AlertMemoryThreshold,
+		
+		// 备注和描述
+		Description: n.Description,
+		Remarks:     n.Remarks,
+		
+		CreatedAt: n.CreatedAt.Format("2006-01-02T15:04:05Z"),
+		UpdatedAt: n.UpdatedAt.Format("2006-01-02T15:04:05Z"),
 	}
 	if n.LastSeenAt != nil {
 		resp.LastSeenAt = n.LastSeenAt.Format("2006-01-02T15:04:05Z")
@@ -101,11 +234,17 @@ func toNodeResponse(n *node.Node) *NodeResponse {
 	if n.SyncedAt != nil {
 		resp.SyncedAt = n.SyncedAt.Format("2006-01-02T15:04:05Z")
 	}
+	if n.TrafficResetAt != nil {
+		resp.TrafficResetAt = n.TrafficResetAt.Format("2006-01-02T15:04:05Z")
+	}
 	if resp.Tags == nil {
 		resp.Tags = []string{}
 	}
 	if resp.IPWhitelist == nil {
 		resp.IPWhitelist = []string{}
+	}
+	if resp.Protocols == nil {
+		resp.Protocols = []string{}
 	}
 	return resp
 }
@@ -192,6 +331,33 @@ func (h *NodeHandler) Create(c *gin.Context) {
 		Weight:      req.Weight,
 		MaxUsers:    req.MaxUsers,
 		IPWhitelist: req.IPWhitelist,
+		
+		// 流量和速率
+		TrafficLimit: req.TrafficLimit,
+		SpeedLimit:   req.SpeedLimit,
+		
+		// 协议支持
+		Protocols: req.Protocols,
+		
+		// TLS 配置
+		TLSEnabled: req.TLSEnabled,
+		TLSDomain:  req.TLSDomain,
+		
+		// 节点分组
+		GroupID: req.GroupID,
+		
+		// 排序和优先级
+		Priority: req.Priority,
+		Sort:     req.Sort,
+		
+		// 告警配置
+		AlertTrafficThreshold: req.AlertTrafficThreshold,
+		AlertCPUThreshold:     req.AlertCPUThreshold,
+		AlertMemoryThreshold:  req.AlertMemoryThreshold,
+		
+		// 备注和描述
+		Description: req.Description,
+		Remarks:     req.Remarks,
 	}
 
 	n, err := h.nodeService.Create(c.Request.Context(), createReq)
@@ -244,6 +410,33 @@ func (h *NodeHandler) Update(c *gin.Context) {
 		Weight:      req.Weight,
 		MaxUsers:    req.MaxUsers,
 		IPWhitelist: req.IPWhitelist,
+		
+		// 流量和速率
+		TrafficLimit: req.TrafficLimit,
+		SpeedLimit:   req.SpeedLimit,
+		
+		// 协议支持
+		Protocols: req.Protocols,
+		
+		// TLS 配置
+		TLSEnabled: req.TLSEnabled,
+		TLSDomain:  req.TLSDomain,
+		
+		// 节点分组
+		GroupID: req.GroupID,
+		
+		// 排序和优先级
+		Priority: req.Priority,
+		Sort:     req.Sort,
+		
+		// 告警配置
+		AlertTrafficThreshold: req.AlertTrafficThreshold,
+		AlertCPUThreshold:     req.AlertCPUThreshold,
+		AlertMemoryThreshold:  req.AlertMemoryThreshold,
+		
+		// 备注和描述
+		Description: req.Description,
+		Remarks:     req.Remarks,
 	}
 
 	n, err := h.nodeService.Update(c.Request.Context(), id, updateReq)

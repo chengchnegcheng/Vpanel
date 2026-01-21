@@ -11,6 +11,8 @@ RUN npm config set registry https://registry.npmmirror.com/
 
 # Copy frontend files
 COPY web/package*.json ./
+# 跳过 puppeteer 下载 Chrome
+ENV PUPPETEER_SKIP_DOWNLOAD=true
 RUN npm ci --legacy-peer-deps
 
 COPY web/ ./
@@ -43,6 +45,18 @@ RUN CGO_ENABLED=0 GOOS=linux go build \
     -ldflags="-s -w -X main.version=${VERSION} -X main.buildTime=${BUILD_TIME} -X main.gitCommit=${GIT_COMMIT}" \
     -o /app/v-panel ./cmd/v/main.go
 
+# Build Agent binaries for multiple architectures
+RUN mkdir -p /app/bin && \
+    CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build \
+    -ldflags="-s -w -X main.Version=${VERSION}" \
+    -o /app/bin/vpanel-agent-amd64 ./cmd/agent/main.go && \
+    CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build \
+    -ldflags="-s -w -X main.Version=${VERSION}" \
+    -o /app/bin/vpanel-agent-arm64 ./cmd/agent/main.go && \
+    CGO_ENABLED=0 GOOS=linux GOARCH=arm go build \
+    -ldflags="-s -w -X main.Version=${VERSION}" \
+    -o /app/bin/vpanel-agent-arm ./cmd/agent/main.go
+
 # Stage 3: Final image
 FROM alpine:3.19
 
@@ -62,6 +76,9 @@ WORKDIR /app
 
 # Copy binary from builder
 COPY --from=backend-builder /app/v-panel /app/v-panel
+
+# Copy Agent binaries
+COPY --from=backend-builder /app/bin /app/bin
 
 # Copy frontend build
 COPY --from=frontend-builder /app/web/dist /app/web/dist

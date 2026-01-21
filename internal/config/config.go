@@ -29,6 +29,7 @@ type Config struct {
 type ServerConfig struct {
 	Host            string        `yaml:"host" env:"V_SERVER_HOST" default:"0.0.0.0"`
 	Port            int           `yaml:"port" env:"V_SERVER_PORT" default:"8080"`
+	PublicURL       string        `yaml:"public_url" env:"V_SERVER_PUBLIC_URL" default:""`
 	Mode            string        `yaml:"mode" env:"V_SERVER_MODE" default:"debug"`
 	BaseURL         string        `yaml:"base_url" env:"V_SERVER_BASE_URL" default:""`
 	ReadTimeout     time.Duration `yaml:"read_timeout" env:"V_SERVER_READ_TIMEOUT" default:"30s"`
