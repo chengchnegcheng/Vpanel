@@ -393,9 +393,9 @@ const loadNodes = async () => {
   try {
     const response = await api.get('/admin/nodes')
     const data = response.data || response
-    nodeList.value = data.list || (Array.isArray(data) ? data : [])
+    nodeList.value = data.nodes || data.list || (Array.isArray(data) ? data : [])
   } catch (error) {
-    console.error('加载节点列表失败:', error)
+    ElMessage.error('加载节点列表失败')
     nodeList.value = []
   }
 }

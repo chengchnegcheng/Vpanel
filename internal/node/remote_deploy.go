@@ -940,24 +940,72 @@ echo ""
 
 // TestConnection tests SSH connection without deploying.
 func (s *RemoteDeployService) TestConnection(ctx context.Context, config *DeployConfig) error {
-	client, err := s.connectSSH(config)
-	if err != nil {
-		return err
+	// 设置超时
+	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+	
+	// 使用 channel 来处理超时
+	type result struct {
+		err error
 	}
-	defer client.Close()
+	resultChan := make(chan result, 1)
+	
+	go func() {
+		// 在 goroutine 内部检查 context
+		select {
+		case <-ctx.Done():
+			return
+		default:
+		}
+		
+		client, err := s.connectSSH(config)
+		if err != nil {
+			select {
+			case resultChan <- result{err: err}:
+			case <-ctx.Done():
+			}
+			return
+		}
+		defer client.Close()
 
-	// Try to execute a simple command
-	session, err := client.NewSession()
-	if err != nil {
-		return fmt.Errorf("failed to create session: %w", err)
+		// 再次检查 context
+		select {
+		case <-ctx.Done():
+			return
+		default:
+		}
+
+		// Try to execute a simple command
+		session, err := client.NewSession()
+		if err != nil {
+			select {
+			case resultChan <- result{err: fmt.Errorf("failed to create session: %w", err)}:
+			case <-ctx.Done():
+			}
+			return
+		}
+		defer session.Close()
+
+		if err := session.Run("echo 'Connection test successful'"); err != nil {
+			select {
+			case resultChan <- result{err: fmt.Errorf("failed to execute test command: %w", err)}:
+			case <-ctx.Done():
+			}
+			return
+		}
+		
+		select {
+		case resultChan <- result{err: nil}:
+		case <-ctx.Done():
+		}
+	}()
+	
+	select {
+	case res := <-resultChan:
+		return res.err
+	case <-ctx.Done():
+		return fmt.Errorf("连接测试超时")
 	}
-	defer session.Close()
-
-	if err := session.Run("echo 'Connection test successful'"); err != nil {
-		return fmt.Errorf("failed to execute test command: %w", err)
-	}
-
-	return nil
 }
 
 // readAgentBinary 读取本地 Agent 二进制文件

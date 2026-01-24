@@ -302,9 +302,10 @@ func setupPortalTestRouter() (*gin.Engine, *PortalAuthHandler, *portalMockUserRe
 	})
 	
 	portalAuthService := portalauth.NewService(userRepo, authTokenRepo)
-	
-	handler := NewPortalAuthHandler(portalAuthService, authService, userRepo, &portalMockLogger{})
-	
+
+	proxyRepo := &portalMockProxyRepo{}
+	handler := NewPortalAuthHandler(portalAuthService, authService, userRepo, proxyRepo, &portalMockLogger{})
+
 	router := gin.New()
 	
 	// Setup routes
@@ -321,6 +322,26 @@ func setupPortalTestRouter() (*gin.Engine, *PortalAuthHandler, *portalMockUserRe
 	
 	return router, handler, userRepo
 }
+
+type portalMockProxyRepo struct{}
+
+func (m *portalMockProxyRepo) Create(ctx context.Context, proxy *repository.Proxy) error { return nil }
+func (m *portalMockProxyRepo) GetByID(ctx context.Context, id int64) (*repository.Proxy, error) { return nil, nil }
+func (m *portalMockProxyRepo) Update(ctx context.Context, proxy *repository.Proxy) error { return nil }
+func (m *portalMockProxyRepo) Delete(ctx context.Context, id int64) error { return nil }
+func (m *portalMockProxyRepo) List(ctx context.Context, limit, offset int) ([]*repository.Proxy, error) { return nil, nil }
+func (m *portalMockProxyRepo) GetByProtocol(ctx context.Context, protocol string) ([]*repository.Proxy, error) { return nil, nil }
+func (m *portalMockProxyRepo) GetEnabled(ctx context.Context) ([]*repository.Proxy, error) { return nil, nil }
+func (m *portalMockProxyRepo) GetByUserID(ctx context.Context, userID int64, limit, offset int) ([]*repository.Proxy, error) { return nil, nil }
+func (m *portalMockProxyRepo) CountByUserID(ctx context.Context, userID int64) (int64, error) { return 0, nil }
+func (m *portalMockProxyRepo) GetByPort(ctx context.Context, port int) (*repository.Proxy, error) { return nil, nil }
+func (m *portalMockProxyRepo) GetByNodeID(ctx context.Context, nodeID int64) ([]*repository.Proxy, error) { return nil, nil }
+func (m *portalMockProxyRepo) EnableByUserID(ctx context.Context, userID int64) error { return nil }
+func (m *portalMockProxyRepo) DisableByUserID(ctx context.Context, userID int64) error { return nil }
+func (m *portalMockProxyRepo) DeleteByIDs(ctx context.Context, ids []int64) error { return nil }
+func (m *portalMockProxyRepo) Count(ctx context.Context) (int64, error) { return 0, nil }
+func (m *portalMockProxyRepo) CountEnabled(ctx context.Context) (int64, error) { return 0, nil }
+func (m *portalMockProxyRepo) CountByProtocol(ctx context.Context) ([]*repository.ProtocolCount, error) { return nil, nil }
 
 type portalMockLogger struct{}
 

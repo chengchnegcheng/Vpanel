@@ -172,6 +172,16 @@ func (m *mockProxyRepoForSync) CountByProtocol(ctx context.Context) ([]*reposito
 	return result, nil
 }
 
+func (m *mockProxyRepoForSync) GetByNodeID(ctx context.Context, nodeID int64) ([]*repository.Proxy, error) {
+	var result []*repository.Proxy
+	for _, p := range m.proxies {
+		if p.NodeID != nil && *p.NodeID == nodeID && p.Enabled {
+			result = append(result, p)
+		}
+	}
+	return result, nil
+}
+
 // mockProxyManagerForSync is a mock implementation of proxy.Manager for config sync testing.
 type mockProxyManagerForSync struct {
 	protocols map[string]proxy.Protocol

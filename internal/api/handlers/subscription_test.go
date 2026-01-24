@@ -370,6 +370,16 @@ func (m *mockProxyRepo) CountByProtocol(ctx context.Context) ([]*repository.Prot
 	return result, nil
 }
 
+func (m *mockProxyRepo) GetByNodeID(ctx context.Context, nodeID int64) ([]*repository.Proxy, error) {
+	var result []*repository.Proxy
+	for _, proxy := range m.proxies {
+		if proxy.NodeID != nil && *proxy.NodeID == nodeID && proxy.Enabled {
+			result = append(result, proxy)
+		}
+	}
+	return result, nil
+}
+
 
 // Property 12: Invalid Token Returns 404
 // For any token that does not exist in the database, accessing the subscription SHALL return HTTP 404.

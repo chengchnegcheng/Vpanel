@@ -177,6 +177,16 @@ func (m *mockProxyRepository) CountByProtocol(ctx context.Context) ([]*repositor
 	return result, nil
 }
 
+func (m *mockProxyRepository) GetByNodeID(ctx context.Context, nodeID int64) ([]*repository.Proxy, error) {
+	var result []*repository.Proxy
+	for _, p := range m.proxies {
+		if p.NodeID != nil && *p.NodeID == nodeID && p.Enabled {
+			result = append(result, p)
+		}
+	}
+	return result, nil
+}
+
 // mockProxyManager is a mock implementation of proxy.Manager for testing.
 type mockProxyManager struct{}
 
