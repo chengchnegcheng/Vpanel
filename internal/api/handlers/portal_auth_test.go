@@ -110,17 +110,6 @@ func (m *portalMockUserRepo) CountActive(ctx context.Context) (int64, error) {
 	return count, nil
 }
 
-type portalNotFoundError struct{}
-
-func (e *portalNotFoundError) Error() string {
-	return "not found"
-}
-
-// portalNotFound returns a proper AppError for not found
-func portalNotFound(entity string, id interface{}) error {
-	return errors.NewNotFoundError(entity, id)
-}
-
 // portalMockAuthTokenRepo is a mock implementation of AuthTokenRepository.
 type portalMockAuthTokenRepo struct {
 	passwordResetTokens     map[string]*repository.PasswordResetToken

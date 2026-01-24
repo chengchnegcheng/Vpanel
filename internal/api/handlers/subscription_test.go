@@ -135,10 +135,6 @@ func (m *mockSubscriptionRepo) ResetAccessStats(ctx context.Context, id int64) e
 	return newNotFoundError("subscription", id)
 }
 
-type notFoundError struct{}
-
-func (e *notFoundError) Error() string { return "not found" }
-
 func newNotFoundError(resource string, id interface{}) error {
 	return errors.NewNotFoundError(resource, id)
 }
