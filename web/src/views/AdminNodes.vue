@@ -11,10 +11,6 @@
           <el-icon><Plus /></el-icon>
           添加节点
         </el-button>
-        <el-button type="success" @click="showRemoteInstallDialog">
-          <el-icon><Upload /></el-icon>
-          远程安装
-        </el-button>
       </div>
     </div>
 
@@ -164,28 +160,28 @@
     </el-card>
 
     <!-- 创建/编辑对话框 -->
-    <el-dialog v-model="dialogVisible" :title="isEdit ? '编辑节点' : '添加节点'" width="600px">
-      <el-form :model="form" :rules="rules" ref="formRef" label-width="100px">
-        <el-form-item label="名称" prop="name">
+    <el-dialog v-model="dialogVisible" :title="isEdit ? '编辑节点' : '添加节点'" width="700px">
+      <el-form :model="form" :rules="rules" ref="formRef" label-width="120px">
+        <el-divider content-position="left">节点信息</el-divider>
+        
+        <el-form-item label="节点名称" prop="name">
           <el-input v-model="form.name" placeholder="请输入节点名称" />
         </el-form-item>
-        <el-form-item label="地址" prop="address">
-          <el-input v-model="form.address" placeholder="IP 地址或域名" />
-        </el-form-item>
-        <el-form-item label="端口" prop="port">
-          <el-input-number v-model="form.port" :min="1" :max="65535" />
-        </el-form-item>
+        
         <el-form-item label="地区" prop="region">
           <el-input v-model="form.region" placeholder="如：香港、日本、美国" />
         </el-form-item>
+        
         <el-form-item label="权重" prop="weight">
-          <el-input-number v-model="form.weight" :min="1" :max="100" />
+          <el-input-number v-model="form.weight" :min="1" :max="100" style="width: 100%;" />
           <span class="form-tip">负载均衡权重，数值越大分配用户越多</span>
         </el-form-item>
+        
         <el-form-item label="最大用户数" prop="max_users">
-          <el-input-number v-model="form.max_users" :min="0" />
+          <el-input-number v-model="form.max_users" :min="0" style="width: 100%;" />
           <span class="form-tip">0 表示无限制</span>
         </el-form-item>
+        
         <el-form-item label="标签">
           <el-tag
             v-for="(tag, index) in form.tags"
@@ -206,6 +202,7 @@
           />
           <el-button v-else size="small" @click="showTagInput = true">+ 添加标签</el-button>
         </el-form-item>
+        
         <el-form-item label="IP 白名单">
           <el-input
             v-model="form.ip_whitelist_str"
@@ -214,10 +211,112 @@
             placeholder="每行一个 IP 地址，留空表示不限制"
           />
         </el-form-item>
+
+        <template v-if="!isEdit && form.installMethod === 'manual'">
+          <el-divider content-position="left">节点连接信息</el-divider>
+          
+          <el-alert type="info" :closable="false" style="margin-bottom: 16px;">
+            手动安装模式需要提供节点地址和端口，用于后续连接
+          </el-alert>
+          
+          <el-form-item label="节点地址" prop="address">
+            <el-input v-model="form.address" placeholder="IP 地址或域名" />
+          </el-form-item>
+          
+          <el-form-item label="节点端口" prop="port">
+            <el-input-number v-model="form.port" :min="1" :max="65535" style="width: 100%;" />
+            <span class="form-tip">Agent 监听端口，默认 8443</span>
+          </el-form-item>
+        </template>
+
+        <template v-if="!isEdit">
+          <el-divider content-position="left">安装方式</el-divider>
+          
+          <el-form-item label="安装方式">
+            <el-radio-group v-model="form.installMethod">
+              <el-radio label="manual">稍后手动安装</el-radio>
+              <el-radio label="auto">立即自动安装</el-radio>
+            </el-radio-group>
+          </el-form-item>
+
+          <template v-if="form.installMethod === 'auto'">
+            <el-alert type="info" :closable="false" style="margin-bottom: 16px;">
+              通过 SSH 连接到服务器并自动安装 Agent 和 Xray
+            </el-alert>
+
+            <el-form-item label="Panel 地址" prop="panel_url">
+              <el-input v-model="form.panel_url" placeholder="http://your-panel-ip:8080">
+                <template #prepend>
+                  <el-icon><Link /></el-icon>
+                </template>
+              </el-input>
+              <span class="form-tip">Agent 连接到 Panel 的地址，必须是 Agent 服务器能访问的地址</span>
+            </el-form-item>
+
+            <el-form-item label="服务器地址" prop="ssh_host">
+              <el-input v-model="form.ssh_host" placeholder="IP 地址或域名" />
+            </el-form-item>
+            
+            <el-form-item label="SSH 端口" prop="ssh_port">
+              <el-input-number v-model="form.ssh_port" :min="1" :max="65535" style="width: 100%;" />
+            </el-form-item>
+            
+            <el-form-item label="用户名" prop="ssh_username">
+              <el-input v-model="form.ssh_username" placeholder="SSH 用户名 (通常为 root)" />
+            </el-form-item>
+            
+            <el-form-item label="认证方式" prop="ssh_auth_method">
+              <el-radio-group v-model="form.ssh_auth_method">
+                <el-radio label="password">密码</el-radio>
+                <el-radio label="key">私钥</el-radio>
+              </el-radio-group>
+            </el-form-item>
+            
+            <el-form-item v-if="form.ssh_auth_method === 'password'" label="密码" prop="ssh_password">
+              <el-input 
+                v-model="form.ssh_password" 
+                type="password" 
+                placeholder="SSH 密码"
+                show-password
+              />
+            </el-form-item>
+            
+            <el-form-item v-if="form.ssh_auth_method === 'key'" label="私钥" prop="ssh_private_key">
+              <el-input 
+                v-model="form.ssh_private_key" 
+                type="textarea" 
+                :rows="6"
+                placeholder="粘贴 SSH 私钥内容 (PEM 格式)"
+              />
+            </el-form-item>
+
+            <el-form-item>
+              <el-button @click="testSSHConnection" :loading="testingConnection">
+                <el-icon><Connection /></el-icon>
+                测试连接
+              </el-button>
+              <span v-if="connectionTestResult" :style="{ marginLeft: '12px', color: connectionTestResult.success ? 'var(--el-color-success)' : 'var(--el-color-danger)' }">
+                {{ connectionTestResult.message }}
+              </span>
+            </el-form-item>
+
+            <el-alert v-if="connectionTestResult && !connectionTestResult.success" type="warning" :closable="false" style="margin-bottom: 16px;">
+              <template #title>常见问题排查</template>
+              <div style="font-size: 13px; line-height: 1.6;">
+                <p style="margin: 4px 0;">• 确认 SSH 服务正在运行: <code>systemctl status sshd</code></p>
+                <p style="margin: 4px 0;">• 确认端口正确 (默认 22)</p>
+                <p style="margin: 4px 0;">• 确认防火墙允许 SSH 连接</p>
+                <p style="margin: 4px 0;">• 如果使用密码认证，确认服务器允许: <code>PasswordAuthentication yes</code></p>
+              </div>
+            </el-alert>
+          </template>
+        </template>
       </el-form>
       <template #footer>
         <el-button @click="dialogVisible = false">取消</el-button>
-        <el-button type="primary" :loading="submitting" @click="submitForm">确定</el-button>
+        <el-button type="primary" :loading="submitting" @click="submitForm">
+          {{ isEdit ? '保存' : (form.installMethod === 'auto' ? '添加并安装' : '添加节点') }}
+        </el-button>
       </template>
     </el-dialog>
 
@@ -265,109 +364,6 @@
           <div class="new-token-text">{{ newToken }}</div>
         </el-alert>
       </div>
-    </el-dialog>
-
-    <!-- 远程安装对话框 -->
-    <el-dialog v-model="remoteInstallDialogVisible" title="远程安装 Agent" width="700px">
-      <el-alert type="info" :closable="false" style="margin-bottom: 20px;">
-        <template #title>
-          通过 SSH 连接到远程服务器并自动安装 Agent 和 Xray
-        </template>
-        <div style="margin-top: 8px; font-size: 13px;">
-          <p style="margin: 4px 0;">• 自动安装系统依赖和 Xray</p>
-          <p style="margin: 4px 0;">• 自动配置 systemd 服务</p>
-          <p style="margin: 4px 0;">• 支持密码和私钥认证</p>
-          <p style="margin: 4px 0;">• 注意: 当前版本需要手动上传 agent 二进制文件</p>
-        </div>
-      </el-alert>
-
-      <el-form :model="remoteInstallForm" :rules="remoteInstallRules" ref="remoteInstallFormRef" label-width="120px">
-        <el-form-item label="节点名称" prop="name">
-          <el-input v-model="remoteInstallForm.name" placeholder="请输入节点名称" />
-        </el-form-item>
-        
-        <el-divider content-position="left">SSH 连接信息</el-divider>
-        
-        <el-form-item label="服务器地址" prop="host">
-          <el-input v-model="remoteInstallForm.host" placeholder="IP 地址或域名" />
-        </el-form-item>
-        
-        <el-form-item label="SSH 端口" prop="port">
-          <el-input-number v-model="remoteInstallForm.port" :min="1" :max="65535" style="width: 100%;" />
-        </el-form-item>
-        
-        <el-form-item label="用户名" prop="username">
-          <el-input v-model="remoteInstallForm.username" placeholder="SSH 用户名 (通常为 root)" />
-        </el-form-item>
-        
-        <el-form-item label="认证方式" prop="authMethod">
-          <el-radio-group v-model="remoteInstallForm.authMethod">
-            <el-radio label="password">密码</el-radio>
-            <el-radio label="key">私钥</el-radio>
-          </el-radio-group>
-        </el-form-item>
-        
-        <el-form-item v-if="remoteInstallForm.authMethod === 'password'" label="密码" prop="password">
-          <el-input 
-            v-model="remoteInstallForm.password" 
-            type="password" 
-            placeholder="SSH 密码"
-            show-password
-          />
-        </el-form-item>
-        
-        <el-form-item v-if="remoteInstallForm.authMethod === 'key'" label="私钥" prop="privateKey">
-          <el-input 
-            v-model="remoteInstallForm.privateKey" 
-            type="textarea" 
-            :rows="6"
-            placeholder="粘贴 SSH 私钥内容 (PEM 格式)"
-          />
-        </el-form-item>
-
-        <el-form-item>
-          <el-button @click="testSSHConnection" :loading="testingConnection">
-            <el-icon><Connection /></el-icon>
-            测试连接
-          </el-button>
-          <span v-if="connectionTestResult" :style="{ marginLeft: '12px', color: connectionTestResult.success ? 'var(--el-color-success)' : 'var(--el-color-danger)' }">
-            {{ connectionTestResult.message }}
-          </span>
-        </el-form-item>
-
-        <el-alert v-if="connectionTestResult && !connectionTestResult.success" type="warning" :closable="false" style="margin-bottom: 16px;">
-          <template #title>常见问题排查</template>
-          <div style="font-size: 13px; line-height: 1.6;">
-            <p style="margin: 4px 0;">• 确认 SSH 服务正在运行: <code>systemctl status sshd</code></p>
-            <p style="margin: 4px 0;">• 确认端口正确 (默认 22)</p>
-            <p style="margin: 4px 0;">• 确认防火墙允许 SSH 连接</p>
-            <p style="margin: 4px 0;">• 如果使用密码认证，确认服务器允许: <code>PasswordAuthentication yes</code> in /etc/ssh/sshd_config</p>
-            <p style="margin: 4px 0;">• 确认用户名和密码正确</p>
-          </div>
-        </el-alert>
-
-        <el-divider content-position="left">节点配置</el-divider>
-        
-        <el-form-item label="地区" prop="region">
-          <el-input v-model="remoteInstallForm.region" placeholder="如：香港、日本、美国" />
-        </el-form-item>
-        
-        <el-form-item label="权重" prop="weight">
-          <el-input-number v-model="remoteInstallForm.weight" :min="1" :max="100" style="width: 100%;" />
-        </el-form-item>
-        
-        <el-form-item label="最大用户数" prop="maxUsers">
-          <el-input-number v-model="remoteInstallForm.maxUsers" :min="0" style="width: 100%;" />
-          <span class="form-tip">0 表示无限制</span>
-        </el-form-item>
-      </el-form>
-
-      <template #footer>
-        <el-button @click="remoteInstallDialogVisible = false">取消</el-button>
-        <el-button type="primary" :loading="deploying" @click="submitRemoteInstall">
-          开始安装
-        </el-button>
-      </template>
     </el-dialog>
 
     <!-- 部署进度对话框 -->
@@ -508,7 +504,6 @@ const pagination = reactive({ page: 1, pageSize: 20 })
 const dialogVisible = ref(false)
 const tokenDialogVisible = ref(false)
 const detailDialogVisible = ref(false)
-const remoteInstallDialogVisible = ref(false)
 const deployToNodeDialogVisible = ref(false)
 const deployProgressDialogVisible = ref(false)
 const isEdit = ref(false)
@@ -517,7 +512,6 @@ const tokenLoading = ref(false)
 const deploying = ref(false)
 const testingConnection = ref(false)
 const formRef = ref(null)
-const remoteInstallFormRef = ref(null)
 const deployFormRef = ref(null)
 const showTagInput = ref(false)
 const newTag = ref('')
@@ -540,20 +534,18 @@ const form = reactive({
   weight: 1,
   max_users: 0,
   tags: [],
-  ip_whitelist_str: ''
-})
-
-const remoteInstallForm = reactive({
-  name: '',
-  host: '',
-  port: 22,
-  username: 'root',
-  authMethod: 'password',
-  password: '',
-  privateKey: '',
-  region: '',
-  weight: 1,
-  maxUsers: 0
+  ip_whitelist_str: '',
+  // 安装方式
+  installMethod: 'manual',
+  // Panel URL
+  panel_url: '',
+  // SSH 配置
+  ssh_host: '',
+  ssh_port: 22,
+  ssh_username: 'root',
+  ssh_auth_method: 'password',
+  ssh_password: '',
+  ssh_private_key: ''
 })
 
 const deployForm = reactive({
@@ -567,18 +559,48 @@ const deployForm = reactive({
 
 const rules = {
   name: [{ required: true, message: '请输入节点名称', trigger: 'blur' }],
-  address: [{ required: true, message: '请输入节点地址', trigger: 'blur' }],
-  port: [{ required: true, message: '请输入端口', trigger: 'blur' }]
-}
-
-const remoteInstallRules = {
-  name: [{ required: true, message: '请输入节点名称', trigger: 'blur' }],
-  host: [{ required: true, message: '请输入服务器地址', trigger: 'blur' }],
-  username: [{ required: true, message: '请输入用户名', trigger: 'blur' }],
-  password: [
+  panel_url: [
     { 
       validator: (rule, value, callback) => {
-        if (remoteInstallForm.authMethod === 'password' && !value) {
+        if (form.installMethod === 'auto' && !value) {
+          callback(new Error('请输入 Panel 地址'))
+        } else if (value && !value.match(/^https?:\/\/.+/)) {
+          callback(new Error('Panel 地址格式不正确，应以 http:// 或 https:// 开头'))
+        } else {
+          callback()
+        }
+      }, 
+      trigger: 'blur' 
+    }
+  ],
+  ssh_host: [
+    { 
+      validator: (rule, value, callback) => {
+        if (form.installMethod === 'auto' && !value) {
+          callback(new Error('请输入服务器地址'))
+        } else {
+          callback()
+        }
+      }, 
+      trigger: 'blur' 
+    }
+  ],
+  ssh_username: [
+    { 
+      validator: (rule, value, callback) => {
+        if (form.installMethod === 'auto' && !value) {
+          callback(new Error('请输入用户名'))
+        } else {
+          callback()
+        }
+      }, 
+      trigger: 'blur' 
+    }
+  ],
+  ssh_password: [
+    { 
+      validator: (rule, value, callback) => {
+        if (form.installMethod === 'auto' && form.ssh_auth_method === 'password' && !value) {
           callback(new Error('请输入密码'))
         } else {
           callback()
@@ -587,10 +609,10 @@ const remoteInstallRules = {
       trigger: 'blur' 
     }
   ],
-  privateKey: [
+  ssh_private_key: [
     { 
       validator: (rule, value, callback) => {
-        if (remoteInstallForm.authMethod === 'key' && !value) {
+        if (form.installMethod === 'auto' && form.ssh_auth_method === 'key' && !value) {
           callback(new Error('请输入私钥'))
         } else {
           callback()
@@ -697,10 +719,30 @@ const fetchNodes = async () => {
 
 const showCreateDialog = () => {
   isEdit.value = false
+  
+  // 自动检测当前访问的 Panel URL
+  const currentUrl = window.location.origin
+  
   Object.assign(form, {
-    id: null, name: '', address: '', port: 8443, region: '',
-    weight: 1, max_users: 0, tags: [], ip_whitelist_str: ''
+    id: null, 
+    name: '', 
+    address: '', 
+    port: 8443, 
+    region: '',
+    weight: 1, 
+    max_users: 0, 
+    tags: [], 
+    ip_whitelist_str: '',
+    installMethod: 'manual',
+    panel_url: currentUrl, // 自动填充当前访问地址
+    ssh_host: '',
+    ssh_port: 22,
+    ssh_username: 'root',
+    ssh_auth_method: 'password',
+    ssh_password: '',
+    ssh_private_key: ''
   })
+  connectionTestResult.value = null
   dialogVisible.value = true
 }
 
@@ -725,27 +767,104 @@ const editNode = (node) => {
 const submitForm = async () => {
   await formRef.value.validate()
   submitting.value = true
+  
   try {
     const ipWhitelist = form.ip_whitelist_str.split('\n').map(s => s.trim()).filter(Boolean)
     const data = {
       name: form.name,
-      address: form.address,
-      port: form.port,
       region: form.region,
       weight: form.weight,
       max_users: form.max_users,
       tags: form.tags,
       ip_whitelist: ipWhitelist
     }
+
+    // 如果是编辑模式
     if (isEdit.value) {
+      // 编辑时需要地址和端口
+      data.address = form.address
+      data.port = form.port
       await nodeStore.updateNode(form.id, data)
       ElMessage.success('更新成功')
-    } else {
-      await nodeStore.createNode(data)
-      ElMessage.success('创建成功')
+      dialogVisible.value = false
+      fetchNodes()
+      return
     }
-    dialogVisible.value = false
-    fetchNodes()
+
+    // 创建模式 - 如果选择自动安装
+    if (form.installMethod === 'auto') {
+      // 使用 SSH 地址作为节点地址
+      data.address = form.ssh_host
+      data.port = 8443 // Agent 默认端口
+      
+      // 添加 SSH 配置
+      data.ssh = {
+        host: form.ssh_host,
+        port: form.ssh_port,
+        username: form.ssh_username,
+        panel_url: form.panel_url // 使用用户指定的 Panel URL
+      }
+
+      if (form.ssh_auth_method === 'password') {
+        data.ssh.password = form.ssh_password
+      } else {
+        data.ssh.private_key = form.ssh_private_key
+      }
+
+      // 显示部署进度对话框
+      dialogVisible.value = false
+      deployProgressDialogVisible.value = true
+      deploySteps.value = []
+      deployStepActive.value = 0
+      deployLogs.value = ''
+      deployResult.value = null
+
+      try {
+        const result = await nodeStore.createNode(data)
+        
+        // 如果有安装结果
+        if (result.install_result) {
+          deploySteps.value = result.install_result.steps || []
+          deployStepActive.value = result.install_result.success ? deploySteps.value.length : deployStepActive.value
+          deployLogs.value = result.install_result.logs || ''
+          deployResult.value = result.install_result
+
+          if (result.install_result.success) {
+            ElMessage.success('节点创建并安装成功')
+            fetchNodes()
+          } else {
+            ElMessage.error(result.install_result.message || '安装失败')
+          }
+        } else {
+          ElMessage.success('节点创建成功')
+          deployProgressDialogVisible.value = false
+          fetchNodes()
+        }
+      } catch (e) {
+        const errorData = e.response?.data || {}
+        deploySteps.value = errorData.steps || []
+        deployStepActive.value = deploySteps.value.length
+        deployLogs.value = errorData.logs || e.message || '创建失败'
+        deployResult.value = {
+          success: false,
+          message: errorData.message || e.message || '创建失败'
+        }
+        ElMessage.error(deployResult.value.message)
+      }
+    } else {
+      // 手动安装模式 - 需要用户提供地址和端口
+      if (!form.address) {
+        ElMessage.warning('手动安装模式需要填写节点地址')
+        return
+      }
+      data.address = form.address
+      data.port = form.port
+      
+      await nodeStore.createNode(data)
+      ElMessage.success('节点创建成功，请手动安装 Agent')
+      dialogVisible.value = false
+      fetchNodes()
+    }
   } catch (e) {
     ElMessage.error(e.message || '操作失败')
   } finally {
@@ -844,154 +963,6 @@ const addTag = () => {
 
 const removeTag = (index) => {
   form.tags.splice(index, 1)
-}
-
-// 远程安装相关函数
-const showRemoteInstallDialog = () => {
-  Object.assign(remoteInstallForm, {
-    name: '',
-    host: '',
-    port: 22,
-    username: 'root',
-    authMethod: 'password',
-    password: '',
-    privateKey: '',
-    region: '',
-    weight: 1,
-    maxUsers: 0
-  })
-  connectionTestResult.value = null
-  remoteInstallDialogVisible.value = true
-}
-
-const testSSHConnection = async () => {
-  try {
-    await remoteInstallFormRef.value.validateField(['host', 'username', 'password', 'privateKey'])
-  } catch {
-    return
-  }
-
-  testingConnection.value = true
-  connectionTestResult.value = null
-
-  try {
-    const data = {
-      host: remoteInstallForm.host,
-      port: remoteInstallForm.port,
-      username: remoteInstallForm.username
-    }
-
-    if (remoteInstallForm.authMethod === 'password') {
-      data.password = remoteInstallForm.password
-    } else {
-      data.private_key = remoteInstallForm.privateKey
-    }
-
-    const result = await nodesApi.testConnection(data)
-    connectionTestResult.value = result
-    
-    if (result.success) {
-      ElMessage.success('SSH 连接测试成功')
-    } else {
-      const errorMsg = result.message || '连接测试失败'
-      ElMessage.error({
-        message: errorMsg,
-        duration: 5000,
-        showClose: true
-      })
-    }
-  } catch (e) {
-    const errorMsg = e.response?.data?.message || e.message || '连接测试失败'
-    connectionTestResult.value = { success: false, message: errorMsg }
-    ElMessage.error({
-      message: errorMsg,
-      duration: 5000,
-      showClose: true
-    })
-  } finally {
-    testingConnection.value = false
-  }
-}
-
-const submitRemoteInstall = async () => {
-  try {
-    await remoteInstallFormRef.value.validate()
-  } catch {
-    return
-  }
-
-  deploying.value = true
-  
-  try {
-    // 先创建节点
-    const nodeData = {
-      name: remoteInstallForm.name,
-      address: remoteInstallForm.host,
-      port: 8443, // Agent 端口
-      region: remoteInstallForm.region,
-      weight: remoteInstallForm.weight,
-      max_users: remoteInstallForm.maxUsers,
-      tags: [],
-      ip_whitelist: []
-    }
-
-    const createResult = await nodeStore.createNode(nodeData)
-    const nodeId = createResult.id
-
-    // 准备部署数据
-    const deployData = {
-      host: remoteInstallForm.host,
-      port: remoteInstallForm.port,
-      username: remoteInstallForm.username
-    }
-
-    if (remoteInstallForm.authMethod === 'password') {
-      deployData.password = remoteInstallForm.password
-    } else {
-      deployData.private_key = remoteInstallForm.privateKey
-    }
-
-    // 显示部署进度对话框
-    remoteInstallDialogVisible.value = false
-    deployProgressDialogVisible.value = true
-    deploySteps.value = []
-    deployStepActive.value = 0
-    deployLogs.value = ''
-    deployResult.value = null
-
-    // 开始部署
-    try {
-      const result = await nodesApi.deployAgent(nodeId, deployData)
-      
-      deploySteps.value = result.steps || []
-      deployStepActive.value = result.success ? deploySteps.value.length : deployStepActive.value
-      deployLogs.value = result.logs || ''
-      deployResult.value = result
-
-      if (result.success) {
-        ElMessage.success('Agent 部署成功')
-        fetchNodes()
-      } else {
-        ElMessage.error(result.message || 'Agent 部署失败')
-      }
-    } catch (deployError) {
-      // 处理部署 API 错误
-      const errorData = deployError.response?.data || {}
-      deploySteps.value = errorData.steps || []
-      deployStepActive.value = deploySteps.value.length
-      deployLogs.value = errorData.logs || deployError.message || '部署失败'
-      deployResult.value = {
-        success: false,
-        message: errorData.message || deployError.message || '部署失败'
-      }
-      ElMessage.error(deployResult.value.message)
-    }
-  } catch (e) {
-    ElMessage.error(e.message || '操作失败')
-    deployProgressDialogVisible.value = false
-  } finally {
-    deploying.value = false
-  }
 }
 
 const showDeployDialog = (node) => {

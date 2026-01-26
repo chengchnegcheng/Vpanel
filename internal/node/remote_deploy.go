@@ -586,30 +586,30 @@ echo "✓ Xray 目录创建完成"
 
 // configureAgent creates the agent configuration file.
 func (s *RemoteDeployService) configureAgent(client *ssh.Client, config *DeployConfig, logBuffer *bytes.Buffer) error {
-	// Create agent config
-	agentConfig := fmt.Sprintf(`panel:
-  url: "%s"
+	// Create agent config - 正确的配置结构
+	agentConfig := fmt.Sprintf(`node:
   token: "%s"
+
+panel:
+  url: "%s"
 
 xray:
   binary_path: "/usr/local/bin/xray"
   config_path: "/etc/xray/config.json"
 
-sync:
-  interval: 5m
-  validate_before_apply: true
-  backup_before_apply: true
-
 health:
   port: 8081
-`, config.PanelURL, config.NodeToken)
+`, config.NodeToken, config.PanelURL)
 
-	// Write config file
-	script := fmt.Sprintf(`cat > /etc/vpanel/agent.yaml <<'EOF'
-%s
-EOF
+	// 使用 base64 编码配置内容，避免 heredoc 格式问题
+	encoded := base64Encode([]byte(agentConfig))
+	
+	// Write config file using base64
+	script := fmt.Sprintf(`echo '%s' | base64 -d > /etc/vpanel/agent.yaml
 chmod 644 /etc/vpanel/agent.yaml
-`, agentConfig)
+echo "配置文件已创建"
+cat /etc/vpanel/agent.yaml
+`, encoded)
 
 	if err := s.executeCommand(client, script, logBuffer); err != nil {
 		return err
@@ -855,18 +855,15 @@ chmod +x /usr/local/bin/vpanel-agent
 # 创建配置文件
 echo "正在创建配置文件..."
 cat > /etc/vpanel/agent.yaml <<EOF
+node:
+  token: "$NODE_TOKEN"
+
 panel:
   url: "$PANEL_URL"
-  token: "$NODE_TOKEN"
 
 xray:
   binary_path: "/usr/local/bin/xray"
   config_path: "/etc/xray/config.json"
-
-sync:
-  interval: 5m
-  validate_before_apply: true
-  backup_before_apply: true
 
 health:
   port: 8081

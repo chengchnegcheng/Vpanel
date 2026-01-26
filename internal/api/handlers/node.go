@@ -13,15 +13,17 @@ import (
 
 // NodeHandler handles node management API requests.
 type NodeHandler struct {
-	nodeService *node.Service
-	logger      logger.Logger
+	nodeService   *node.Service
+	deployService *node.RemoteDeployService
+	logger        logger.Logger
 }
 
 // NewNodeHandler creates a new node handler.
-func NewNodeHandler(nodeService *node.Service, log logger.Logger) *NodeHandler {
+func NewNodeHandler(nodeService *node.Service, deployService *node.RemoteDeployService, log logger.Logger) *NodeHandler {
 	return &NodeHandler{
-		nodeService: nodeService,
-		logger:      log,
+		nodeService:   nodeService,
+		deployService: deployService,
+		logger:        log,
 	}
 }
 
@@ -103,6 +105,9 @@ type CreateNodeRequest struct {
 	MaxUsers    int      `json:"max_users"`
 	IPWhitelist []string `json:"ip_whitelist"`
 	
+	// SSH 自动安装配置（可选）
+	SSH *SSHConfig `json:"ssh,omitempty"`
+	
 	// 流量和速率
 	TrafficLimit int64 `json:"traffic_limit"`
 	SpeedLimit   int64 `json:"speed_limit"`
@@ -129,6 +134,16 @@ type CreateNodeRequest struct {
 	// 备注和描述
 	Description string `json:"description"`
 	Remarks     string `json:"remarks"`
+}
+
+// SSHConfig SSH 连接配置
+type SSHConfig struct {
+	Host       string `json:"host" binding:"required"`
+	Port       int    `json:"port"`
+	Username   string `json:"username" binding:"required"`
+	Password   string `json:"password"`
+	PrivateKey string `json:"private_key"`
+	PanelURL   string `json:"panel_url"` // Panel 服务器地址
 }
 
 // UpdateNodeRequest represents a request to update a node.
@@ -377,7 +392,65 @@ func (h *NodeHandler) Create(c *gin.Context) {
 
 	h.logger.Info("Node created", logger.F("node_id", n.ID), logger.F("name", n.Name))
 
-	// Return response with token (only on create)
+	// 如果提供了 SSH 配置，执行自动安装
+	if req.SSH != nil && h.deployService != nil {
+		h.logger.Info("Starting auto-install", logger.F("node_id", n.ID), logger.F("host", req.SSH.Host))
+		
+		// 获取 Panel URL - 优先使用前端传递的，其次使用请求头，最后使用请求 Host
+		panelURL := req.SSH.PanelURL
+		if panelURL == "" {
+			panelURL = c.Request.Header.Get("X-Panel-URL")
+		}
+		if panelURL == "" {
+			scheme := "http"
+			if c.Request.TLS != nil {
+				scheme = "https"
+			}
+			panelURL = scheme + "://" + c.Request.Host
+		}
+		
+		// 准备部署配置
+		deployConfig := &node.DeployConfig{
+			Host:       req.SSH.Host,
+			Port:       req.SSH.Port,
+			Username:   req.SSH.Username,
+			Password:   req.SSH.Password,
+			PrivateKey: req.SSH.PrivateKey,
+			PanelURL:   panelURL,
+			NodeToken:  n.Token,
+		}
+		
+		if deployConfig.Port == 0 {
+			deployConfig.Port = 22
+		}
+		
+		// 执行部署
+		result, err := h.deployService.Deploy(c.Request.Context(), deployConfig)
+		
+		// 返回结果（包含安装状态）
+		resp := gin.H{
+			"id":         n.ID,
+			"name":       n.Name,
+			"address":    n.Address,
+			"port":       n.Port,
+			"region":     n.Region,
+			"installing": true,
+			"success":    result.Success,
+			"message":    result.Message,
+			"steps":      result.Steps,
+			"logs":       result.Logs,
+		}
+		
+		if err != nil {
+			h.logger.Error("Auto-install failed", logger.Err(err), logger.F("node_id", n.ID))
+			resp["error"] = err.Error()
+		}
+		
+		c.JSON(http.StatusCreated, resp)
+		return
+	}
+
+	// 没有自动安装，返回普通响应（包含 Token）
 	resp := &NodeWithTokenResponse{
 		NodeResponse: *toNodeResponse(n),
 		Token:        n.Token,

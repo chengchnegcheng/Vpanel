@@ -221,18 +221,24 @@ func NewService(
 func (s *Service) Create(ctx context.Context, req *CreateNodeRequest) (*Node, error) {
 	// 基础字段验证
 	if req.Name == "" {
-		return nil, fmt.Errorf("%w: name is required", ErrInvalidNode)
+		return nil, fmt.Errorf("%w: 节点名称不能为空", ErrInvalidNode)
 	}
 	if len(req.Name) > 128 {
-		return nil, fmt.Errorf("%w: name too long (max 128 characters)", ErrInvalidNode)
+		return nil, fmt.Errorf("%w: 节点名称过长（最多 128 个字符）", ErrInvalidNode)
 	}
 	if req.Address == "" {
-		return nil, fmt.Errorf("%w: address is required", ErrInvalidNode)
+		return nil, fmt.Errorf("%w: 节点地址不能为空", ErrInvalidNode)
 	}
 
+	// 标准化地址（去除空格和协议前缀）
+	address := strings.TrimSpace(req.Address)
+	address = strings.TrimPrefix(address, "http://")
+	address = strings.TrimPrefix(address, "https://")
+	address = strings.TrimSuffix(address, "/")
+
 	// 验证地址格式
-	if !ValidateAddress(req.Address) {
-		return nil, fmt.Errorf("%w: invalid address format", ErrInvalidAddress)
+	if !ValidateAddress(address) {
+		return nil, fmt.Errorf("%w: 地址格式无效，请输入有效的 IP 地址或域名", ErrInvalidAddress)
 	}
 
 	// 验证端口范围
@@ -241,7 +247,7 @@ func (s *Service) Create(ctx context.Context, req *CreateNodeRequest) (*Node, er
 		port = 8443 // 默认端口
 	}
 	if port < 1 || port > 65535 {
-		return nil, fmt.Errorf("%w: port must be between 1 and 65535", ErrInvalidNode)
+		return nil, fmt.Errorf("%w: 端口必须在 1-65535 之间", ErrInvalidNode)
 	}
 
 	// 验证权重
@@ -250,22 +256,22 @@ func (s *Service) Create(ctx context.Context, req *CreateNodeRequest) (*Node, er
 		weight = 1
 	}
 	if weight > 100 {
-		return nil, fmt.Errorf("%w: weight must be between 1 and 100", ErrInvalidNode)
+		return nil, fmt.Errorf("%w: 权重必须在 1-100 之间", ErrInvalidNode)
 	}
 
 	// 验证最大用户数
 	if req.MaxUsers < 0 {
-		return nil, fmt.Errorf("%w: max_users cannot be negative", ErrInvalidNode)
+		return nil, fmt.Errorf("%w: 最大用户数不能为负数", ErrInvalidNode)
 	}
 
 	// 验证流量限制
 	if req.TrafficLimit < 0 {
-		return nil, fmt.Errorf("%w: traffic_limit cannot be negative", ErrInvalidNode)
+		return nil, fmt.Errorf("%w: 流量限制不能为负数", ErrInvalidNode)
 	}
 
 	// 验证速率限制
 	if req.SpeedLimit < 0 {
-		return nil, fmt.Errorf("%w: speed_limit cannot be negative", ErrInvalidNode)
+		return nil, fmt.Errorf("%w: 速率限制不能为负数", ErrInvalidNode)
 	}
 
 	// 验证协议列表
@@ -276,46 +282,59 @@ func (s *Service) Create(ctx context.Context, req *CreateNodeRequest) (*Node, er
 		}
 		for _, protocol := range req.Protocols {
 			if !validProtocols[strings.ToLower(protocol)] {
-				return nil, fmt.Errorf("%w: unsupported protocol '%s'", ErrInvalidNode, protocol)
+				return nil, fmt.Errorf("%w: 不支持的协议 '%s'", ErrInvalidNode, protocol)
 			}
 		}
 	}
 
 	// 验证 TLS 配置
 	if req.TLSEnabled && req.TLSDomain == "" {
-		return nil, fmt.Errorf("%w: tls_domain is required when TLS is enabled", ErrInvalidNode)
+		return nil, fmt.Errorf("%w: 启用 TLS 时必须指定域名", ErrInvalidNode)
 	}
 	if req.TLSDomain != "" && !ValidateDomain(req.TLSDomain) {
-		return nil, fmt.Errorf("%w: invalid TLS domain format", ErrInvalidNode)
+		return nil, fmt.Errorf("%w: TLS 域名格式无效", ErrInvalidNode)
 	}
 
 	// 验证告警阈值
 	if req.AlertTrafficThreshold < 0 || req.AlertTrafficThreshold > 100 {
-		return nil, fmt.Errorf("%w: alert_traffic_threshold must be between 0 and 100", ErrInvalidNode)
+		return nil, fmt.Errorf("%w: 流量告警阈值必须在 0-100 之间", ErrInvalidNode)
 	}
 	if req.AlertCPUThreshold < 0 || req.AlertCPUThreshold > 100 {
-		return nil, fmt.Errorf("%w: alert_cpu_threshold must be between 0 and 100", ErrInvalidNode)
+		return nil, fmt.Errorf("%w: CPU 告警阈值必须在 0-100 之间", ErrInvalidNode)
 	}
 	if req.AlertMemoryThreshold < 0 || req.AlertMemoryThreshold > 100 {
-		return nil, fmt.Errorf("%w: alert_memory_threshold must be between 0 and 100", ErrInvalidNode)
+		return nil, fmt.Errorf("%w: 内存告警阈值必须在 0-100 之间", ErrInvalidNode)
 	}
 
 	// 验证 IP 白名单格式
 	for _, ip := range req.IPWhitelist {
-		if !ValidateIPv4(ip) && !ValidateIPv6(ip) && !strings.Contains(ip, "/") {
-			return nil, fmt.Errorf("%w: invalid IP address in whitelist: %s", ErrInvalidNode, ip)
+		ipTrimmed := strings.TrimSpace(ip)
+		if ipTrimmed == "" {
+			continue
+		}
+		// 支持 CIDR 格式
+		if strings.Contains(ipTrimmed, "/") {
+			_, _, err := net.ParseCIDR(ipTrimmed)
+			if err != nil {
+				return nil, fmt.Errorf("%w: IP 白名单中的 CIDR 格式无效: %s", ErrInvalidNode, ip)
+			}
+		} else if !ValidateIPv4(ipTrimmed) && !ValidateIPv6(ipTrimmed) {
+			return nil, fmt.Errorf("%w: IP 白名单中的地址无效: %s", ErrInvalidNode, ip)
 		}
 	}
 
-	// 检查节点名称是否重复
-	existingNodes, err := s.nodeRepo.List(ctx, &repository.NodeFilter{Limit: 1000})
-	if err == nil {
+	// 检查节点名称和地址是否重复
+	existingNodes, err := s.nodeRepo.List(ctx, &repository.NodeFilter{Limit: 10000})
+	if err != nil {
+		s.logger.Warn("Failed to check existing nodes", logger.Err(err))
+		// 继续创建，不因为查询失败而阻止
+	} else {
 		for _, node := range existingNodes {
-			if node.Name == req.Name {
-				return nil, fmt.Errorf("%w: node name already exists", ErrInvalidNode)
+			if strings.EqualFold(node.Name, req.Name) {
+				return nil, fmt.Errorf("%w: 节点名称 '%s' 已存在", ErrDuplicateNode, req.Name)
 			}
-			if node.Address == req.Address && node.Port == port {
-				return nil, fmt.Errorf("%w: node with same address and port already exists", ErrInvalidNode)
+			if strings.EqualFold(node.Address, address) && node.Port == port {
+				return nil, fmt.Errorf("%w: 节点地址 %s:%d 已存在", ErrDuplicateNode, address, port)
 			}
 		}
 	}
@@ -324,12 +343,24 @@ func (s *Service) Create(ctx context.Context, req *CreateNodeRequest) (*Node, er
 	token, err := GenerateToken()
 	if err != nil {
 		s.logger.Error("Failed to generate token", logger.Err(err))
-		return nil, fmt.Errorf("failed to generate token: %w", err)
+		return nil, fmt.Errorf("生成认证 Token 失败: %w", err)
 	}
 
+	// 序列化 JSON 字段
 	tagsJSON, _ := json.Marshal(req.Tags)
+	if req.Tags == nil {
+		tagsJSON = []byte("[]")
+	}
+	
 	ipWhitelistJSON, _ := json.Marshal(req.IPWhitelist)
+	if req.IPWhitelist == nil {
+		ipWhitelistJSON = []byte("[]")
+	}
+	
 	protocolsJSON, _ := json.Marshal(req.Protocols)
+	if req.Protocols == nil {
+		protocolsJSON = []byte("[]")
+	}
 
 	// 设置默认告警阈值
 	alertTrafficThreshold := req.AlertTrafficThreshold
@@ -347,7 +378,7 @@ func (s *Service) Create(ctx context.Context, req *CreateNodeRequest) (*Node, er
 
 	repoNode := &repository.Node{
 		Name:        req.Name,
-		Address:     req.Address,
+		Address:     address, // 使用标准化后的地址
 		Port:        port,
 		Token:       token,
 		Status:      repository.NodeStatusOffline,
@@ -386,8 +417,14 @@ func (s *Service) Create(ctx context.Context, req *CreateNodeRequest) (*Node, er
 
 	if err := s.nodeRepo.Create(ctx, repoNode); err != nil {
 		s.logger.Error("Failed to create node", logger.Err(err))
-		return nil, err
+		return nil, fmt.Errorf("创建节点失败: %w", err)
 	}
+
+	s.logger.Info("Node created successfully",
+		logger.F("node_id", repoNode.ID),
+		logger.F("name", repoNode.Name),
+		logger.F("address", repoNode.Address),
+		logger.F("port", repoNode.Port))
 
 	return s.toNode(repoNode), nil
 }
@@ -409,93 +446,193 @@ func (s *Service) Update(ctx context.Context, id int64, req *UpdateNodeRequest) 
 	}
 
 	// 验证更新请求
-	if req.Name != nil && *req.Name == "" {
-		return nil, fmt.Errorf("%w: name cannot be empty", ErrInvalidNode)
-	}
-
 	if req.Name != nil {
+		if *req.Name == "" {
+			return nil, fmt.Errorf("%w: 节点名称不能为空", ErrInvalidNode)
+		}
+		if len(*req.Name) > 128 {
+			return nil, fmt.Errorf("%w: 节点名称过长（最多 128 个字符）", ErrInvalidNode)
+		}
+		
+		// 检查名称是否与其他节点重复
+		existingNodes, err := s.nodeRepo.List(ctx, &repository.NodeFilter{Limit: 10000})
+		if err == nil {
+			for _, node := range existingNodes {
+				if node.ID != id && strings.EqualFold(node.Name, *req.Name) {
+					return nil, fmt.Errorf("%w: 节点名称 '%s' 已被使用", ErrDuplicateNode, *req.Name)
+				}
+			}
+		}
 		repoNode.Name = *req.Name
 	}
+
 	if req.Address != nil {
-		if !ValidateAddress(*req.Address) {
-			return nil, fmt.Errorf("%w: %s", ErrInvalidAddress, *req.Address)
+		// 标准化地址
+		address := strings.TrimSpace(*req.Address)
+		address = strings.TrimPrefix(address, "http://")
+		address = strings.TrimPrefix(address, "https://")
+		address = strings.TrimSuffix(address, "/")
+		
+		if !ValidateAddress(address) {
+			return nil, fmt.Errorf("%w: 地址格式无效", ErrInvalidAddress)
 		}
-		repoNode.Address = *req.Address
+		
+		// 检查地址+端口是否与其他节点重复
+		checkPort := repoNode.Port
+		if req.Port != nil {
+			checkPort = *req.Port
+		}
+		
+		existingNodes, err := s.nodeRepo.List(ctx, &repository.NodeFilter{Limit: 10000})
+		if err == nil {
+			for _, node := range existingNodes {
+				if node.ID != id && strings.EqualFold(node.Address, address) && node.Port == checkPort {
+					return nil, fmt.Errorf("%w: 节点地址 %s:%d 已被使用", ErrDuplicateNode, address, checkPort)
+				}
+			}
+		}
+		repoNode.Address = address
 	}
+
 	if req.Port != nil {
 		if *req.Port <= 0 || *req.Port > 65535 {
-			return nil, fmt.Errorf("%w: port must be between 1 and 65535", ErrInvalidNode)
+			return nil, fmt.Errorf("%w: 端口必须在 1-65535 之间", ErrInvalidNode)
 		}
 		repoNode.Port = *req.Port
 	}
+
 	if req.Tags != nil {
 		tagsJSON, _ := json.Marshal(*req.Tags)
 		repoNode.Tags = string(tagsJSON)
 	}
+
 	if req.Region != nil {
 		repoNode.Region = *req.Region
 	}
+
 	if req.Weight != nil {
-		if *req.Weight < 0 {
-			return nil, fmt.Errorf("%w: weight cannot be negative", ErrInvalidNode)
+		if *req.Weight < 1 || *req.Weight > 100 {
+			return nil, fmt.Errorf("%w: 权重必须在 1-100 之间", ErrInvalidNode)
 		}
 		repoNode.Weight = *req.Weight
 	}
+
 	if req.MaxUsers != nil {
 		if *req.MaxUsers < 0 {
-			return nil, fmt.Errorf("%w: max_users cannot be negative", ErrInvalidNode)
+			return nil, fmt.Errorf("%w: 最大用户数不能为负数", ErrInvalidNode)
 		}
 		repoNode.MaxUsers = *req.MaxUsers
 	}
+
 	if req.IPWhitelist != nil {
+		// 验证 IP 白名单
+		for _, ip := range *req.IPWhitelist {
+			ipTrimmed := strings.TrimSpace(ip)
+			if ipTrimmed == "" {
+				continue
+			}
+			if strings.Contains(ipTrimmed, "/") {
+				_, _, err := net.ParseCIDR(ipTrimmed)
+				if err != nil {
+					return nil, fmt.Errorf("%w: IP 白名单中的 CIDR 格式无效: %s", ErrInvalidNode, ip)
+				}
+			} else if !ValidateIPv4(ipTrimmed) && !ValidateIPv6(ipTrimmed) {
+				return nil, fmt.Errorf("%w: IP 白名单中的地址无效: %s", ErrInvalidNode, ip)
+			}
+		}
 		ipWhitelistJSON, _ := json.Marshal(*req.IPWhitelist)
 		repoNode.IPWhitelist = string(ipWhitelistJSON)
 	}
+
 	if req.TrafficLimit != nil {
+		if *req.TrafficLimit < 0 {
+			return nil, fmt.Errorf("%w: 流量限制不能为负数", ErrInvalidNode)
+		}
 		repoNode.TrafficLimit = *req.TrafficLimit
 	}
+
 	if req.SpeedLimit != nil {
+		if *req.SpeedLimit < 0 {
+			return nil, fmt.Errorf("%w: 速率限制不能为负数", ErrInvalidNode)
+		}
 		repoNode.SpeedLimit = *req.SpeedLimit
 	}
+
 	if req.Protocols != nil {
+		// 验证协议
+		validProtocols := map[string]bool{
+			"vless": true, "vmess": true, "trojan": true,
+			"shadowsocks": true, "wireguard": true, "socks": true, "http": true,
+		}
+		for _, protocol := range *req.Protocols {
+			if !validProtocols[strings.ToLower(protocol)] {
+				return nil, fmt.Errorf("%w: 不支持的协议 '%s'", ErrInvalidNode, protocol)
+			}
+		}
 		protocolsJSON, _ := json.Marshal(*req.Protocols)
 		repoNode.Protocols = string(protocolsJSON)
 	}
+
 	if req.TLSEnabled != nil {
 		repoNode.TLSEnabled = *req.TLSEnabled
 	}
+
 	if req.TLSDomain != nil {
+		if *req.TLSDomain != "" && !ValidateDomain(*req.TLSDomain) {
+			return nil, fmt.Errorf("%w: TLS 域名格式无效", ErrInvalidNode)
+		}
 		repoNode.TLSDomain = *req.TLSDomain
 	}
+
 	if req.GroupID != nil {
 		repoNode.GroupID = req.GroupID
 	}
+
 	if req.Priority != nil {
 		repoNode.Priority = *req.Priority
 	}
+
 	if req.Sort != nil {
 		repoNode.Sort = *req.Sort
 	}
+
 	if req.AlertTrafficThreshold != nil {
+		if *req.AlertTrafficThreshold < 0 || *req.AlertTrafficThreshold > 100 {
+			return nil, fmt.Errorf("%w: 流量告警阈值必须在 0-100 之间", ErrInvalidNode)
+		}
 		repoNode.AlertTrafficThreshold = *req.AlertTrafficThreshold
 	}
+
 	if req.AlertCPUThreshold != nil {
+		if *req.AlertCPUThreshold < 0 || *req.AlertCPUThreshold > 100 {
+			return nil, fmt.Errorf("%w: CPU 告警阈值必须在 0-100 之间", ErrInvalidNode)
+		}
 		repoNode.AlertCPUThreshold = *req.AlertCPUThreshold
 	}
+
 	if req.AlertMemoryThreshold != nil {
+		if *req.AlertMemoryThreshold < 0 || *req.AlertMemoryThreshold > 100 {
+			return nil, fmt.Errorf("%w: 内存告警阈值必须在 0-100 之间", ErrInvalidNode)
+		}
 		repoNode.AlertMemoryThreshold = *req.AlertMemoryThreshold
 	}
+
 	if req.Description != nil {
 		repoNode.Description = *req.Description
 	}
+
 	if req.Remarks != nil {
 		repoNode.Remarks = *req.Remarks
 	}
 
 	if err := s.nodeRepo.Update(ctx, repoNode); err != nil {
 		s.logger.Error("Failed to update node", logger.Err(err), logger.F("id", id))
-		return nil, err
+		return nil, fmt.Errorf("更新节点失败: %w", err)
 	}
+
+	s.logger.Info("Node updated successfully",
+		logger.F("node_id", id),
+		logger.F("name", repoNode.Name))
 
 	return s.toNode(repoNode), nil
 }

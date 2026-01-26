@@ -120,9 +120,68 @@
           <div class="form-tip">节点可以同时属于多个分组</div>
         </el-form-item>
 
+        <!-- SSH 自动安装（仅新建时显示） -->
+        <template v-if="!isEdit">
+          <el-divider />
+          
+          <div style="margin-bottom: 16px;">
+            <el-checkbox v-model="enableAutoInstall">
+              自动安装 Agent（通过 SSH 远程安装）
+            </el-checkbox>
+            <div class="form-tip" style="margin-left: 0; margin-top: 8px;">
+              勾选后，系统将自动连接到服务器并安装 Agent 和 Xray
+            </div>
+          </div>
+
+          <template v-if="enableAutoInstall">
+            <el-form-item label="服务器 IP">
+              <el-input v-model="form.ssh_host" placeholder="服务器 IP 地址" />
+            </el-form-item>
+
+            <el-form-item label="SSH 端口">
+              <el-input-number v-model="form.ssh_port" :min="1" :max="65535" style="width: 200px;" />
+            </el-form-item>
+
+            <el-form-item label="SSH 用户名">
+              <el-input v-model="form.ssh_username" placeholder="通常为 root" />
+            </el-form-item>
+
+            <el-form-item label="认证方式">
+              <el-radio-group v-model="form.ssh_auth_type">
+                <el-radio value="password">密码</el-radio>
+                <el-radio value="key">私钥</el-radio>
+              </el-radio-group>
+            </el-form-item>
+
+            <el-form-item v-if="form.ssh_auth_type === 'password'" label="SSH 密码">
+              <el-input 
+                v-model="form.ssh_password" 
+                type="password" 
+                placeholder="SSH 登录密码"
+                show-password
+              />
+            </el-form-item>
+
+            <el-form-item v-if="form.ssh_auth_type === 'key'" label="SSH 私钥">
+              <el-input
+                v-model="form.ssh_private_key"
+                type="textarea"
+                :rows="6"
+                placeholder="粘贴 SSH 私钥内容"
+              />
+            </el-form-item>
+
+            <el-form-item>
+              <el-button @click="testSSHConnection" :loading="testingConnection">
+                测试 SSH 连接
+              </el-button>
+            </el-form-item>
+          </template>
+        </template>
+
         <el-form-item>
           <el-button type="primary" @click="submitForm" :loading="submitting">
-            {{ isEdit ? '保存修改' : '创建节点' }}
+            {{ isEdit ? '保存修改' : (enableAutoInstall ? '创建并安装' : '创建节点') }}
           </el-button>
           <el-button @click="goBack">取消</el-button>
         </el-form-item>
@@ -162,7 +221,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { ArrowLeft, CopyDocument } from '@element-plus/icons-vue'
 import { useNodeStore } from '@/stores/node'
-import { nodeGroupsApi } from '@/api'
+import { nodeGroupsApi, nodesApi } from '@/api'
 
 const route = useRoute()
 const router = useRouter()
@@ -180,6 +239,10 @@ const groups = ref([])
 const tokenDialogVisible = ref(false)
 const createdToken = ref('')
 
+// SSH 自动安装相关
+const enableAutoInstall = ref(false)
+const testingConnection = ref(false)
+
 const form = reactive({
   name: '',
   address: '',
@@ -189,7 +252,14 @@ const form = reactive({
   max_users: 0,
   tags: [],
   ip_whitelist_str: '',
-  group_ids: []
+  group_ids: [],
+  // SSH 连接信息
+  ssh_host: '',
+  ssh_port: 22,
+  ssh_username: 'root',
+  ssh_auth_type: 'password',
+  ssh_password: '',
+  ssh_private_key: ''
 })
 
 const rules = {
@@ -331,13 +401,47 @@ const submitForm = async () => {
       group_ids: form.group_ids
     }
     
+    // 如果开启了自动安装，添加 SSH 信息
+    if (enableAutoInstall.value) {
+      if (!form.ssh_host) {
+        ElMessage.error('请输入服务器 IP')
+        return
+      }
+      if (form.ssh_auth_type === 'password' && !form.ssh_password) {
+        ElMessage.error('请输入 SSH 密码')
+        return
+      }
+      if (form.ssh_auth_type === 'key' && !form.ssh_private_key) {
+        ElMessage.error('请输入 SSH 私钥')
+        return
+      }
+      
+      data.ssh = {
+        host: form.ssh_host,
+        port: form.ssh_port,
+        username: form.ssh_username,
+        password: form.ssh_auth_type === 'password' ? form.ssh_password : '',
+        private_key: form.ssh_auth_type === 'key' ? form.ssh_private_key : ''
+      }
+    }
+    
     if (isEdit.value) {
       await nodeStore.updateNode(route.params.id, data)
       ElMessage.success('更新成功')
       router.push('/admin/nodes')
     } else {
       const res = await nodeStore.createNode(data)
-      if (res.token) {
+      
+      // 如果有自动安装结果
+      if (res.installing) {
+        if (res.success) {
+          ElMessage.success('节点创建并安装成功')
+        } else {
+          ElMessage.error(res.message || '安装失败')
+        }
+        router.push('/admin/nodes')
+      } else if (res.token) {
+        // 没有自动安装，显示 Token
         createdToken.value = res.token
         tokenDialogVisible.value = true
       } else {
@@ -358,6 +462,43 @@ const copyToken = async () => {
     ElMessage.success('已复制到剪贴板')
   } catch {
     ElMessage.error('复制失败')
+  }
+}
+
+// 测试 SSH 连接
+const testSSHConnection = async () => {
+  if (!form.ssh_host) {
+    ElMessage.error('请输入服务器 IP')
+    return
+  }
+  if (form.ssh_auth_type === 'password' && !form.ssh_password) {
+    ElMessage.error('请输入 SSH 密码')
+    return
+  }
+  if (form.ssh_auth_type === 'key' && !form.ssh_private_key) {
+    ElMessage.error('请输入 SSH 私钥')
+    return
+  }
+  
+  testingConnection.value = true
+  try {
+    const res = await nodesApi.testConnection({
+      host: form.ssh_host,
+      port: form.ssh_port,
+      username: form.ssh_username,
+      password: form.ssh_auth_type === 'password' ? form.ssh_password : '',
+      private_key: form.ssh_auth_type === 'key' ? form.ssh_private_key : ''
+    })
+    
+    if (res.success) {
+      ElMessage.success('SSH 连接测试成功')
+    } else {
+      ElMessage.error(res.message || 'SSH 连接失败')
+    }
+  } catch (e) {
+    ElMessage.error(e.message || 'SSH 连接测试失败')
+  } finally {
+    testingConnection.value = false
   }
 }
 

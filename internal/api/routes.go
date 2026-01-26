@@ -188,7 +188,7 @@ func (r *Router) Setup() {
 	nodeDeployService := node.NewRemoteDeployService(r.logger)
 
 	// Create node management handlers
-	nodeHandler := handlers.NewNodeHandler(nodeService, r.logger)
+	nodeHandler := handlers.NewNodeHandler(nodeService, nodeDeployService, r.logger)
 	nodeGroupHandler := handlers.NewNodeGroupHandler(nodeGroupService, r.logger)
 	nodeHealthHandler := handlers.NewNodeHealthHandler(nodeHealthChecker, r.repos.HealthCheck, r.repos.Node, r.logger)
 	nodeStatsHandler := handlers.NewNodeStatsHandler(nodeTrafficService, nodeService, nodeGroupService, r.logger)
