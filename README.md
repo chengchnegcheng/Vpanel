@@ -1,6 +1,14 @@
 # V Panel - 高性能代理服务器管理面板
 
 <div align="center">
+
+[![Build Status](https://github.com/chengchnegcheng/V/workflows/Build%20and%20Release/badge.svg)](https://github.com/chengchnegcheng/V/actions)
+[![Go Report Card](https://goreportcard.com/badge/github.com/chengchnegcheng/V)](https://goreportcard.com/report/github.com/chengchnegcheng/V)
+[![codecov](https://codecov.io/gh/chengchnegcheng/V/branch/main/graph/badge.svg)](https://codecov.io/gh/chengchnegcheng/V)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![GitHub release](https://img.shields.io/github/release/chengchnegcheng/V.svg)](https://github.com/chengchnegcheng/V/releases)
+[![Docker Pulls](https://img.shields.io/docker/pulls/yourusername/vpanel.svg)](https://hub.docker.com/r/yourusername/vpanel)
+
   <p>
     <a href="#功能特点">功能特点</a> •
     <a href="#快速开始">快速开始</a> •

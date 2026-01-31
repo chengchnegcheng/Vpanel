@@ -1,0 +1,93 @@
+# 自动标签配置
+
+# 后端相关
+'backend':
+  - changed-files:
+    - any-glob-to-any-file: 
+      - 'internal/**/*'
+      - 'cmd/**/*'
+      - 'pkg/**/*'
+      - '*.go'
+      - 'go.mod'
+      - 'go.sum'
+
+# 前端相关
+'frontend':
+  - changed-files:
+    - any-glob-to-any-file:
+      - 'web/**/*'
+      - '*.vue'
+      - '*.js'
+      - '*.ts'
+      - 'package.json'
+
+# 文档相关
+'documentation':
+  - changed-files:
+    - any-glob-to-any-file:
+      - 'Docs/**/*'
+      - '*.md'
+      - 'README*'
+
+# 配置相关
+'configuration':
+  - changed-files:
+    - any-glob-to-any-file:
+      - 'configs/**/*'
+      - '*.yaml'
+      - '*.yml'
+      - '*.json'
+
+# 部署相关
+'deployment':
+  - changed-files:
+    - any-glob-to-any-file:
+      - 'deployments/**/*'
+      - 'Dockerfile'
+      - 'docker-compose.yml'
+
+# 测试相关
+'tests':
+  - changed-files:
+    - any-glob-to-any-file:
+      - '**/*_test.go'
+      - 'web/tests/**/*'
+      - '**/*.test.js'
+      - '**/*.spec.js'
+
+# CI/CD 相关
+'ci/cd':
+  - changed-files:
+    - any-glob-to-any-file:
+      - '.github/**/*'
+      - '.gitlab-ci.yml'
+
+# 数据库相关
+'database':
+  - changed-files:
+    - any-glob-to-any-file:
+      - 'internal/database/**/*'
+      - '**/migrations/**/*'
+      - '*.sql'
+
+# 安全相关
+'security':
+  - changed-files:
+    - any-glob-to-any-file:
+      - 'internal/auth/**/*'
+      - '**/security/**/*'
+
+# API 相关
+'api':
+  - changed-files:
+    - any-glob-to-any-file:
+      - 'internal/api/**/*'
+
+# 依赖更新
+'dependencies':
+  - changed-files:
+    - any-glob-to-any-file:
+      - 'go.mod'
+      - 'go.sum'
+      - 'package.json'
+      - 'package-lock.json'
