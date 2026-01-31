@@ -2,11 +2,11 @@
 
 <div align="center">
 
-[![Build Status](https://github.com/chengchnegcheng/VT/workflows/Build%20and%20Release/badge.svg)](https://github.com/chengchnegcheng/VT/actions)
-[![Go Report Card](https://goreportcard.com/badge/github.com/chengchnegcheng/VT)](https://goreportcard.com/report/github.com/chengchnegcheng/VT)
+[![Build Status](https://github.com/chengchnegcheng/Vpanel/workflows/Build%20and%20Release/badge.svg)](https://github.com/chengchnegcheng/Vpanel/actions)
+[![Go Report Card](https://goreportcard.com/badge/github.com/chengchnegcheng/Vpanel)](https://goreportcard.com/report/github.com/chengchnegcheng/Vpanel)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![GitHub release](https://img.shields.io/github/release/chengchnegcheng/VT.svg)](https://github.com/chengchnegcheng/VT/releases)
-[![Go Version](https://img.shields.io/github/go-mod/go-version/chengchnegcheng/VT)](https://github.com/chengchnegcheng/VT)
+[![GitHub release](https://img.shields.io/github/release/chengchnegcheng/Vpanel.svg)](https://github.com/chengchnegcheng/Vpanel/releases)
+[![Go Version](https://img.shields.io/github/go-mod/go-version/chengchnegcheng/Vpanel)](https://github.com/chengchnegcheng/Vpanel)
 
   <p>
     <a href="#功能特点">功能特点</a> •
@@ -55,8 +55,8 @@ V Panel 是一个用 Go 语言编写的高性能代理服务器管理面板，�
 
 ```bash
 # 1. 克隆仓库
-git clone https://github.com/chengchnegcheng/VT.git
-cd VT
+git clone https://github.com/chengchnegcheng/Vpanel.git
+cd Vpanel
 
 # 2. 启动菜单管理脚本
 ./vpanel.sh
@@ -86,8 +86,8 @@ cd VT
 
 ```bash
 # 克隆仓库
-git clone https://github.com/chengchnegcheng/VT.git
-cd VT
+git clone https://github.com/chengchnegcheng/Vpanel.git
+cd Vpanel
 
 # 构建（前端 + 后端）
 ./scripts/build.sh all
@@ -222,7 +222,7 @@ Node Agent 是部署在远程节点服务器上的轻量级代理程序，负责
 
 ```bash
 # 下载 Agent
-wget https://github.com/chengchnegcheng/VT/releases/latest/download/v-agent-linux-amd64
+wget https://github.com/chengchnegcheng/Vpanel/releases/latest/download/v-agent-linux-amd64
 
 # 添加执行权限
 chmod +x v-agent-linux-amd64
@@ -794,8 +794,8 @@ v/
 
 ## 问题反馈
 
-- 使用 [Bug Report](https://github.com/chengchnegcheng/VT/issues/new?template=bug_report.yml) 报告 Bug
-- 使用 [Feature Request](https://github.com/chengchnegcheng/VT/issues/new?template=feature_request.yml) 提出新功能
+- 使用 [Bug Report](https://github.com/chengchnegcheng/Vpanel/issues/new?template=bug_report.yml) 报告 Bug
+- 使用 [Feature Request](https://github.com/chengchnegcheng/Vpanel/issues/new?template=feature_request.yml) 提出新功能
 
 ## 特别鸣谢
 
