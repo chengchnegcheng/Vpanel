@@ -31,6 +31,8 @@ web/node_modules/
 v-panel
 build/
 dist/
+bin/
+cmd/*/bin/
 
 # ==================== 日志 ====================
 *.log
