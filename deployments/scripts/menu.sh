@@ -90,11 +90,8 @@ docker_menu() {
                     echo -e "${YELLOW}服务已在运行中${NC}"
                 else
                     echo -e "${GREEN}启动 V Panel...${NC}"
-                    cd "$DOCKER_DIR"
-                    docker_compose_cmd up -d
-                    echo -e "${GREEN}V Panel 启动成功！${NC}"
-                    echo -e "访问地址: ${YELLOW}http://localhost:8080${NC}"
-                    echo -e "默认账号: ${CYAN}admin / admin123${NC}"
+                    # 使用 start.sh 脚本来处理随机端口
+                    "$SCRIPT_DIR/start.sh" start
                 fi
                 pause
                 ;;
@@ -421,7 +418,10 @@ main_menu() {
         # 显示快速状态
         echo -e "${CYAN}快速状态:${NC}"
         if check_container_status 2>/dev/null; then
-            echo -e "  Docker: ${GREEN}运行中${NC} | 访问: ${YELLOW}http://localhost:8080${NC}"
+            # 读取端口
+            source "$DOCKER_DIR/.env" 2>/dev/null || true
+            PORT=${V_SERVER_PORT:-8080}
+            echo -e "  Docker: ${GREEN}运行中${NC} | 访问: ${YELLOW}http://localhost:${PORT}${NC}"
         else
             echo -e "  Docker: ${YELLOW}已停止${NC}"
         fi
@@ -454,10 +454,7 @@ main_menu() {
                 ;;
             5)
                 echo -e "${GREEN}快速启动 Docker 服务...${NC}"
-                cd "$DOCKER_DIR"
-                docker_compose_cmd up -d
-                echo -e "${GREEN}启动完成！${NC}"
-                echo -e "访问地址: ${YELLOW}http://localhost:8080${NC}"
+                "$SCRIPT_DIR/start.sh" start
                 pause
                 ;;
             6)
