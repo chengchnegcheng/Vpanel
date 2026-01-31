@@ -42,6 +42,7 @@ type DeployAgentRequest struct {
 	Username   string `json:"username" binding:"required"`
 	Password   string `json:"password"`
 	PrivateKey string `json:"private_key"`
+	PanelURL   string `json:"panel_url"` // Panel 服务器地址（可选，优先使用此值）
 }
 
 // DeployAgent deploys the agent to a remote server.
@@ -105,7 +106,11 @@ func (h *NodeDeployHandler) DeployAgent(c *gin.Context) {
 	}
 
 	// Get panel URL from config, request header, or construct from request
-	panelURL := h.config.Server.PublicURL
+	// 优先级：请求参数 > 配置文件 > 请求头 > 请求 Host
+	panelURL := req.PanelURL
+	if panelURL == "" {
+		panelURL = h.config.Server.PublicURL
+	}
 	if panelURL == "" {
 		panelURL = c.Request.Header.Get("X-Panel-URL")
 	}
