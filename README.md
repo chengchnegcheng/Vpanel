@@ -2,12 +2,11 @@
 
 <div align="center">
 
-[![Build Status](https://github.com/chengchnegcheng/V/workflows/Build%20and%20Release/badge.svg)](https://github.com/chengchnegcheng/V/actions)
-[![Go Report Card](https://goreportcard.com/badge/github.com/chengchnegcheng/V)](https://goreportcard.com/report/github.com/chengchnegcheng/V)
-[![codecov](https://codecov.io/gh/chengchnegcheng/V/branch/main/graph/badge.svg)](https://codecov.io/gh/chengchnegcheng/V)
+[![Build Status](https://github.com/chengchnegcheng/VT/workflows/Build%20and%20Release/badge.svg)](https://github.com/chengchnegcheng/VT/actions)
+[![Go Report Card](https://goreportcard.com/badge/github.com/chengchnegcheng/VT)](https://goreportcard.com/report/github.com/chengchnegcheng/VT)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![GitHub release](https://img.shields.io/github/release/chengchnegcheng/V.svg)](https://github.com/chengchnegcheng/V/releases)
-[![Docker Pulls](https://img.shields.io/docker/pulls/yourusername/vpanel.svg)](https://hub.docker.com/r/yourusername/vpanel)
+[![GitHub release](https://img.shields.io/github/release/chengchnegcheng/VT.svg)](https://github.com/chengchnegcheng/VT/releases)
+[![Go Version](https://img.shields.io/github/go-mod/go-version/chengchnegcheng/VT)](https://github.com/chengchnegcheng/VT)
 
   <p>
     <a href="#功能特点">功能特点</a> •
@@ -56,8 +55,8 @@ V Panel 是一个用 Go 语言编写的高性能代理服务器管理面板，�
 
 ```bash
 # 1. 克隆仓库
-git clone https://github.com/chengchnegcheng/V.git
-cd V
+git clone https://github.com/chengchnegcheng/VT.git
+cd VT
 
 # 2. 启动菜单管理脚本
 ./vpanel.sh
@@ -87,8 +86,8 @@ cd V
 
 ```bash
 # 克隆仓库
-git clone https://github.com/chengchnegcheng/V.git
-cd V
+git clone https://github.com/chengchnegcheng/VT.git
+cd VT
 
 # 构建（前端 + 后端）
 ./scripts/build.sh all
@@ -223,7 +222,7 @@ Node Agent 是部署在远程节点服务器上的轻量级代理程序，负责
 
 ```bash
 # 下载 Agent
-wget https://github.com/chengchnegcheng/V/releases/latest/download/v-agent-linux-amd64
+wget https://github.com/chengchnegcheng/VT/releases/latest/download/v-agent-linux-amd64
 
 # 添加执行权限
 chmod +x v-agent-linux-amd64
@@ -496,38 +495,19 @@ npm run dev
 ./scripts/build.sh test
 ```
 
-### E2E 自动化测试
-
-使用 Puppeteer 进行端到端自动化测试：
+### 测试
 
 ```bash
-# 快速验证（推荐首次运行）
-./run-e2e-tests.sh quick
+# 运行后端测试
+go test -v ./...
 
-# 运行基础检查
-./run-e2e-tests.sh basic
+# 运行前端测试
+cd web
+npm run test:unit
 
-# 运行所有测试
-./run-e2e-tests.sh all
-
-# 有头模式（可以看到浏览器操作）
-./run-e2e-tests.sh all --headed
-
-# 调试模式
-./run-e2e-tests.sh basic --debug
+# 查看测试覆盖率
+go test -cover ./...
 ```
-
-**测试套件：**
-- 基础检查 - 验证应用基本功能
-- 管理员登录 - 测试管理后台登录流程
-- 用户门户 - 测试用户门户功能
-- 节点管理 - 测试节点管理功能
-- 订阅系统 - 测试订阅链接功能
-
-**详细文档：**
-- 快速指南：`PUPPETEER_GUIDE.md`
-- 详细文档：`web/tests/e2e/README.md`
-- 技术文档：`Docs/puppeteer-testing.md`
 
 ## 故障排除
 
@@ -599,8 +579,6 @@ docker logs v-panel
 | 数据库检查 | 检查表结构和迁移状态 | `./scripts/check-db.sh` |
 | 迁移修复 | 手动执行 SQL 迁移 | `./scripts/fix-migrations.sh` |
 | API 测试 | 测试所有 API 端点 | `./scripts/test-api.sh` |
-
-详细的问题诊断和修复指南请参考：[API 和数据库问题修复文档](Docs/api-database-fix.md)
 
 ### 日志查看
 
@@ -810,6 +788,15 @@ v/
 - `GET /api/portal/help` - 帮助文章列表
 - `GET /api/portal/help/:slug` - 帮助文章详情
 
+## 贡献
+
+欢迎贡献！请查看 [贡献指南](.github/CONTRIBUTING.md) 了解详情。
+
+## 问题反馈
+
+- 使用 [Bug Report](https://github.com/chengchnegcheng/VT/issues/new?template=bug_report.yml) 报告 Bug
+- 使用 [Feature Request](https://github.com/chengchnegcheng/VT/issues/new?template=feature_request.yml) 提出新功能
+
 ## 特别鸣谢
 
 - [Xray-core](https://github.com/XTLS/Xray-core) - 核心代理引擎
@@ -817,6 +804,6 @@ v/
 - [Gin](https://gin-gonic.com/) - Web 框架
 - [GORM](https://gorm.io/) - ORM 框架
 
-## License
+## 许可证
 
-MIT License
+[MIT License](LICENSE)
