@@ -4,6 +4,9 @@
 # Stage 1: Build frontend
 FROM node:20-alpine AS frontend-builder
 
+# 使用国内镜像源加速
+RUN sed -i 's/dl-cdn.alpinelinux.org/mirrors.aliyun.com/g' /etc/apk/repositories
+
 WORKDIR /app/web
 
 # Use China npm mirror for faster downloads
@@ -20,6 +23,9 @@ RUN npm run build
 
 # Stage 2: Build backend
 FROM golang:1.24-alpine AS backend-builder
+
+# 使用国内镜像源加速
+RUN sed -i 's/dl-cdn.alpinelinux.org/mirrors.aliyun.com/g' /etc/apk/repositories
 
 # Install minimal build dependencies (no gcc needed - using pure Go SQLite)
 RUN apk add --no-cache git ca-certificates tzdata
@@ -59,6 +65,9 @@ RUN mkdir -p /app/bin && \
 
 # Stage 3: Final image
 FROM alpine:3.19
+
+# 使用国内镜像源加速
+RUN sed -i 's/dl-cdn.alpinelinux.org/mirrors.aliyun.com/g' /etc/apk/repositories
 
 # Install runtime dependencies
 RUN apk add --no-cache \

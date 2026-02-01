@@ -88,7 +88,8 @@ validate_jwt_secret() {
     fi
     
     # 检查是否是默认值
-    if [ "$secret" = "CHANGE_ME_OR_SYSTEM_WILL_REFUSE_TO_START" ] || \
+    if [ "$secret" = "CHANGE_ME_OR_AUTO_GENERATE_ON_FIRST_START" ] || \
+       [ "$secret" = "CHANGE_ME_OR_SYSTEM_WILL_REFUSE_TO_START" ] || \
        [ "$secret" = "your-secure-jwt-secret-change-me" ] || \
        [ "$secret" = "change-me-in-production" ]; then
         return 1
@@ -162,14 +163,107 @@ production_security_check() {
     return 0
 }
 
+# 生成随机强密码
+generate_strong_password() {
+    # 生成 16 字符的强密码：大小写字母、数字、特殊字符
+    if command -v openssl &> /dev/null; then
+        # 使用 openssl 生成，确保包含所需字符
+        local password=$(openssl rand -base64 24 | tr -d "=+/" | cut -c1-16)
+        # 确保包含至少一个特殊字符
+        echo "${password}@$(openssl rand -hex 2 | cut -c1-2)!"
+    else
+        # 备用方案：使用 /dev/urandom
+        LC_ALL=C tr -dc 'A-Za-z0-9!@#$%^&*' < /dev/urandom | head -c 16
+        echo "!@"
+    fi
+}
+
+# 生成 JWT Secret
+generate_jwt_secret() {
+    if command -v openssl &> /dev/null; then
+        openssl rand -base64 48 | tr -d "\n"
+    else
+        # 备用方案
+        LC_ALL=C tr -dc 'A-Za-z0-9' < /dev/urandom | head -c 48
+    fi
+}
+
+# 初始化或更新 .env 文件
+init_env_file() {
+    local env_file="$1"
+    local needs_update=0
+    
+    # 读取当前值
+    local jwt_secret=$(read_env_var "V_JWT_SECRET" "$env_file")
+    local admin_pass=$(read_env_var "V_ADMIN_PASS" "$env_file")
+    
+    # 检查是否需要生成 JWT Secret
+    if [ -z "$jwt_secret" ] || \
+       [ "$jwt_secret" = "CHANGE_ME_OR_AUTO_GENERATE_ON_FIRST_START" ] || \
+       [ "$jwt_secret" = "CHANGE_ME_OR_SYSTEM_WILL_REFUSE_TO_START" ] || \
+       [ "$jwt_secret" = "your-secure-jwt-secret-change-me" ] || \
+       [ "$jwt_secret" = "change-me-in-production" ]; then
+        jwt_secret=$(generate_jwt_secret)
+        needs_update=1
+        echo -e "${GREEN}✓ 已生成 JWT Secret${NC}"
+    fi
+    
+    # 检查是否需要生成管理员密码
+    if [ -z "$admin_pass" ] || \
+       [ "$admin_pass" = "CHANGE_ME_OR_AUTO_GENERATE_ON_FIRST_START" ] || \
+       [ "$admin_pass" = "CHANGE_ME_OR_SYSTEM_WILL_REFUSE_TO_START" ] || \
+       [ "$admin_pass" = "admin123" ] || \
+       [ "$admin_pass" = "your-secure-admin-password" ]; then
+        admin_pass=$(generate_strong_password)
+        needs_update=1
+        echo -e "${GREEN}✓ 已生成管理员密码${NC}"
+    fi
+    
+    # 如果需要更新，写入文件
+    if [ $needs_update -eq 1 ]; then
+        # 创建临时文件
+        local temp_file="${env_file}.tmp"
+        
+        # 复制原文件，替换相关行
+        while IFS= read -r line; do
+            if echo "$line" | grep -q "^V_JWT_SECRET="; then
+                echo "V_JWT_SECRET=$jwt_secret"
+            elif echo "$line" | grep -q "^V_ADMIN_PASS="; then
+                echo "V_ADMIN_PASS=$admin_pass"
+            else
+                echo "$line"
+            fi
+        done < "$env_file" > "$temp_file"
+        
+        # 替换原文件
+        mv "$temp_file" "$env_file"
+        
+        echo ""
+        echo -e "${CYAN}========================================${NC}"
+        echo -e "${CYAN}  自动生成的凭据信息${NC}"
+        echo -e "${CYAN}========================================${NC}"
+        echo -e "${YELLOW}管理员密码: ${admin_pass}${NC}"
+        echo -e "${GREEN}JWT Secret 已保存到 .env 文件${NC}"
+        echo -e "${CYAN}========================================${NC}"
+        echo -e "${RED}请妥善保存管理员密码！${NC}"
+        echo ""
+        
+        # 等待用户确认
+        read -p "按回车键继续启动服务..."
+    fi
+}
+
 # 检查 .env 文件
 if [ ! -f "$DOCKER_DIR/.env" ]; then
     echo -e "${YELLOW}创建 .env 配置文件...${NC}"
     cp "$DOCKER_DIR/.env.example" "$DOCKER_DIR/.env"
     echo -e "${GREEN}.env 文件已创建${NC}"
-    echo -e "${YELLOW}警告: 请先编辑 .env 文件，修改默认密码和 JWT Secret！${NC}"
-    exit 1
+    echo ""
 fi
+
+# 初始化 .env 文件（自动生成密码）
+echo -e "${CYAN}检查配置文件...${NC}"
+init_env_file "$DOCKER_DIR/.env"
 
 # 切换到 Docker 目录
 cd "$DOCKER_DIR" || {
@@ -181,10 +275,19 @@ cd "$DOCKER_DIR" || {
 V_SERVER_PORT=$(read_env_var "V_SERVER_PORT" ".env")
 V_SERVER_MODE=$(read_env_var "V_SERVER_MODE" ".env")
 
-# 如果端口为空，使用默认值
+# 端口处理逻辑
 if [ -z "$V_SERVER_PORT" ]; then
-    V_SERVER_PORT=8080
-    echo -e "${YELLOW}警告: 端口未配置，使用默认端口 8080${NC}"
+    # 端口为空
+    if [ "$V_SERVER_MODE" = "release" ]; then
+        # 生产模式必须配置端口
+        echo -e "${RED}错误: 生产模式必须配置固定端口！${NC}"
+        echo -e "${YELLOW}请编辑 .env 文件，设置 V_SERVER_PORT${NC}"
+        exit 1
+    else
+        # 开发/测试模式可以使用随机端口
+        V_SERVER_PORT=8080
+        echo -e "${YELLOW}开发模式: 使用默认端口 8080${NC}"
+    fi
 fi
 
 # 解析命令行参数

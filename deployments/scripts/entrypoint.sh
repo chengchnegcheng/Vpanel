@@ -11,6 +11,7 @@ if [ "${V_SERVER_MODE}" = "release" ]; then
     
     # 检查 JWT Secret
     if [ -z "${V_JWT_SECRET}" ] || \
+       [ "${V_JWT_SECRET}" = "CHANGE_ME_OR_AUTO_GENERATE_ON_FIRST_START" ] || \
        [ "${V_JWT_SECRET}" = "CHANGE_ME_OR_SYSTEM_WILL_REFUSE_TO_START" ] || \
        [ "${V_JWT_SECRET}" = "your-secure-jwt-secret-change-me" ] || \
        [ "${V_JWT_SECRET}" = "change-me-in-production" ]; then
@@ -29,6 +30,7 @@ if [ "${V_SERVER_MODE}" = "release" ]; then
     
     # 检查管理员密码
     if [ -z "${V_ADMIN_PASS}" ] || \
+       [ "${V_ADMIN_PASS}" = "CHANGE_ME_OR_AUTO_GENERATE_ON_FIRST_START" ] || \
        [ "${V_ADMIN_PASS}" = "CHANGE_ME_OR_SYSTEM_WILL_REFUSE_TO_START" ] || \
        [ "${V_ADMIN_PASS}" = "admin123" ] || \
        [ "${V_ADMIN_PASS}" = "your-secure-admin-password" ]; then
