@@ -337,10 +337,10 @@ config_menu() {
         show_header
         echo -e "${GREEN}配置管理${NC}"
         echo ""
-        echo "  1) 创建/重置配置文件"
-        echo "  2) 编辑配置文件"
-        echo "  3) 查看当前配置"
-        echo "  4) 创建 Docker .env 文件"
+        echo "  1) 创建/重置配置文件 (本地部署)"
+        echo "  2) 编辑配置文件 (本地部署)"
+        echo "  3) 查看配置文件"
+        echo "  4) 创建/编辑 Docker .env 文件"
         echo "  5) 生产环境部署检查"
         echo "  0) 返回主菜单"
         echo ""
@@ -365,32 +365,88 @@ config_menu() {
                 fi
                 ;;
             3)
-                if [ -f "$PROJECT_ROOT/configs/config.yaml" ]; then
-                    cat "$PROJECT_ROOT/configs/config.yaml"
-                else
-                    echo -e "${RED}错误: 配置文件不存在${NC}"
-                fi
+                echo -e "${CYAN}配置文件查看${NC}"
+                echo ""
+                echo "1) 查看 configs/config.yaml (本地部署)"
+                echo "2) 查看 Docker .env (Docker 部署)"
+                echo "0) 返回"
+                echo ""
+                read -p "请选择 [0-2]: " view_choice
+                
+                case $view_choice in
+                    1)
+                        if [ -f "$PROJECT_ROOT/configs/config.yaml" ]; then
+                            cat "$PROJECT_ROOT/configs/config.yaml"
+                        else
+                            echo -e "${YELLOW}配置文件不存在 (本地部署使用)${NC}"
+                        fi
+                        ;;
+                    2)
+                        if [ -f "$DOCKER_DIR/.env" ]; then
+                            echo -e "${CYAN}Docker 环境配置:${NC}"
+                            echo ""
+                            # 隐藏敏感信息
+                            while IFS= read -r line; do
+                                if echo "$line" | grep -q "^V_JWT_SECRET="; then
+                                    echo "V_JWT_SECRET=********** (已隐藏)"
+                                elif echo "$line" | grep -q "^V_ADMIN_PASS="; then
+                                    echo "V_ADMIN_PASS=********** (已隐藏)"
+                                else
+                                    echo "$line"
+                                fi
+                            done < "$DOCKER_DIR/.env"
+                        else
+                            echo -e "${RED}.env 文件不存在${NC}"
+                        fi
+                        ;;
+                    0)
+                        ;;
+                    *)
+                        echo -e "${RED}无效选择${NC}"
+                        ;;
+                esac
                 pause
                 ;;
             4)
-                if [ -f "$DOCKER_DIR/.env.example" ]; then
-                    if [ -f "$DOCKER_DIR/.env" ]; then
-                        echo -e "${YELLOW}警告: .env 文件已存在${NC}"
-                        read -p "是否覆盖? (y/N): " confirm
-                        if [ "$confirm" = "y" ] || [ "$confirm" = "Y" ]; then
-                            cp "$DOCKER_DIR/.env.example" "$DOCKER_DIR/.env"
-                            echo -e "${GREEN}Docker .env 文件已创建${NC}"
-                            echo -e "${YELLOW}请编辑 .env 文件，修改默认密码和 JWT Secret！${NC}"
-                        else
-                            echo -e "${YELLOW}已取消${NC}"
-                        fi
-                    else
+                if [ -f "$DOCKER_DIR/.env" ]; then
+                    echo -e "${CYAN}Docker .env 文件管理${NC}"
+                    echo ""
+                    echo "1) 编辑 .env 文件"
+                    echo "2) 从示例重新创建 (会覆盖现有配置)"
+                    echo "0) 返回"
+                    echo ""
+                    read -p "请选择 [0-2]: " env_choice
+                    
+                    case $env_choice in
+                        1)
+                            ${EDITOR:-vi} "$DOCKER_DIR/.env"
+                            ;;
+                        2)
+                            echo -e "${YELLOW}警告: 这将覆盖现有 .env 文件${NC}"
+                            read -p "确认覆盖? (y/N): " confirm
+                            if [ "$confirm" = "y" ] || [ "$confirm" = "Y" ]; then
+                                cp "$DOCKER_DIR/.env.example" "$DOCKER_DIR/.env"
+                                echo -e "${GREEN}Docker .env 文件已重新创建${NC}"
+                                echo -e "${YELLOW}首次启动时会自动生成密码和 JWT Secret${NC}"
+                            else
+                                echo -e "${YELLOW}已取消${NC}"
+                            fi
+                            ;;
+                        0)
+                            ;;
+                        *)
+                            echo -e "${RED}无效选择${NC}"
+                            ;;
+                    esac
+                else
+                    echo -e "${YELLOW}创建 Docker .env 文件...${NC}"
+                    if [ -f "$DOCKER_DIR/.env.example" ]; then
                         cp "$DOCKER_DIR/.env.example" "$DOCKER_DIR/.env"
                         echo -e "${GREEN}Docker .env 文件已创建${NC}"
-                        echo -e "${YELLOW}请编辑 .env 文件，修改默认密码和 JWT Secret！${NC}"
+                        echo -e "${YELLOW}首次启动时会自动生成密码和 JWT Secret${NC}"
+                    else
+                        echo -e "${RED}错误: 找不到 .env.example 文件${NC}"
                     fi
-                else
-                    echo -e "${RED}错误: 找不到 .env.example 文件${NC}"
                 fi
                 pause
                 ;;
