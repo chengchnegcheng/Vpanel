@@ -167,14 +167,25 @@ api.interceptors.response.use(
       // 根据当前路径决定清除哪个令牌和跳转到哪个登录页
       const currentPath = window.location.pathname
       if (currentPath.startsWith('/user')) {
+        // 用户门户 - 清除用户令牌，跳转到用户登录页
         sessionStorage.removeItem('userToken')
         localStorage.removeItem('userToken')
         sessionStorage.removeItem('userInfo')
         localStorage.removeItem('userInfo')
         router.push('/user/login')
-      } else {
+      } else if (currentPath.startsWith('/admin')) {
+        // 管理后台 - 清除管理员令牌，跳转到管理员登录页
         sessionStorage.removeItem('token')
         localStorage.removeItem('token')
+        sessionStorage.removeItem('userRole')
+        localStorage.removeItem('userRole')
+        router.push('/user/login?redirect=' + encodeURIComponent(currentPath))
+      } else {
+        // 其他路径 - 默认跳转到用户登录页
+        sessionStorage.removeItem('token')
+        localStorage.removeItem('token')
+        sessionStorage.removeItem('userToken')
+        localStorage.removeItem('userToken')
         router.push('/user/login')
       }
     }

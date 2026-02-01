@@ -167,23 +167,33 @@ func main() {
 
 
 // ensureAdminUser creates the default admin user if it doesn't exist.
+// If the user exists, it updates the password to match the configuration.
 func ensureAdminUser(userRepo repository.UserRepository, authService *auth.Service, cfg *config.Config, log logger.Logger) error {
 	ctx := context.Background()
 
-	// Check if admin user exists
-	_, err := userRepo.GetByUsername(ctx, cfg.Auth.AdminUsername)
-	if err == nil {
-		// Admin user already exists
-		log.Info("admin user already exists", logger.F("username", cfg.Auth.AdminUsername))
-		return nil
-	}
-
-	// Create admin user
+	// Hash the password from config
 	passwordHash, err := authService.HashPassword(cfg.Auth.AdminPassword)
 	if err != nil {
 		return fmt.Errorf("failed to hash admin password: %w", err)
 	}
 
+	// Check if admin user exists
+	existingUser, err := userRepo.GetByUsername(ctx, cfg.Auth.AdminUsername)
+	if err == nil {
+		// Admin user already exists, update password if different
+		if existingUser.PasswordHash != passwordHash {
+			existingUser.PasswordHash = passwordHash
+			if err := userRepo.Update(ctx, existingUser); err != nil {
+				return fmt.Errorf("failed to update admin password: %w", err)
+			}
+			log.Info("admin user password updated", logger.F("username", cfg.Auth.AdminUsername))
+		} else {
+			log.Info("admin user already exists", logger.F("username", cfg.Auth.AdminUsername))
+		}
+		return nil
+	}
+
+	// Create admin user
 	adminUser := &repository.User{
 		Username:     cfg.Auth.AdminUsername,
 		PasswordHash: passwordHash,
