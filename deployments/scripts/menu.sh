@@ -90,7 +90,7 @@ docker_menu() {
                     echo -e "${YELLOW}服务已在运行中${NC}"
                 else
                     echo -e "${GREEN}启动 V Panel...${NC}"
-                    # 使用 start.sh 脚本来处理随机端口
+                    # 使用 start.sh 脚本来处理安全检查
                     if "$SCRIPT_DIR/start.sh" start; then
                         echo -e "${GREEN}启动成功${NC}"
                     else
@@ -173,8 +173,11 @@ docker_menu() {
                 echo -e "  - 所有数据卷 (数据库、日志等)"
                 echo -e "  - 所有配置"
                 echo ""
-                read -p "确认删除所有数据? 输入 'yes' 确认: " confirm
-                if [ "$confirm" = "yes" ]; then
+                echo -e "${YELLOW}建议: 在删除前先备份数据${NC}"
+                echo -e "  备份命令: docker run --rm -v v-panel-data:/data -v \$(pwd):/backup alpine tar czf /backup/v-panel-backup-\$(date +%Y%m%d-%H%M%S).tar.gz /data"
+                echo ""
+                read -p "确认删除所有数据? 输入 'DELETE' 确认: " confirm
+                if [ "$confirm" = "DELETE" ]; then
                     cd "$DOCKER_DIR" || { echo -e "${RED}错误: 无法进入 Docker 目录${NC}"; pause; continue; }
                     if docker_compose_cmd down -v; then
                         echo -e "${GREEN}已清理所有容器和数据卷${NC}"
@@ -338,9 +341,10 @@ config_menu() {
         echo "  2) 编辑配置文件"
         echo "  3) 查看当前配置"
         echo "  4) 创建 Docker .env 文件"
+        echo "  5) 生产环境部署检查"
         echo "  0) 返回主菜单"
         echo ""
-        read -p "请选择操作 [0-4]: " choice
+        read -p "请选择操作 [0-5]: " choice
 
         case $choice in
             1)
@@ -370,10 +374,35 @@ config_menu() {
                 ;;
             4)
                 if [ -f "$DOCKER_DIR/.env.example" ]; then
-                    cp "$DOCKER_DIR/.env.example" "$DOCKER_DIR/.env"
-                    echo -e "${GREEN}Docker .env 文件已创建${NC}"
+                    if [ -f "$DOCKER_DIR/.env" ]; then
+                        echo -e "${YELLOW}警告: .env 文件已存在${NC}"
+                        read -p "是否覆盖? (y/N): " confirm
+                        if [ "$confirm" = "y" ] || [ "$confirm" = "Y" ]; then
+                            cp "$DOCKER_DIR/.env.example" "$DOCKER_DIR/.env"
+                            echo -e "${GREEN}Docker .env 文件已创建${NC}"
+                            echo -e "${YELLOW}请编辑 .env 文件，修改默认密码和 JWT Secret！${NC}"
+                        else
+                            echo -e "${YELLOW}已取消${NC}"
+                        fi
+                    else
+                        cp "$DOCKER_DIR/.env.example" "$DOCKER_DIR/.env"
+                        echo -e "${GREEN}Docker .env 文件已创建${NC}"
+                        echo -e "${YELLOW}请编辑 .env 文件，修改默认密码和 JWT Secret！${NC}"
+                    fi
                 else
                     echo -e "${RED}错误: 找不到 .env.example 文件${NC}"
+                fi
+                pause
+                ;;
+            5)
+                echo -e "${CYAN}执行生产环境部署检查...${NC}"
+                echo ""
+                if "$SCRIPT_DIR/production-check.sh"; then
+                    echo ""
+                    echo -e "${GREEN}检查完成！${NC}"
+                else
+                    echo ""
+                    echo -e "${RED}检查发现问题，请修复后重试${NC}"
                 fi
                 pause
                 ;;

@@ -65,7 +65,7 @@ RUN apk add --no-cache \
     ca-certificates \
     tzdata \
     sqlite \
-    curl \
+    wget \
     && rm -rf /var/cache/apk/*
 
 # Create non-root user
@@ -103,7 +103,7 @@ EXPOSE 8080
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-    CMD curl -f http://localhost:8080/health || exit 1
+    CMD wget --no-verbose --tries=1 --spider http://localhost:8080/health || exit 1
 
 # Set environment variables
 ENV V_SERVER_HOST=0.0.0.0 \
