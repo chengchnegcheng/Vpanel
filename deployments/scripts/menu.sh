@@ -47,8 +47,8 @@ docker_compose_cmd() {
 
 # 检查容器状态
 check_container_status() {
-    cd "$DOCKER_DIR"
-    if docker_compose_cmd ps | grep -q "v-panel.*Up"; then
+    cd "$DOCKER_DIR" || return 1
+    if docker_compose_cmd ps 2>/dev/null | grep -q "v-panel.*Up"; then
         return 0
     else
         return 1
@@ -63,7 +63,7 @@ docker_menu() {
         echo ""
         
         # 显示当前状态
-        cd "$DOCKER_DIR"
+        cd "$DOCKER_DIR" || { echo -e "${RED}错误: 无法进入 Docker 目录${NC}"; pause; continue; }
         if check_container_status; then
             echo -e "当前状态: ${GREEN}运行中${NC}"
         else
@@ -91,7 +91,11 @@ docker_menu() {
                 else
                     echo -e "${GREEN}启动 V Panel...${NC}"
                     # 使用 start.sh 脚本来处理随机端口
-                    "$SCRIPT_DIR/start.sh" start
+                    if "$SCRIPT_DIR/start.sh" start; then
+                        echo -e "${GREEN}启动成功${NC}"
+                    else
+                        echo -e "${RED}启动失败${NC}"
+                    fi
                 fi
                 pause
                 ;;
@@ -100,41 +104,49 @@ docker_menu() {
                     echo -e "${YELLOW}服务未运行${NC}"
                 else
                     echo -e "${YELLOW}停止 V Panel...${NC}"
-                    cd "$DOCKER_DIR"
-                    docker_compose_cmd down
-                    echo -e "${GREEN}V Panel 已停止${NC}"
+                    cd "$DOCKER_DIR" || { echo -e "${RED}错误: 无法进入 Docker 目录${NC}"; pause; continue; }
+                    if docker_compose_cmd down; then
+                        echo -e "${GREEN}V Panel 已停止${NC}"
+                    else
+                        echo -e "${RED}停止失败${NC}"
+                    fi
                 fi
                 pause
                 ;;
             3)
                 echo -e "${YELLOW}重启 V Panel...${NC}"
-                cd "$DOCKER_DIR"
-                docker_compose_cmd restart
-                echo -e "${GREEN}V Panel 已重启${NC}"
+                cd "$DOCKER_DIR" || { echo -e "${RED}错误: 无法进入 Docker 目录${NC}"; pause; continue; }
+                if docker_compose_cmd restart; then
+                    echo -e "${GREEN}V Panel 已重启${NC}"
+                else
+                    echo -e "${RED}重启失败${NC}"
+                fi
                 pause
                 ;;
             4)
                 echo -e "${YELLOW}重新构建并启动...${NC}"
-                cd "$DOCKER_DIR"
+                cd "$DOCKER_DIR" || { echo -e "${RED}错误: 无法进入 Docker 目录${NC}"; pause; continue; }
                 docker_compose_cmd down
-                docker_compose_cmd build --no-cache
-                docker_compose_cmd up -d
-                echo -e "${GREEN}重新构建完成！${NC}"
+                if docker_compose_cmd build --no-cache && docker_compose_cmd up -d; then
+                    echo -e "${GREEN}重新构建完成！${NC}"
+                else
+                    echo -e "${RED}构建失败${NC}"
+                fi
                 pause
                 ;;
             5)
                 echo -e "${CYAN}查看实时日志 (Ctrl+C 退出)${NC}"
-                cd "$DOCKER_DIR"
+                cd "$DOCKER_DIR" || { echo -e "${RED}错误: 无法进入 Docker 目录${NC}"; pause; continue; }
                 docker_compose_cmd logs -f
                 ;;
             6)
                 echo -e "${CYAN}最近 100 行日志:${NC}"
-                cd "$DOCKER_DIR"
+                cd "$DOCKER_DIR" || { echo -e "${RED}错误: 无法进入 Docker 目录${NC}"; pause; continue; }
                 docker_compose_cmd logs --tail=100
                 pause
                 ;;
             7)
-                cd "$DOCKER_DIR"
+                cd "$DOCKER_DIR" || { echo -e "${RED}错误: 无法进入 Docker 目录${NC}"; pause; continue; }
                 echo -e "${CYAN}容器状态:${NC}"
                 docker_compose_cmd ps
                 echo ""
@@ -163,9 +175,12 @@ docker_menu() {
                 echo ""
                 read -p "确认删除所有数据? 输入 'yes' 确认: " confirm
                 if [ "$confirm" = "yes" ]; then
-                    cd "$DOCKER_DIR"
-                    docker_compose_cmd down -v
-                    echo -e "${GREEN}已清理所有容器和数据卷${NC}"
+                    cd "$DOCKER_DIR" || { echo -e "${RED}错误: 无法进入 Docker 目录${NC}"; pause; continue; }
+                    if docker_compose_cmd down -v; then
+                        echo -e "${GREEN}已清理所有容器和数据卷${NC}"
+                    else
+                        echo -e "${RED}清理失败${NC}"
+                    fi
                 else
                     echo -e "${YELLOW}已取消操作${NC}"
                 fi
@@ -216,21 +231,30 @@ dev_menu() {
         case $choice in
             1)
                 echo -e "${GREEN}编译 Panel...${NC}"
-                make build
-                echo -e "${GREEN}编译完成: ./vpanel${NC}"
+                if make build; then
+                    echo -e "${GREEN}编译完成: ./vpanel${NC}"
+                else
+                    echo -e "${RED}编译失败${NC}"
+                fi
                 pause
                 ;;
             2)
                 echo -e "${GREEN}编译 Agent (所有平台)...${NC}"
-                make agent-all
-                echo -e "${GREEN}编译完成，文件位于 bin/ 目录${NC}"
-                ls -lh bin/
+                if make agent-all; then
+                    echo -e "${GREEN}编译完成，文件位于 bin/ 目录${NC}"
+                    ls -lh bin/
+                else
+                    echo -e "${RED}编译失败${NC}"
+                fi
                 pause
                 ;;
             3)
                 echo -e "${GREEN}编译 Panel + Agent...${NC}"
-                make build-all
-                echo -e "${GREEN}编译完成${NC}"
+                if make build-all; then
+                    echo -e "${GREEN}编译完成${NC}"
+                else
+                    echo -e "${RED}编译失败${NC}"
+                fi
                 pause
                 ;;
             4)
@@ -248,13 +272,20 @@ dev_menu() {
                 ;;
             6)
                 echo -e "${GREEN}运行测试...${NC}"
-                make test
+                if make test; then
+                    echo -e "${GREEN}测试通过${NC}"
+                else
+                    echo -e "${RED}测试失败${NC}"
+                fi
                 pause
                 ;;
             7)
                 echo -e "${GREEN}格式化代码...${NC}"
-                make fmt
-                echo -e "${GREEN}格式化完成${NC}"
+                if make fmt; then
+                    echo -e "${GREEN}格式化完成${NC}"
+                else
+                    echo -e "${RED}格式化失败${NC}"
+                fi
                 pause
                 ;;
             8)
@@ -263,17 +294,27 @@ dev_menu() {
                 ;;
             9)
                 echo -e "${GREEN}编译前端...${NC}"
-                cd web && npm run build
-                echo -e "${GREEN}前端编译完成${NC}"
+                if cd web && npm run build; then
+                    echo -e "${GREEN}前端编译完成${NC}"
+                else
+                    echo -e "${RED}前端编译失败${NC}"
+                fi
                 pause
                 ;;
             10)
                 echo -e "${GREEN}安装依赖...${NC}"
                 echo -e "${CYAN}安装 Go 依赖...${NC}"
-                go mod download
+                if go mod download; then
+                    echo -e "${GREEN}Go 依赖安装完成${NC}"
+                else
+                    echo -e "${RED}Go 依赖安装失败${NC}"
+                fi
                 echo -e "${CYAN}安装前端依赖...${NC}"
-                cd web && npm install
-                echo -e "${GREEN}依赖安装完成${NC}"
+                if cd web && npm install; then
+                    echo -e "${GREEN}前端依赖安装完成${NC}"
+                else
+                    echo -e "${RED}前端依赖安装失败${NC}"
+                fi
                 pause
                 ;;
             0)
@@ -419,8 +460,12 @@ main_menu() {
         echo -e "${CYAN}快速状态:${NC}"
         if check_container_status 2>/dev/null; then
             # 读取端口
-            source "$DOCKER_DIR/.env" 2>/dev/null || true
-            PORT=${V_SERVER_PORT:-8080}
+            if [ -f "$DOCKER_DIR/.env" ]; then
+                PORT=$(grep "^V_SERVER_PORT=" "$DOCKER_DIR/.env" 2>/dev/null | cut -d'=' -f2)
+                PORT=${PORT:-8080}
+            else
+                PORT=8080
+            fi
             echo -e "  Docker: ${GREEN}运行中${NC} | 访问: ${YELLOW}http://localhost:${PORT}${NC}"
         else
             echo -e "  Docker: ${YELLOW}已停止${NC}"
@@ -454,14 +499,21 @@ main_menu() {
                 ;;
             5)
                 echo -e "${GREEN}快速启动 Docker 服务...${NC}"
-                "$SCRIPT_DIR/start.sh" start
+                if "$SCRIPT_DIR/start.sh" start; then
+                    echo -e "${GREEN}启动成功${NC}"
+                else
+                    echo -e "${RED}启动失败${NC}"
+                fi
                 pause
                 ;;
             6)
                 echo -e "${YELLOW}快速停止 Docker 服务...${NC}"
-                cd "$DOCKER_DIR"
-                docker_compose_cmd down
-                echo -e "${GREEN}已停止${NC}"
+                cd "$DOCKER_DIR" || { echo -e "${RED}错误: 无法进入 Docker 目录${NC}"; pause; continue; }
+                if docker_compose_cmd down; then
+                    echo -e "${GREEN}已停止${NC}"
+                else
+                    echo -e "${RED}停止失败${NC}"
+                fi
                 pause
                 ;;
             0)

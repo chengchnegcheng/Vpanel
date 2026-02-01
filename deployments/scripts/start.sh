@@ -47,8 +47,10 @@ check_port() {
     local port=$1
     if command -v lsof &> /dev/null; then
         lsof -i :$port &> /dev/null && return 1
+    elif command -v ss &> /dev/null; then
+        ss -ln | grep -E ":${port}[[:space:]]" &> /dev/null && return 1
     elif command -v netstat &> /dev/null; then
-        netstat -an | grep ":$port " &> /dev/null && return 1
+        netstat -an | grep -E "[:.]${port}[[:space:]]" &> /dev/null && return 1
     fi
     return 0
 }
@@ -81,19 +83,25 @@ fi
 
 # 读取或生成端口
 cd "$DOCKER_DIR"
-source .env 2>/dev/null || true
+
+# 只读取需要的变量，避免变量污染
+if [ -f .env ]; then
+    V_SERVER_PORT=$(grep "^V_SERVER_PORT=" .env 2>/dev/null | cut -d'=' -f2)
+fi
 
 if [ -z "$V_SERVER_PORT" ]; then
     V_SERVER_PORT=$(get_available_port)
     echo -e "${YELLOW}生成随机端口: ${V_SERVER_PORT}${NC}"
     
-    # 更新 .env 文件
-    if grep -q "^V_SERVER_PORT=" .env; then
-        sed -i.bak "s/^V_SERVER_PORT=.*/V_SERVER_PORT=$V_SERVER_PORT/" .env
+    # 更新 .env 文件 (跨平台兼容)
+    if grep -q "^V_SERVER_PORT=" .env 2>/dev/null; then
+        # 使用临时文件方式，兼容所有平台
+        grep -v "^V_SERVER_PORT=" .env > .env.tmp
+        echo "V_SERVER_PORT=$V_SERVER_PORT" >> .env.tmp
+        mv .env.tmp .env
     else
         echo "V_SERVER_PORT=$V_SERVER_PORT" >> .env
     fi
-    rm -f .env.bak
 fi
 
 # 解析命令行参数
