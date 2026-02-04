@@ -238,7 +238,7 @@ panel:
   token: "your-node-token"
   
 agent:
-  port: 8443
+  port: 18443
   
 xray:
   binary: "/usr/local/bin/xray"
@@ -255,7 +255,7 @@ EOF
 |--------|------|--------|
 | `panel.address` | Panel 服务器地址 | - |
 | `panel.token` | 节点认证 Token | - |
-| `agent.port` | Agent 监听端口 | 8443 |
+| `agent.port` | Agent 监听端口 | 18443 |
 | `xray.binary` | Xray 可执行文件路径 | /usr/local/bin/xray |
 | `xray.config` | Xray 配置文件路径 | /etc/xray/config.json |
 

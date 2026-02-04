@@ -34,7 +34,7 @@ health:
   # Host to bind health server
   host: "0.0.0.0"
   # Port for health check endpoint
-  port: 8443
+  port: 18443
 
 # Logging configuration
 log:

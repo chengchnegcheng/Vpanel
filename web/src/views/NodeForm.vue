@@ -246,7 +246,7 @@ const testingConnection = ref(false)
 const form = reactive({
   name: '',
   address: '',
-  port: 8443,
+  port: 18443,
   region: '',
   weight: 1,
   max_users: 0,

@@ -20,7 +20,7 @@ curl -X POST "${API_URL}/api/admin/nodes" \
     -d '{
         "name": "香港-01",
         "address": "hk1.example.com",
-        "port": 8443,
+        "port": 18443,
         "region": "香港",
         "weight": 10,
         "max_users": 100

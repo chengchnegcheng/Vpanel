@@ -51,7 +51,7 @@ create_nodes() {
         -d '{
             "name": "香港-01",
             "address": "hk1.example.com",
-            "port": 8443,
+            "port": 18443,
             "region": "香港",
             "weight": 10,
             "max_users": 100,
@@ -67,7 +67,7 @@ create_nodes() {
         -d '{
             "name": "日本-01",
             "address": "jp1.example.com",
-            "port": 8443,
+            "port": 18443,
             "region": "日本",
             "weight": 8,
             "max_users": 80,
@@ -83,7 +83,7 @@ create_nodes() {
         -d '{
             "name": "美国-01",
             "address": "us1.example.com",
-            "port": 8443,
+            "port": 18443,
             "region": "美国",
             "weight": 5,
             "max_users": 50,

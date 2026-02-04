@@ -164,7 +164,7 @@ func TestMultiServerManagementTableOperations(t *testing.T) {
 	db := setupTestDB(t)
 	executeMigration(t, db)
 
-	result := db.Exec(`INSERT INTO nodes (name, address, port, token, status, region, weight) VALUES ('test-node', '192.168.1.1', 8443, 'test-token-123', 'online', 'us-west', 1)`)
+	result := db.Exec(`INSERT INTO nodes (name, address, port, token, status, region, weight) VALUES ('test-node', '192.168.1.1', 18443, 'test-token-123', 'online', 'us-west', 1)`)
 	if result.Error != nil {
 		t.Fatalf("Failed to insert node: %v", result.Error)
 	}

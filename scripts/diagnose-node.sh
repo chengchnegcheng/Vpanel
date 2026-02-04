@@ -47,7 +47,7 @@ echo ""
 
 # 检查端口监听
 echo "6. 检查端口监听..."
-ssh -o StrictHostKeyChecking=no "$NODE_USER@$NODE_IP" "ss -tlnp | grep -E ':(8081|8443)'" 2>/dev/null || echo "✗ Agent 端口未监听"
+ssh -o StrictHostKeyChecking=no "$NODE_USER@$NODE_IP" "ss -tlnp | grep -E ':(8081|18443)'" 2>/dev/null || echo "✗ Agent 端口未监听"
 echo ""
 
 echo "=========================================="

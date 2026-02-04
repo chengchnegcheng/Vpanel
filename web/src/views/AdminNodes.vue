@@ -225,7 +225,7 @@
           
           <el-form-item label="节点端口" prop="port">
             <el-input-number v-model="form.port" :min="1" :max="65535" style="width: 100%;" />
-            <span class="form-tip">Agent 监听端口，默认 8443</span>
+            <span class="form-tip">Agent 监听端口，默认 18443</span>
           </el-form-item>
         </template>
 
@@ -529,7 +529,7 @@ const form = reactive({
   id: null,
   name: '',
   address: '',
-  port: 8443,
+  port: 18443,
   region: '',
   weight: 1,
   max_users: 0,
@@ -727,7 +727,7 @@ const showCreateDialog = () => {
     id: null, 
     name: '', 
     address: '', 
-    port: 8443, 
+    port: 18443, 
     region: '',
     weight: 1, 
     max_users: 0, 
@@ -795,7 +795,7 @@ const submitForm = async () => {
     if (form.installMethod === 'auto') {
       // 使用 SSH 地址作为节点地址
       data.address = form.ssh_host
-      data.port = 8443 // Agent 默认端口
+      data.port = 18443 // Agent 默认端口
       
       // 添加 SSH 配置
       data.ssh = {

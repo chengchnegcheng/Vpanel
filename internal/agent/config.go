@@ -74,7 +74,7 @@ func DefaultConfig() *Config {
 			BackupDir:  "/tmp/xray-backups",
 		},
 		Health: HealthConfig{
-			Port: 8443,
+			Port: 18443,
 			Host: "0.0.0.0",
 		},
 		Log: LogConfig{

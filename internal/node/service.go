@@ -244,7 +244,7 @@ func (s *Service) Create(ctx context.Context, req *CreateNodeRequest) (*Node, er
 	// 验证端口范围
 	port := req.Port
 	if port <= 0 {
-		port = 8443 // 默认端口
+		port = 18443 // 默认端口
 	}
 	if port < 1 || port > 65535 {
 		return nil, fmt.Errorf("%w: 端口必须在 1-65535 之间", ErrInvalidNode)
@@ -1082,7 +1082,7 @@ func (s *Service) GetTotalUsers(ctx context.Context) (int64, error) {
 // TestNodeConnectivity 测试节点连通性
 func (s *Service) TestNodeConnectivity(ctx context.Context, address string, port int) error {
 	if port <= 0 {
-		port = 8443
+		port = 18443
 	}
 	
 	addr := fmt.Sprintf("%s:%d", address, port)

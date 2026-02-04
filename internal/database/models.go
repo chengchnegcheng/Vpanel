@@ -827,7 +827,7 @@ type Node struct {
 	ID           int64      `json:"id" gorm:"primaryKey"`
 	Name         string     `json:"name" gorm:"size:128;not null"`
 	Address      string     `json:"address" gorm:"size:256;not null"` // IP or domain
-	Port         int        `json:"port" gorm:"default:8443"`         // Agent port
+	Port         int        `json:"port" gorm:"default:18443"`         // Agent port
 	Token        string     `json:"-" gorm:"size:64;uniqueIndex"`     // Authentication token
 	Status       string     `json:"status" gorm:"size:32;default:offline;index"` // online, offline, unhealthy
 	Tags         string     `json:"tags" gorm:"type:text"`            // JSON array
