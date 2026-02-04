@@ -598,7 +598,7 @@ xray:
   config_path: "/etc/xray/config.json"
 
 health:
-  port: 8081
+  port: 18443
 `, config.NodeToken, config.PanelURL)
 
 	// 使用 base64 编码配置内容，避免 heredoc 格式问题
@@ -866,7 +866,7 @@ xray:
   config_path: "/etc/xray/config.json"
 
 health:
-  port: 8081
+  port: 18443
 
 log:
   level: "info"

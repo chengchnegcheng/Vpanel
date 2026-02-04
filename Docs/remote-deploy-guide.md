@@ -356,7 +356,7 @@ sync:
   interval: 5m
 
 health:
-  port: 8081
+  port: 18443
 EOF
 ```
 

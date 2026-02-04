@@ -11,7 +11,7 @@ RED='\033[0;31m'
 NC='\033[0m'
 
 PANEL_URL=${PANEL_URL:-"http://localhost:8080"}
-AGENT_PORT=${AGENT_PORT:-8081}
+AGENT_PORT=${AGENT_PORT:-18443}
 
 show_help() {
     echo "V Panel 健康检查脚本"
@@ -23,7 +23,7 @@ show_help() {
     echo ""
     echo "环境变量:"
     echo "  PANEL_URL             Panel 地址 (默认: http://localhost:8080)"
-    echo "  AGENT_PORT            Agent 端口 (默认: 8081)"
+    echo "  AGENT_PORT            Agent 端口 (默认: 18443)"
     echo ""
 }
 

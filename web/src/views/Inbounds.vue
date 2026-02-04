@@ -137,6 +137,30 @@
           <el-input v-model="inboundForm.remark" placeholder="请输入备注" />
         </el-form-item>
         
+        <el-form-item label="部署节点" prop="node_id">
+          <el-select 
+            v-model="inboundForm.node_id" 
+            placeholder="选择节点（可选）" 
+            clearable
+            style="width: 100%"
+          >
+            <el-option 
+              v-for="node in nodeList" 
+              :key="node.id" 
+              :label="node.name" 
+              :value="node.id"
+            >
+              <span>{{ node.name }}</span>
+              <span style="float: right; color: var(--el-text-color-secondary); font-size: 13px">
+                {{ node.address }}
+              </span>
+            </el-option>
+          </el-select>
+          <div style="color: var(--el-text-color-secondary); font-size: 12px; margin-top: 4px">
+            不选择节点时，协议将在主服务器上运行
+          </div>
+        </el-form-item>
+        
         <el-form-item label="IP监听" prop="listen">
           <el-input v-model="inboundForm.listen" placeholder="填空默认使用0.0.0.0" />
         </el-form-item>
@@ -518,6 +542,7 @@ import QRCode from 'qrcode'
 // 数据表格
 const loading = ref(false)
 const inbounds = ref([])
+const nodeList = ref([])  // 节点列表
 
 // 表单对话框
 const addInboundDialogVisible = ref(false)
@@ -536,6 +561,7 @@ const defaultInboundForm = {
   protocol: 'vmess',
   listen: '',
   port: null,
+  node_id: null,  // 节点ID
   total_traffic: 0,
   expiry_time: '',
   vmess_id: '',  // vmess 特有
@@ -678,7 +704,20 @@ const handleCurrentChange = (page) => {
 // 初始化
 onMounted(() => {
   loadInbounds()
+  loadNodes()
 })
+
+// 加载节点列表
+const loadNodes = async () => {
+  try {
+    const response = await api.get('/admin/nodes')
+    const data = response.data || response
+    nodeList.value = data.nodes || data.list || (Array.isArray(data) ? data : [])
+  } catch (error) {
+    console.error('加载节点列表失败:', error)
+    nodeList.value = []
+  }
+}
 
 // 加载入站列表
 const loadInbounds = async () => {

@@ -98,7 +98,7 @@ sync:
   backup_before_apply: true
 
 health:
-  port: 8081
+  port: 18443
 EOF
     
     # 安装 Agent

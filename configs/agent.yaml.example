@@ -33,7 +33,7 @@ xray:
 health:
   # Host to bind health server
   host: "0.0.0.0"
-  # Port for health check endpoint
+  # Port for health check endpoint (Agent 监听端口)
   port: 18443
 
 # Logging configuration

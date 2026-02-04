@@ -306,7 +306,7 @@ Panel 状态: 正常
 
 **环境变量**:
 - `PANEL_URL`: Panel 地址 (默认: http://localhost:8080)
-- `AGENT_PORT`: Agent 端口 (默认: 8081)
+- `AGENT_PORT`: Agent 端口 (默认: 18443)
 
 ---
 
@@ -579,7 +579,7 @@ make clean
 ### health-check.sh
 
 - `PANEL_URL`: Panel 地址（默认: http://localhost:8080）
-- `AGENT_PORT`: Agent 端口（默认: 8081）
+- `AGENT_PORT`: Agent 端口（默认: 18443）
 
 ### backup.sh
 

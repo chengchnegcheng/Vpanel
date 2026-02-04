@@ -108,7 +108,7 @@ xray:
 # 健康检查服务
 health:
   host: "0.0.0.0"
-  port: 8081                             # 健康检查端口
+  port: 18443                             # 健康检查端口（Agent 监听端口）
 
 # 日志配置
 log:
@@ -164,7 +164,7 @@ tail -f /var/log/vpanel-agent.log
 
 #### 3.3 测试健康检查
 ```bash
-curl http://localhost:8081/health
+curl http://localhost:18443/health
 # 应该返回：{"status":"healthy","registered":true,"node_id":1}
 ```
 
