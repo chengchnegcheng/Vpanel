@@ -71,7 +71,8 @@ validate_password() {
     fi
     
     # 检查是否包含特殊字符
-    if ! echo "$password" | grep -q '[!@#$%^&*()_+=\[\]{}|;:,.<>?-]'; then
+    # 使用更兼容的方式：检查是否包含非字母数字字符
+    if ! echo "$password" | grep -q '[^A-Za-z0-9]'; then
         return 1
     fi
     
