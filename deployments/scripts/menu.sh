@@ -47,12 +47,16 @@ docker_compose_cmd() {
 
 # 检查容器状态
 check_container_status() {
-    cd "$DOCKER_DIR" || return 1
+    local current_dir=$(pwd)
+    cd "$DOCKER_DIR" 2>/dev/null || return 1
+    local result=1
+    
     if docker_compose_cmd ps 2>/dev/null | grep -q "v-panel.*Up"; then
-        return 0
-    else
-        return 1
+        result=0
     fi
+    
+    cd "$current_dir" 2>/dev/null
+    return $result
 }
 
 # Docker 相关操作
