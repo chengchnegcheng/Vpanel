@@ -1089,6 +1089,54 @@ const downloadDeployScript = async (node) => {
   }
 }
 
+const testSSHConnection = async () => {
+  // 验证必填字段
+  if (!form.ssh_host) {
+    ElMessage.error('请输入服务器地址')
+    return
+  }
+  if (form.ssh_auth_method === 'password' && !form.ssh_password) {
+    ElMessage.error('请输入 SSH 密码')
+    return
+  }
+  if (form.ssh_auth_method === 'key' && !form.ssh_private_key) {
+    ElMessage.error('请输入 SSH 私钥')
+    return
+  }
+  
+  testingConnection.value = true
+  connectionTestResult.value = null
+  
+  try {
+    const res = await nodesApi.testConnection({
+      host: form.ssh_host,
+      port: form.ssh_port,
+      username: form.ssh_username,
+      password: form.ssh_auth_method === 'password' ? form.ssh_password : '',
+      private_key: form.ssh_auth_method === 'key' ? form.ssh_private_key : ''
+    })
+    
+    connectionTestResult.value = {
+      success: res.success,
+      message: res.success ? 'SSH 连接测试成功' : (res.message || 'SSH 连接失败')
+    }
+    
+    if (res.success) {
+      ElMessage.success('SSH 连接测试成功')
+    } else {
+      ElMessage.error(res.message || 'SSH 连接失败')
+    }
+  } catch (e) {
+    connectionTestResult.value = {
+      success: false,
+      message: e.message || 'SSH 连接测试失败'
+    }
+    ElMessage.error(e.message || 'SSH 连接测试失败')
+  } finally {
+    testingConnection.value = false
+  }
+}
+
 onMounted(fetchNodes)
 </script>
 
