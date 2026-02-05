@@ -628,6 +628,35 @@ func (s *RemoteDeployService) configureAgent(client *ssh.Client, config *DeployC
 		logger.F("panel_url", config.PanelURL),
 		logger.F("node_token", config.NodeToken))
 	
+	// 先停止旧的 Agent 服务和进程（如果存在）
+	stopScript := `
+# 停止 systemd 服务
+if systemctl is-active --quiet vpanel-agent 2>/dev/null; then
+    echo "停止旧的 Agent 服务..."
+    systemctl stop vpanel-agent
+    systemctl disable vpanel-agent 2>/dev/null || true
+    sleep 2
+fi
+
+# 强制杀死所有 vpanel-agent 进程（确保没有残留进程）
+if pgrep -x vpanel-agent >/dev/null 2>&1; then
+    echo "发现残留的 Agent 进程，强制终止..."
+    pkill -9 vpanel-agent 2>/dev/null || true
+    sleep 1
+fi
+
+# 验证进程已清理
+if pgrep -x vpanel-agent >/dev/null 2>&1; then
+    echo "⚠ 警告：仍有 Agent 进程在运行"
+else
+    echo "✓ 所有旧进程已清理"
+fi
+`
+	if err := s.executeCommand(client, stopScript, logBuffer); err != nil {
+		// 忽略停止失败的错误，可能是首次安装
+		logBuffer.WriteString("⚠ 停止旧服务失败（可能是首次安装）\n")
+	}
+	
 	// Create agent config - 正确的配置结构
 	agentConfig := fmt.Sprintf(`node:
   token: "%s"
@@ -646,10 +675,19 @@ health:
 	// 使用 base64 编码配置内容，避免 heredoc 格式问题
 	encoded := base64Encode([]byte(agentConfig))
 	
-	// Write config file using base64
-	script := fmt.Sprintf(`echo '%s' | base64 -d > /etc/vpanel/agent.yaml
+	// Write config file using base64- 强制覆盖旧配置
+	script := fmt.Sprintf(`
+# 备份旧配置（如果存在）
+if [ -f /etc/vpanel/agent.yaml ]; then
+    cp /etc/vpanel/agent.yaml /etc/vpanel/agent.yaml.backup.$(date +%%s) 2>/dev/null || true
+    echo "已备份旧配置"
+fi
+
+# 写入新配置
+echo '%s' | base64 -d > /etc/vpanel/agent.yaml
 chmod 644 /etc/vpanel/agent.yaml
-echo "配置文件已创建"
+echo "✓ 配置文件已创建/更新"
+echo "配置内容："
 cat /etc/vpanel/agent.yaml
 `, encoded)
 
@@ -690,13 +728,18 @@ systemctl daemon-reload
 // startAgentService starts the agent service.
 func (s *RemoteDeployService) startAgentService(client *ssh.Client, logBuffer *bytes.Buffer) error {
 	script := `
+# 重新加载 systemd
+systemctl daemon-reload
+
+# 启用并启动服务
 systemctl enable vpanel-agent
-systemctl start vpanel-agent
+systemctl restart vpanel-agent
 sleep 3
 
 # 检查服务状态
 if systemctl is-active --quiet vpanel-agent; then
-    systemctl status vpanel-agent --no-pager
+    echo "✓ Agent 服务启动成功"
+    systemctl status vpanel-agent --no-pager | head -20
 else
     echo "✗ Agent 服务启动失败"
     echo ""
