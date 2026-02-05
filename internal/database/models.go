@@ -829,6 +829,7 @@ type Node struct {
 	Address      string     `json:"address" gorm:"size:256;not null"` // IP or domain
 	Port         int        `json:"port" gorm:"default:18443"`         // Agent port
 	Token        string     `json:"-" gorm:"size:64;uniqueIndex"`     // Authentication token
+	PanelURL     string     `json:"panel_url" gorm:"size:256"`        // Panel server URL for agent connection
 	Status       string     `json:"status" gorm:"size:32;default:offline;index"` // online, offline, unhealthy
 	Tags         string     `json:"tags" gorm:"type:text"`            // JSON array
 	Region       string     `json:"region" gorm:"size:64;index"`

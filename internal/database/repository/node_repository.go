@@ -16,6 +16,7 @@ type Node struct {
 	Name         string     `gorm:"size:128;not null"`
 	Address      string     `gorm:"size:256;not null"` // IP or domain
 	Port         int        `gorm:"default:18443"`      // Agent port
+	PanelURL     string     `gorm:"size:256"`           // Panel server URL
 	Token        string     `gorm:"size:64;uniqueIndex"`
 	Status       string     `gorm:"size:32;default:offline;index"` // online, offline, unhealthy
 	Tags         string     `gorm:"type:text"`                     // JSON array

@@ -566,6 +566,8 @@ const rules = {
           callback(new Error('请输入 Panel 地址'))
         } else if (value && !value.match(/^https?:\/\/.+/)) {
           callback(new Error('Panel 地址格式不正确，应以 http:// 或 https:// 开头'))
+        } else if (value && (value.includes('localhost') || value.includes('127.0.0.1'))) {
+          callback(new Error('Panel 地址不能使用 localhost 或 127.0.0.1，请使用服务器的实际 IP 或域名'))
         } else {
           callback()
         }
@@ -721,7 +723,14 @@ const showCreateDialog = () => {
   isEdit.value = false
   
   // 自动检测当前访问的 Panel URL
-  const currentUrl = window.location.origin
+  let currentUrl = window.location.origin
+  
+  // 如果检测到 localhost，尝试获取实际 IP
+  if (currentUrl.includes('localhost') || currentUrl.includes('127.0.0.1')) {
+    // 提示用户需要手动输入实际地址
+    currentUrl = ''
+    ElMessage.warning('检测到使用 localhost 访问，请手动输入 Panel 服务器的实际 IP 或域名')
+  }
   
   Object.assign(form, {
     id: null, 

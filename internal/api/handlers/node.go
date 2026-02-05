@@ -33,6 +33,7 @@ type NodeResponse struct {
 	Name         string   `json:"name"`
 	Address      string   `json:"address"`
 	Port         int      `json:"port"`
+	PanelURL     string   `json:"panel_url"` // Panel server URL
 	Status       string   `json:"status"`
 	Tags         []string `json:"tags"`
 	Region       string   `json:"region"`
@@ -99,6 +100,7 @@ type CreateNodeRequest struct {
 	Name        string   `json:"name" binding:"required"`
 	Address     string   `json:"address" binding:"required"`
 	Port        int      `json:"port"`
+	PanelURL    string   `json:"panel_url"` // Panel server URL
 	Tags        []string `json:"tags"`
 	Region      string   `json:"region"`
 	Weight      int      `json:"weight"`
@@ -151,6 +153,7 @@ type UpdateNodeRequest struct {
 	Name        *string   `json:"name"`
 	Address     *string   `json:"address"`
 	Port        *int      `json:"port"`
+	PanelURL    *string   `json:"panel_url"` // Panel server URL
 	Tags        *[]string `json:"tags"`
 	Region      *string   `json:"region"`
 	Weight      *int      `json:"weight"`
@@ -192,6 +195,7 @@ func toNodeResponse(n *node.Node) *NodeResponse {
 		Name:         n.Name,
 		Address:      n.Address,
 		Port:         n.Port,
+		PanelURL:     n.PanelURL, // 添加 Panel URL 字段
 		Status:       n.Status,
 		Tags:         n.Tags,
 		Region:       n.Region,
@@ -341,6 +345,7 @@ func (h *NodeHandler) Create(c *gin.Context) {
 		Name:        req.Name,
 		Address:     req.Address,
 		Port:        req.Port,
+		PanelURL:    req.PanelURL, // 保存 Panel URL
 		Tags:        req.Tags,
 		Region:      req.Region,
 		Weight:      req.Weight,
@@ -478,6 +483,7 @@ func (h *NodeHandler) Update(c *gin.Context) {
 		Name:        req.Name,
 		Address:     req.Address,
 		Port:        req.Port,
+		PanelURL:    req.PanelURL, // 添加 Panel URL
 		Tags:        req.Tags,
 		Region:      req.Region,
 		Weight:      req.Weight,

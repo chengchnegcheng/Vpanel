@@ -40,6 +40,7 @@ type Node struct {
 	Name         string     `json:"name"`
 	Address      string     `json:"address"`
 	Port         int        `json:"port"`
+	PanelURL     string     `json:"panel_url"`      // Panel server URL
 	Token        string     `json:"token,omitempty"`
 	Status       string     `json:"status"`
 	Tags         []string   `json:"tags"`
@@ -109,6 +110,7 @@ type CreateNodeRequest struct {
 	Name        string   `json:"name"`
 	Address     string   `json:"address"`
 	Port        int      `json:"port"`
+	PanelURL    string   `json:"panel_url"` // Panel server URL
 	Tags        []string `json:"tags"`
 	Region      string   `json:"region"`
 	Weight      int      `json:"weight"`
@@ -150,6 +152,7 @@ type UpdateNodeRequest struct {
 	Name        *string   `json:"name"`
 	Address     *string   `json:"address"`
 	Port        *int      `json:"port"`
+	PanelURL    *string   `json:"panel_url"` // Panel server URL
 	Tags        *[]string `json:"tags"`
 	Region      *string   `json:"region"`
 	Weight      *int      `json:"weight"`
@@ -381,6 +384,7 @@ func (s *Service) Create(ctx context.Context, req *CreateNodeRequest) (*Node, er
 		Address:     address, // 使用标准化后的地址
 		Port:        port,
 		Token:       token,
+		PanelURL:    req.PanelURL, // 保存 Panel URL
 		Status:      repository.NodeStatusOffline,
 		Tags:        string(tagsJSON),
 		Region:      req.Region,
@@ -499,6 +503,10 @@ func (s *Service) Update(ctx context.Context, id int64, req *UpdateNodeRequest) 
 			return nil, fmt.Errorf("%w: 端口必须在 1-65535 之间", ErrInvalidNode)
 		}
 		repoNode.Port = *req.Port
+	}
+
+	if req.PanelURL != nil {
+		repoNode.PanelURL = *req.PanelURL
 	}
 
 	if req.Tags != nil {
@@ -1010,6 +1018,7 @@ func (s *Service) toNode(rn *repository.Node) *Node {
 		Name:         rn.Name,
 		Address:      rn.Address,
 		Port:         rn.Port,
+		PanelURL:     rn.PanelURL, // 添加 Panel URL 字段
 		Token:        rn.Token,
 		Status:       rn.Status,
 		Tags:         tags,
