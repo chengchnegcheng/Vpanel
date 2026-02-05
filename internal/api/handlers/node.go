@@ -2,6 +2,7 @@
 package handlers
 
 import (
+	"context"
 	"net/http"
 	"strconv"
 
@@ -397,7 +398,7 @@ func (h *NodeHandler) Create(c *gin.Context) {
 
 	h.logger.Info("Node created", logger.F("node_id", n.ID), logger.F("name", n.Name))
 
-	// 如果提供了 SSH 配置，执行自动安装
+	// 如果提供了 SSH 配置，启动异步部署
 	if req.SSH != nil && h.deployService != nil {
 		h.logger.Info("Starting auto-install", logger.F("node_id", n.ID), logger.F("host", req.SSH.Host))
 		
@@ -436,29 +437,35 @@ func (h *NodeHandler) Create(c *gin.Context) {
 			deployConfig.Port = 22
 		}
 		
-		// 执行部署
-		result, err := h.deployService.Deploy(c.Request.Context(), deployConfig)
+		// 异步执行部署，避免 HTTP 超时
+		go func() {
+			// 使用新的 context，不受 HTTP 请求超时影响
+			deployCtx := context.Background()
+			result, err := h.deployService.Deploy(deployCtx, deployConfig)
+			
+			if err != nil {
+				h.logger.Error("Auto-install failed", 
+					logger.Err(err), 
+					logger.F("node_id", n.ID),
+					logger.F("message", result.Message))
+			} else {
+				h.logger.Info("Auto-install completed successfully", 
+					logger.F("node_id", n.ID),
+					logger.F("host", req.SSH.Host))
+			}
+		}()
 		
-		// 返回结果（包含安装状态）
-		resp := gin.H{
+		// 立即返回响应，告知前端部署已开始
+		c.JSON(http.StatusCreated, gin.H{
 			"id":         n.ID,
 			"name":       n.Name,
 			"address":    n.Address,
 			"port":       n.Port,
 			"region":     n.Region,
+			"token":      n.Token,
 			"installing": true,
-			"success":    result.Success,
-			"message":    result.Message,
-			"steps":      result.Steps,
-			"logs":       result.Logs,
-		}
-		
-		if err != nil {
-			h.logger.Error("Auto-install failed", logger.Err(err), logger.F("node_id", n.ID))
-			resp["error"] = err.Error()
-		}
-		
-		c.JSON(http.StatusCreated, resp)
+			"message":    "节点创建成功，正在后台部署 Agent，请稍后查看节点状态",
+		})
 		return
 	}
 
