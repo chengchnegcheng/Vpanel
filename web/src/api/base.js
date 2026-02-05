@@ -179,14 +179,14 @@ api.interceptors.response.use(
         localStorage.removeItem('token')
         sessionStorage.removeItem('userRole')
         localStorage.removeItem('userRole')
-        router.push('/user/login?redirect=' + encodeURIComponent(currentPath))
+        router.push('/admin/login?redirect=' + encodeURIComponent(currentPath))
       } else {
-        // 其他路径 - 默认跳转到用户登录页
+        // 其他路径 - 默认清除所有令牌，跳转到管理员登录页
         sessionStorage.removeItem('token')
         localStorage.removeItem('token')
         sessionStorage.removeItem('userToken')
         localStorage.removeItem('userToken')
-        router.push('/user/login')
+        router.push('/admin/login')
       }
     }
     
