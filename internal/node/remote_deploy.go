@@ -50,78 +50,115 @@ type DeployResult struct {
 // Deploy deploys the agent to a remote server.
 func (s *RemoteDeployService) Deploy(ctx context.Context, config *DeployConfig) (*DeployResult, error) {
 	result := &DeployResult{
-		Steps: []string{},
+		Steps:   []string{},
+		Success: false,
 	}
 
 	var logBuffer bytes.Buffer
 
+	// 记录开始部署
+	logBuffer.WriteString("========================================\n")
+	logBuffer.WriteString("开始部署 V Panel Agent\n")
+	logBuffer.WriteString("========================================\n\n")
+	logBuffer.WriteString(fmt.Sprintf("目标服务器: %s:%d\n", config.Host, config.Port))
+	logBuffer.WriteString(fmt.Sprintf("用户名: %s\n", config.Username))
+	logBuffer.WriteString(fmt.Sprintf("Panel URL: %s\n\n", config.PanelURL))
+
 	// Step 1: Connect to remote server
 	result.Steps = append(result.Steps, "连接到远程服务器...")
+	logBuffer.WriteString("步骤 1/8: 连接到远程服务器...\n")
+	
 	client, err := s.connectSSH(config)
 	if err != nil {
 		result.Message = fmt.Sprintf("SSH 连接失败: %v", err)
+		result.Logs = logBuffer.String()
+		logBuffer.WriteString(fmt.Sprintf("✗ 连接失败: %v\n", err))
 		return result, err
 	}
 	defer client.Close()
 
-	logBuffer.WriteString("✓ SSH 连接成功\n")
+	logBuffer.WriteString("✓ SSH 连接成功\n\n")
 	s.logger.Info("SSH connected", logger.F("host", config.Host))
 
 	// Step 2: Check system requirements
 	result.Steps = append(result.Steps, "检查系统要求...")
+	logBuffer.WriteString("步骤 2/8: 检查系统要求...\n")
+	
 	if err := s.checkSystemRequirements(client, &logBuffer); err != nil {
 		result.Message = fmt.Sprintf("系统检查失败: %v", err)
 		result.Logs = logBuffer.String()
 		return result, err
 	}
+	logBuffer.WriteString("\n")
 
 	// Step 3: Install dependencies
 	result.Steps = append(result.Steps, "安装依赖...")
+	logBuffer.WriteString("步骤 3/8: 安装依赖...\n")
+	
 	if err := s.installDependencies(client, &logBuffer); err != nil {
 		result.Message = fmt.Sprintf("依赖安装失败: %v", err)
 		result.Logs = logBuffer.String()
 		return result, err
 	}
+	logBuffer.WriteString("\n")
 
 	// Step 4: Download and install agent
 	result.Steps = append(result.Steps, "下载并安装 Agent...")
+	logBuffer.WriteString("步骤 4/8: 下载并安装 Agent...\n")
+	
 	if err := s.installAgent(client, config, &logBuffer); err != nil {
 		result.Message = fmt.Sprintf("Agent 安装失败: %v", err)
 		result.Logs = logBuffer.String()
 		return result, err
 	}
+	logBuffer.WriteString("\n")
 
 	// Step 5: Install Xray
 	result.Steps = append(result.Steps, "安装 Xray...")
+	logBuffer.WriteString("步骤 5/8: 安装 Xray...\n")
+	
 	if err := s.installXray(client, &logBuffer); err != nil {
 		result.Message = fmt.Sprintf("Xray 安装失败: %v", err)
 		result.Logs = logBuffer.String()
 		return result, err
 	}
+	logBuffer.WriteString("\n")
 
 	// Step 6: Configure agent
 	result.Steps = append(result.Steps, "配置 Agent...")
+	logBuffer.WriteString("步骤 6/8: 配置 Agent...\n")
+	
 	if err := s.configureAgent(client, config, &logBuffer); err != nil {
 		result.Message = fmt.Sprintf("Agent 配置失败: %v", err)
 		result.Logs = logBuffer.String()
 		return result, err
 	}
+	logBuffer.WriteString("\n")
 
 	// Step 7: Start agent service
 	result.Steps = append(result.Steps, "启动 Agent 服务...")
+	logBuffer.WriteString("步骤 7/8: 启动 Agent 服务...\n")
+	
 	if err := s.startAgentService(client, &logBuffer); err != nil {
 		result.Message = fmt.Sprintf("Agent 启动失败: %v", err)
 		result.Logs = logBuffer.String()
 		return result, err
 	}
+	logBuffer.WriteString("\n")
 
 	// Step 8: Verify installation
 	result.Steps = append(result.Steps, "验证安装...")
+	logBuffer.WriteString("步骤 8/8: 验证安装...\n")
+	
 	if err := s.verifyInstallation(client, &logBuffer); err != nil {
 		result.Message = fmt.Sprintf("安装验证失败: %v", err)
 		result.Logs = logBuffer.String()
 		return result, err
 	}
+
+	logBuffer.WriteString("\n========================================\n")
+	logBuffer.WriteString("✓ Agent 部署成功！\n")
+	logBuffer.WriteString("========================================\n")
 
 	result.Success = true
 	result.Message = "Agent 部署成功"
@@ -942,72 +979,40 @@ echo ""
 
 // TestConnection tests SSH connection without deploying.
 func (s *RemoteDeployService) TestConnection(ctx context.Context, config *DeployConfig) error {
-	// 设置超时
-	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
-	defer cancel()
+	s.logger.Info("开始测试 SSH 连接",
+		logger.F("host", config.Host),
+		logger.F("port", config.Port),
+		logger.F("username", config.Username))
 	
-	// 使用 channel 来处理超时
-	type result struct {
-		err error
+	// 连接 SSH
+	client, err := s.connectSSH(config)
+	if err != nil {
+		s.logger.Error("SSH 连接失败", logger.Err(err))
+		return err
 	}
-	resultChan := make(chan result, 1)
-	
-	go func() {
-		// 在 goroutine 内部检查 context
-		select {
-		case <-ctx.Done():
-			return
-		default:
-		}
-		
-		client, err := s.connectSSH(config)
-		if err != nil {
-			select {
-			case resultChan <- result{err: err}:
-			case <-ctx.Done():
-			}
-			return
-		}
-		defer client.Close()
+	defer client.Close()
 
-		// 再次检查 context
-		select {
-		case <-ctx.Done():
-			return
-		default:
-		}
+	s.logger.Info("SSH 连接成功，测试执行命令")
 
-		// Try to execute a simple command
-		session, err := client.NewSession()
-		if err != nil {
-			select {
-			case resultChan <- result{err: fmt.Errorf("failed to create session: %w", err)}:
-			case <-ctx.Done():
-			}
-			return
-		}
-		defer session.Close()
-
-		if err := session.Run("echo 'Connection test successful'"); err != nil {
-			select {
-			case resultChan <- result{err: fmt.Errorf("failed to execute test command: %w", err)}:
-			case <-ctx.Done():
-			}
-			return
-		}
-		
-		select {
-		case resultChan <- result{err: nil}:
-		case <-ctx.Done():
-		}
-	}()
-	
-	select {
-	case res := <-resultChan:
-		return res.err
-	case <-ctx.Done():
-		return fmt.Errorf("连接测试超时")
+	// 执行简单命令测试
+	session, err := client.NewSession()
+	if err != nil {
+		s.logger.Error("创建 SSH 会话失败", logger.Err(err))
+		return fmt.Errorf("创建会话失败: %w", err)
 	}
+	defer session.Close()
+
+	// 执行测试命令
+	output, err := session.CombinedOutput("echo 'Connection test successful' && whoami && pwd")
+	if err != nil {
+		s.logger.Error("执行测试命令失败", logger.Err(err))
+		return fmt.Errorf("执行测试命令失败: %w", err)
+	}
+
+	s.logger.Info("SSH 连接测试成功",
+		logger.F("output", string(output)))
+
+	return nil
 }
 
 // readAgentBinary 读取本地 Agent 二进制文件
