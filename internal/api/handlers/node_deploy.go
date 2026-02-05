@@ -105,9 +105,11 @@ func (h *NodeDeployHandler) DeployAgent(c *gin.Context) {
 		nodeData.Token = token
 	}
 
-	// Get panel URL from config, request header, or construct from request
-	// 优先级：请求参数 > 配置文件 > 请求头 > 请求 Host
-	panelURL := req.PanelURL
+	// Get panel URL - 优先级：节点保存的 PanelURL > 请求参数 > 配置文件 > 请求头 > 请求 Host
+	panelURL := nodeData.PanelURL // 优先使用节点创建时保存的 Panel URL
+	if panelURL == "" {
+		panelURL = req.PanelURL
+	}
 	if panelURL == "" {
 		panelURL = h.config.Server.PublicURL
 	}
@@ -122,6 +124,10 @@ func (h *NodeDeployHandler) DeployAgent(c *gin.Context) {
 		}
 		panelURL = scheme + "://" + c.Request.Host
 	}
+	
+	h.logger.Info("Using Panel URL for deployment",
+		logger.F("node_id", nodeID),
+		logger.F("panel_url", panelURL))
 
 	// Prepare deploy config
 	deployConfig := &node.DeployConfig{

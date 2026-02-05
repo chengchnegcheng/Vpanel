@@ -401,8 +401,11 @@ func (h *NodeHandler) Create(c *gin.Context) {
 	if req.SSH != nil && h.deployService != nil {
 		h.logger.Info("Starting auto-install", logger.F("node_id", n.ID), logger.F("host", req.SSH.Host))
 		
-		// 获取 Panel URL - 优先使用前端传递的，其次使用请求头，最后使用请求 Host
-		panelURL := req.SSH.PanelURL
+		// 获取 Panel URL - 优先使用数据库中保存的值，其次使用前端传递的，最后使用请求 Host
+		panelURL := n.PanelURL // 使用数据库中保存的 Panel URL
+		if panelURL == "" && req.SSH.PanelURL != "" {
+			panelURL = req.SSH.PanelURL
+		}
 		if panelURL == "" {
 			panelURL = c.Request.Header.Get("X-Panel-URL")
 		}
@@ -413,6 +416,10 @@ func (h *NodeHandler) Create(c *gin.Context) {
 			}
 			panelURL = scheme + "://" + c.Request.Host
 		}
+		
+		h.logger.Info("Using Panel URL for deployment", 
+			logger.F("panel_url", panelURL),
+			logger.F("node_id", n.ID))
 		
 		// 准备部署配置
 		deployConfig := &node.DeployConfig{
