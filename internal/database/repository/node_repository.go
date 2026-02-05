@@ -137,6 +137,11 @@ type NodeRepository interface {
 	// Statistics
 	CountByStatus(ctx context.Context) (map[string]int64, error)
 	GetTotalUsers(ctx context.Context) (int64, error)
+
+	// Transaction operations
+	Transaction(ctx context.Context, fn func(txCtx context.Context) error) error
+	DeleteInTx(ctx context.Context, id int64) error
+	GetAvailableInTx(ctx context.Context) ([]*Node, error)
 }
 
 // nodeRepository implements NodeRepository.
@@ -426,4 +431,50 @@ func (r *nodeRepository) GetTotalUsers(ctx context.Context) (int64, error) {
 		return 0, errors.NewDatabaseError("failed to get total users", err)
 	}
 	return total, nil
+}
+
+// Transaction executes a function within a database transaction.
+// If the function returns an error, the transaction is rolled back.
+// Otherwise, the transaction is committed.
+func (r *nodeRepository) Transaction(ctx context.Context, fn func(txCtx context.Context) error) error {
+	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		// Create a new context with the transaction
+		txCtx := context.WithValue(ctx, "tx", tx)
+		return fn(txCtx)
+	})
+}
+
+// DeleteInTx deletes a node within a transaction.
+func (r *nodeRepository) DeleteInTx(ctx context.Context, id int64) error {
+	db := r.getDB(ctx)
+	result := db.Delete(&Node{}, id)
+	if result.Error != nil {
+		return errors.NewDatabaseError("failed to delete node in transaction", result.Error)
+	}
+	if result.RowsAffected == 0 {
+		return errors.NewNotFoundError("node", id)
+	}
+	return nil
+}
+
+// GetAvailableInTx retrieves nodes that are online and not at capacity within a transaction.
+func (r *nodeRepository) GetAvailableInTx(ctx context.Context) ([]*Node, error) {
+	db := r.getDB(ctx)
+	var nodes []*Node
+	result := db.
+		Where("status = ?", NodeStatusOnline).
+		Where("max_users = 0 OR current_users < max_users").
+		Find(&nodes)
+	if result.Error != nil {
+		return nil, errors.NewDatabaseError("failed to get available nodes in transaction", result.Error)
+	}
+	return nodes, nil
+}
+
+// getDB returns the appropriate database connection (transaction or regular).
+func (r *nodeRepository) getDB(ctx context.Context) *gorm.DB {
+	if tx, ok := ctx.Value("tx").(*gorm.DB); ok {
+		return tx
+	}
+	return r.db.WithContext(ctx)
 }

@@ -586,6 +586,11 @@ echo "✓ Xray 目录创建完成"
 
 // configureAgent creates the agent configuration file.
 func (s *RemoteDeployService) configureAgent(client *ssh.Client, config *DeployConfig, logBuffer *bytes.Buffer) error {
+	// 记录 Panel URL 用于调试
+	s.logger.Info("Configuring agent with Panel URL",
+		logger.F("panel_url", config.PanelURL),
+		logger.F("node_token", config.NodeToken))
+	
 	// Create agent config - 正确的配置结构
 	agentConfig := fmt.Sprintf(`node:
   token: "%s"

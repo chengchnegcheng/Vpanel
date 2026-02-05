@@ -50,6 +50,9 @@ type UserNodeAssignmentRepository interface {
 	// Batch operations
 	DeleteByNodeID(ctx context.Context, nodeID int64) error
 	GetUnassignedUsers(ctx context.Context, limit int) ([]int64, error)
+
+	// Transaction operations
+	ReassignInTx(ctx context.Context, userID, newNodeID int64) error
 }
 
 // userNodeAssignmentRepository implements UserNodeAssignmentRepository.
@@ -258,4 +261,41 @@ func (r *userNodeAssignmentRepository) GetUnassignedUsers(ctx context.Context, l
 		return nil, errors.NewDatabaseError("failed to get unassigned users", result.Error)
 	}
 	return userIDs, nil
+}
+
+// ReassignInTx reassigns a user to a different node within a transaction.
+func (r *userNodeAssignmentRepository) ReassignInTx(ctx context.Context, userID, newNodeID int64) error {
+	db := r.getDB(ctx)
+	now := time.Now()
+	result := db.
+		Model(&UserNodeAssignment{}).
+		Where("user_id = ?", userID).
+		Updates(map[string]interface{}{
+			"node_id":    newNodeID,
+			"updated_at": now,
+		})
+	if result.Error != nil {
+		return errors.NewDatabaseError("failed to reassign user in transaction", result.Error)
+	}
+	if result.RowsAffected == 0 {
+		// No existing assignment, create one
+		assignment := &UserNodeAssignment{
+			UserID:     userID,
+			NodeID:     newNodeID,
+			AssignedAt: now,
+			UpdatedAt:  now,
+		}
+		if err := db.Create(assignment).Error; err != nil {
+			return errors.NewDatabaseError("failed to create assignment in transaction", err)
+		}
+	}
+	return nil
+}
+
+// getDB returns the appropriate database connection (transaction or regular).
+func (r *userNodeAssignmentRepository) getDB(ctx context.Context) *gorm.DB {
+	if tx, ok := ctx.Value("tx").(*gorm.DB); ok {
+		return tx
+	}
+	return r.db.WithContext(ctx)
 }

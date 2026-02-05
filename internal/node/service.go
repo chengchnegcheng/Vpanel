@@ -647,7 +647,7 @@ func (s *Service) Update(ctx context.Context, id int64, req *UpdateNodeRequest) 
 
 
 // Delete deletes a node and reassigns its users to other healthy nodes.
-// 注意: 此操作不是原子性的，如果重分配失败，节点不会被删除
+// 此操作在事务中执行，确保原子性
 func (s *Service) Delete(ctx context.Context, id int64) error {
 	node, err := s.nodeRepo.GetByID(ctx, id)
 	if err != nil {
@@ -661,21 +661,37 @@ func (s *Service) Delete(ctx context.Context, id int64) error {
 		return err
 	}
 
-	// Reassign users to other healthy nodes
-	if len(userIDs) > 0 {
-		if err := s.reassignUsersFromNode(ctx, id, userIDs); err != nil {
-			s.logger.Error("Failed to reassign users", logger.Err(err), logger.F("node_id", id))
-			return fmt.Errorf("无法重分配用户，节点删除已取消: %w", err)
+	// 在事务中执行用户重分配和节点删除
+	err = s.nodeRepo.Transaction(ctx, func(txCtx context.Context) error {
+		// Reassign users to other healthy nodes
+		if len(userIDs) > 0 {
+			if err := s.reassignUsersFromNodeInTx(txCtx, id, userIDs); err != nil {
+				s.logger.Error("Failed to reassign users in transaction", 
+					logger.Err(err), 
+					logger.F("node_id", id))
+				return fmt.Errorf("无法重分配用户: %w", err)
+			}
 		}
+
+		// Delete the node
+		if err := s.nodeRepo.DeleteInTx(txCtx, id); err != nil {
+			s.logger.Error("Failed to delete node in transaction", 
+				logger.Err(err), 
+				logger.F("id", id))
+			return err
+		}
+
+		return nil
+	})
+
+	if err != nil {
+		s.logger.Error("Node deletion transaction failed", 
+			logger.Err(err), 
+			logger.F("node_id", id))
+		return fmt.Errorf("节点删除失败: %w", err)
 	}
 
-	// Delete the node
-	if err := s.nodeRepo.Delete(ctx, id); err != nil {
-		s.logger.Error("Failed to delete node", logger.Err(err), logger.F("id", id))
-		return err
-	}
-
-	s.logger.Info("Node deleted", 
+	s.logger.Info("Node deleted successfully", 
 		logger.F("id", id), 
 		logger.F("name", node.Name),
 		logger.F("reassigned_users", len(userIDs)))
@@ -683,9 +699,15 @@ func (s *Service) Delete(ctx context.Context, id int64) error {
 }
 
 // reassignUsersFromNode reassigns users from a node to other healthy nodes.
+// 已废弃：使用 reassignUsersFromNodeInTx 在事务中执行
 func (s *Service) reassignUsersFromNode(ctx context.Context, excludeNodeID int64, userIDs []int64) error {
+	return s.reassignUsersFromNodeInTx(ctx, excludeNodeID, userIDs)
+}
+
+// reassignUsersFromNodeInTx reassigns users from a node to other healthy nodes within a transaction.
+func (s *Service) reassignUsersFromNodeInTx(ctx context.Context, excludeNodeID int64, userIDs []int64) error {
 	// Get available healthy nodes
-	healthyNodes, err := s.nodeRepo.GetAvailable(ctx)
+	healthyNodes, err := s.nodeRepo.GetAvailableInTx(ctx)
 	if err != nil {
 		return fmt.Errorf("获取可用节点失败: %w", err)
 	}
@@ -708,22 +730,26 @@ func (s *Service) reassignUsersFromNode(ctx context.Context, excludeNodeID int64
 
 	// Distribute users across available nodes using round-robin
 	failedCount := 0
+	failedUsers := make([]int64, 0)
+	
 	for i, userID := range userIDs {
 		targetNode := availableNodes[i%len(availableNodes)]
-		if err := s.assignmentRepo.Reassign(ctx, userID, targetNode.ID); err != nil {
+		if err := s.assignmentRepo.ReassignInTx(ctx, userID, targetNode.ID); err != nil {
 			s.logger.Error("Failed to reassign user",
 				logger.Err(err),
 				logger.F("user_id", userID),
 				logger.F("target_node_id", targetNode.ID))
 			failedCount++
+			failedUsers = append(failedUsers, userID)
 		}
 	}
 
 	if failedCount > 0 {
-		return fmt.Errorf("重分配失败: %d/%d 用户分配失败", failedCount, len(userIDs))
+		return fmt.Errorf("重分配失败: %d/%d 用户分配失败 (用户ID: %v)", 
+			failedCount, len(userIDs), failedUsers)
 	}
 
-	s.logger.Info("Users reassigned successfully",
+	s.logger.Info("Users reassigned successfully in transaction",
 		logger.F("user_count", len(userIDs)),
 		logger.F("target_nodes", len(availableNodes)))
 	return nil

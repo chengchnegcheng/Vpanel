@@ -26,16 +26,19 @@ type HealthCheckConfig struct {
 	HealthyThreshold int
 	// RetentionDays is how many days to keep health check history
 	RetentionDays int
+	// MaxConcurrentChecks is the maximum number of concurrent health checks (default: 10)
+	MaxConcurrentChecks int
 }
 
 // DefaultHealthCheckConfig returns the default health check configuration.
 func DefaultHealthCheckConfig() *HealthCheckConfig {
 	return &HealthCheckConfig{
-		Interval:           30 * time.Second,
-		Timeout:            10 * time.Second,
-		UnhealthyThreshold: 3,
-		HealthyThreshold:   2,
-		RetentionDays:      7,
+		Interval:            30 * time.Second,
+		Timeout:             10 * time.Second,
+		UnhealthyThreshold:  3,
+		HealthyThreshold:    2,
+		RetentionDays:       7,
+		MaxConcurrentChecks: 10,
 	}
 }
 
@@ -186,6 +189,7 @@ func (hc *HealthChecker) runLoop() {
 }
 
 // checkAllNodes performs health checks on all registered nodes.
+// Uses a worker pool to limit concurrent checks and prevent resource exhaustion.
 func (hc *HealthChecker) checkAllNodes() {
 	nodes, err := hc.nodeRepo.List(hc.ctx, nil)
 	if err != nil {
@@ -193,14 +197,50 @@ func (hc *HealthChecker) checkAllNodes() {
 		return
 	}
 
+	if len(nodes) == 0 {
+		return
+	}
+
+	// Create a semaphore to limit concurrent checks
+	maxConcurrent := hc.config.MaxConcurrentChecks
+	if maxConcurrent <= 0 {
+		maxConcurrent = 10 // Default fallback
+	}
+	
+	sem := make(chan struct{}, maxConcurrent)
 	var wg sync.WaitGroup
+
+	hc.logger.Debug("Starting health checks",
+		logger.F("node_count", len(nodes)),
+		logger.F("max_concurrent", maxConcurrent))
+
 	for _, node := range nodes {
 		wg.Add(1)
+		
+		// Acquire semaphore
+		select {
+		case sem <- struct{}{}:
+			// Got a slot, proceed
+		case <-hc.ctx.Done():
+			// Context cancelled, stop spawning new checks
+			wg.Done()
+			continue
+		}
+
 		go func(n *repository.Node) {
 			defer wg.Done()
-			hc.checkNode(n)
+			defer func() { <-sem }() // Release semaphore
+			
+			// Check for context cancellation
+			select {
+			case <-hc.ctx.Done():
+				return
+			default:
+				hc.checkNode(n)
+			}
 		}(node)
 	}
+
 	wg.Wait()
 
 	// Cleanup old health check records
@@ -484,20 +524,51 @@ func (hc *HealthChecker) CheckNode(ctx context.Context, nodeID int64) (*HealthCh
 }
 
 // CheckAll performs manual health checks on all nodes.
+// Uses a worker pool to limit concurrent checks.
 func (hc *HealthChecker) CheckAll(ctx context.Context) ([]*HealthCheckResult, error) {
 	nodes, err := hc.nodeRepo.List(ctx, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list nodes: %w", err)
 	}
 
+	if len(nodes) == 0 {
+		return []*HealthCheckResult{}, nil
+	}
+
 	results := make([]*HealthCheckResult, 0, len(nodes))
 	var mu sync.Mutex
 	var wg sync.WaitGroup
 
+	// Create a semaphore to limit concurrent checks
+	maxConcurrent := hc.config.MaxConcurrentChecks
+	if maxConcurrent <= 0 {
+		maxConcurrent = 10
+	}
+	sem := make(chan struct{}, maxConcurrent)
+
 	for _, node := range nodes {
 		wg.Add(1)
+		
+		// Acquire semaphore
+		select {
+		case sem <- struct{}{}:
+			// Got a slot
+		case <-ctx.Done():
+			wg.Done()
+			continue
+		}
+
 		go func(n *repository.Node) {
 			defer wg.Done()
+			defer func() { <-sem }()
+			
+			// Check for context cancellation
+			select {
+			case <-ctx.Done():
+				return
+			default:
+			}
+
 			result := hc.performCheck(n)
 
 			// Save health check record
