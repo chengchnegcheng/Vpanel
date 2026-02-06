@@ -4,6 +4,7 @@ package handlers
 import (
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 
@@ -105,7 +106,7 @@ func (h *NodeDeployHandler) DeployAgent(c *gin.Context) {
 		nodeData.Token = token
 	}
 
-	// Get panel URL - 优先级：节点保存的 PanelURL > 请求参数 > 配置文件 > 请求头 > 请求 Host
+	// Get panel URL - 优先级：节点保存的 PanelURL > 请求参数 > 配置文件 > 请求头
 	panelURL := nodeData.PanelURL // 优先使用节点创建时保存的 Panel URL
 	if panelURL == "" {
 		panelURL = req.PanelURL
@@ -116,13 +117,27 @@ func (h *NodeDeployHandler) DeployAgent(c *gin.Context) {
 	if panelURL == "" {
 		panelURL = c.Request.Header.Get("X-Panel-URL")
 	}
-	if panelURL == "" {
-		// 最后才使用请求的 Host（可能是 localhost）
-		scheme := "http"
-		if c.Request.TLS != nil {
-			scheme = "https"
-		}
-		panelURL = scheme + "://" + c.Request.Host
+	
+	// 验证 Panel URL 不能是 localhost 或 127.0.0.1
+	if panelURL == "" || strings.Contains(panelURL, "localhost") || strings.Contains(panelURL, "127.0.0.1") {
+		h.logger.Error("Invalid Panel URL for remote deployment",
+			logger.F("panel_url", panelURL))
+		c.JSON(http.StatusBadRequest, gin.H{
+			"success": false,
+			"message": "Panel URL 配置错误：远程部署不能使用 localhost 或 127.0.0.1，请配置公网 IP 或域名",
+		})
+		return
+	}
+	
+	// 检查 Panel URL 是否为 localhost，这对远程部署无效
+	if strings.Contains(panelURL, "localhost") || strings.Contains(panelURL, "127.0.0.1") {
+		h.logger.Error("Panel URL is localhost, cannot deploy to remote server",
+			logger.F("panel_url", panelURL))
+		c.JSON(http.StatusBadRequest, gin.H{
+			"success": false,
+			"message": "Panel URL 不能使用 localhost 或 127.0.0.1，远程节点无法连接。请在配置文件中设置 server.public_url 为公网地址或域名",
+		})
+		return
 	}
 	
 	h.logger.Info("Using Panel URL for deployment",

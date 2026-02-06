@@ -8,9 +8,15 @@ server:
   host: "0.0.0.0"
   # Port to listen on
   port: 8080
-  # Public URL for this panel (used for agent deployment)
-  # Example: "https://panel.example.com" or "http://your-server-ip:8080"
-  public_url: "http://localhost:8080"
+  # Public URL for this panel (REQUIRED for remote agent deployment)
+  # ⚠️ 重要：远程部署 Agent 时必须配置为公网可访问的地址
+  # ❌ 错误：http://localhost:8080 或 http://127.0.0.1:8080
+  # ✅ 正确：http://YOUR_PUBLIC_IP:8080 或 https://panel.yourdomain.com
+  # 示例：
+  #   - 公网 IP: "http://123.45.67.89:8080"
+  #   - 域名: "https://panel.example.com"
+  #   - 内网 IP (仅限内网部署): "http://192.168.1.100:8080"
+  public_url: ""  # 留空将导致远程部署失败
   # Read timeout for HTTP requests
   read_timeout: "30s"
   # Write timeout for HTTP responses
