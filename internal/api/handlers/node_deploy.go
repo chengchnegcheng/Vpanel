@@ -106,7 +106,7 @@ func (h *NodeDeployHandler) DeployAgent(c *gin.Context) {
 		nodeData.Token = token
 	}
 
-	// Get panel URL - 优先级：节点保存的 PanelURL > 请求参数 > 配置文件 > 请求头
+	// Get panel URL - 优先级：节点保存的 PanelURL > 请求参数 > 配置文件 > 请求头 > 自动检测
 	panelURL := nodeData.PanelURL // 优先使用节点创建时保存的 Panel URL
 	if panelURL == "" {
 		panelURL = req.PanelURL
@@ -117,25 +117,37 @@ func (h *NodeDeployHandler) DeployAgent(c *gin.Context) {
 	if panelURL == "" {
 		panelURL = c.Request.Header.Get("X-Panel-URL")
 	}
-	
-	// 验证 Panel URL 不能是 localhost 或 127.0.0.1
-	if panelURL == "" || strings.Contains(panelURL, "localhost") || strings.Contains(panelURL, "127.0.0.1") {
-		h.logger.Error("Invalid Panel URL for remote deployment",
-			logger.F("panel_url", panelURL))
-		c.JSON(http.StatusBadRequest, gin.H{
-			"success": false,
-			"message": "Panel URL 配置错误：远程部署不能使用 localhost 或 127.0.0.1，请配置公网 IP 或域名",
-		})
-		return
+	if panelURL == "" {
+		// 自动从请求中获取（使用 X-Forwarded-Host 或 Host）
+		scheme := "http"
+		if c.Request.TLS != nil || c.Request.Header.Get("X-Forwarded-Proto") == "https" {
+			scheme = "https"
+		}
+		
+		// 优先使用 X-Forwarded-Host（反向代理场景）
+		host := c.Request.Header.Get("X-Forwarded-Host")
+		if host == "" {
+			host = c.Request.Host
+		}
+		
+		panelURL = scheme + "://" + host
+		
+		h.logger.Info("Auto-detected Panel URL from request",
+			logger.F("panel_url", panelURL),
+			logger.F("request_host", c.Request.Host),
+			logger.F("x_forwarded_host", c.Request.Header.Get("X-Forwarded-Host")),
+			logger.F("x_forwarded_proto", c.Request.Header.Get("X-Forwarded-Proto")))
 	}
 	
-	// 检查 Panel URL 是否为 localhost，这对远程部署无效
+	// 验证 Panel URL 不能是 localhost 或 127.0.0.1
 	if strings.Contains(panelURL, "localhost") || strings.Contains(panelURL, "127.0.0.1") {
-		h.logger.Error("Panel URL is localhost, cannot deploy to remote server",
-			logger.F("panel_url", panelURL))
+		h.logger.Error("Invalid Panel URL for remote deployment",
+			logger.F("panel_url", panelURL),
+			logger.F("request_host", c.Request.Host),
+			logger.F("x_forwarded_host", c.Request.Header.Get("X-Forwarded-Host")))
 		c.JSON(http.StatusBadRequest, gin.H{
 			"success": false,
-			"message": "Panel URL 不能使用 localhost 或 127.0.0.1，远程节点无法连接。请在配置文件中设置 server.public_url 为公网地址或域名",
+			"message": "Panel URL 配置错误：远程部署不能使用 localhost 或 127.0.0.1，请配置 server.public_url 为公网 IP 或域名",
 		})
 		return
 	}
