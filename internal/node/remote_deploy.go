@@ -39,18 +39,24 @@ type DeployConfig struct {
 	AgentBinaryPath string `json:"agent_binary_path,omitempty"` // 本地 Agent 二进制文件路径
 }
 
+// DeployStep represents a single deployment step with status.
+type DeployStep struct {
+	Name   string `json:"name"`   // 步骤名称
+	Status string `json:"status"` // pending, running, success, failed
+}
+
 // DeployResult contains the result of a deployment.
 type DeployResult struct {
-	Success bool     `json:"success"`
-	Message string   `json:"message"`
-	Steps   []string `json:"steps"`
-	Logs    string   `json:"logs"`
+	Success bool         `json:"success"`
+	Message string       `json:"message"`
+	Steps   []DeployStep `json:"steps"`
+	Logs    string       `json:"logs"`
 }
 
 // Deploy deploys the agent to a remote server.
 func (s *RemoteDeployService) Deploy(ctx context.Context, config *DeployConfig) (*DeployResult, error) {
 	result := &DeployResult{
-		Steps:   []string{},
+		Steps:   []DeployStep{},
 		Success: false,
 	}
 
@@ -64,12 +70,33 @@ func (s *RemoteDeployService) Deploy(ctx context.Context, config *DeployConfig) 
 	logBuffer.WriteString(fmt.Sprintf("用户名: %s\n", config.Username))
 	logBuffer.WriteString(fmt.Sprintf("Panel URL: %s\n\n", config.PanelURL))
 
+	// 辅助函数：添加步骤并标记为运行中
+	addStep := func(name string) int {
+		result.Steps = append(result.Steps, DeployStep{Name: name, Status: "running"})
+		return len(result.Steps) - 1
+	}
+
+	// 辅助函数：标记步骤完成
+	markSuccess := func(index int) {
+		if index >= 0 && index < len(result.Steps) {
+			result.Steps[index].Status = "success"
+		}
+	}
+
+	// 辅助函数：标记步骤失败
+	markFailed := func(index int) {
+		if index >= 0 && index < len(result.Steps) {
+			result.Steps[index].Status = "failed"
+		}
+	}
+
 	// Step 1: Connect to remote server
-	result.Steps = append(result.Steps, "连接到远程服务器...")
+	stepIdx := addStep("连接到远程服务器")
 	logBuffer.WriteString("步骤 1/8: 连接到远程服务器...\n")
 	
 	client, err := s.connectSSH(config)
 	if err != nil {
+		markFailed(stepIdx)
 		result.Message = fmt.Sprintf("SSH 连接失败: %v", err)
 		result.Logs = logBuffer.String()
 		logBuffer.WriteString(fmt.Sprintf("✗ 连接失败: %v\n", err))
@@ -77,84 +104,99 @@ func (s *RemoteDeployService) Deploy(ctx context.Context, config *DeployConfig) 
 	}
 	defer client.Close()
 
+	markSuccess(stepIdx)
 	logBuffer.WriteString("✓ SSH 连接成功\n\n")
 	s.logger.Info("SSH connected", logger.F("host", config.Host))
 
 	// Step 2: Check system requirements
-	result.Steps = append(result.Steps, "检查系统要求...")
+	stepIdx = addStep("检查系统要求")
 	logBuffer.WriteString("步骤 2/8: 检查系统要求...\n")
 	
 	if err := s.checkSystemRequirements(client, &logBuffer); err != nil {
+		markFailed(stepIdx)
 		result.Message = fmt.Sprintf("系统检查失败: %v", err)
 		result.Logs = logBuffer.String()
 		return result, err
 	}
+	markSuccess(stepIdx)
 	logBuffer.WriteString("\n")
 
 	// Step 3: Install dependencies
-	result.Steps = append(result.Steps, "安装依赖...")
+	stepIdx = addStep("安装依赖")
 	logBuffer.WriteString("步骤 3/8: 安装依赖...\n")
 	
 	if err := s.installDependencies(client, &logBuffer); err != nil {
+		markFailed(stepIdx)
 		result.Message = fmt.Sprintf("依赖安装失败: %v", err)
 		result.Logs = logBuffer.String()
 		return result, err
 	}
+	markSuccess(stepIdx)
 	logBuffer.WriteString("\n")
 
 	// Step 4: Download and install agent
-	result.Steps = append(result.Steps, "下载并安装 Agent...")
+	stepIdx = addStep("下载并安装 Agent")
 	logBuffer.WriteString("步骤 4/8: 下载并安装 Agent...\n")
 	
 	if err := s.installAgent(client, config, &logBuffer); err != nil {
+		markFailed(stepIdx)
 		result.Message = fmt.Sprintf("Agent 安装失败: %v", err)
 		result.Logs = logBuffer.String()
 		return result, err
 	}
+	markSuccess(stepIdx)
 	logBuffer.WriteString("\n")
 
 	// Step 5: Install Xray
-	result.Steps = append(result.Steps, "安装 Xray...")
+	stepIdx = addStep("安装 Xray")
 	logBuffer.WriteString("步骤 5/8: 安装 Xray...\n")
 	
 	if err := s.installXray(client, &logBuffer); err != nil {
+		markFailed(stepIdx)
 		result.Message = fmt.Sprintf("Xray 安装失败: %v", err)
 		result.Logs = logBuffer.String()
 		return result, err
 	}
+	markSuccess(stepIdx)
 	logBuffer.WriteString("\n")
 
 	// Step 6: Configure agent
-	result.Steps = append(result.Steps, "配置 Agent...")
+	stepIdx = addStep("配置 Agent")
 	logBuffer.WriteString("步骤 6/8: 配置 Agent...\n")
 	
 	if err := s.configureAgent(client, config, &logBuffer); err != nil {
+		markFailed(stepIdx)
 		result.Message = fmt.Sprintf("Agent 配置失败: %v", err)
 		result.Logs = logBuffer.String()
 		return result, err
 	}
+	markSuccess(stepIdx)
 	logBuffer.WriteString("\n")
 
 	// Step 7: Start agent service
-	result.Steps = append(result.Steps, "启动 Agent 服务...")
+	stepIdx = addStep("启动 Agent 服务")
 	logBuffer.WriteString("步骤 7/8: 启动 Agent 服务...\n")
 	
 	if err := s.startAgentService(client, &logBuffer); err != nil {
+		markFailed(stepIdx)
 		result.Message = fmt.Sprintf("Agent 启动失败: %v", err)
 		result.Logs = logBuffer.String()
 		return result, err
 	}
+	markSuccess(stepIdx)
 	logBuffer.WriteString("\n")
 
 	// Step 8: Verify installation
-	result.Steps = append(result.Steps, "验证安装...")
+	stepIdx = addStep("验证安装")
 	logBuffer.WriteString("步骤 8/8: 验证安装...\n")
 	
 	if err := s.verifyInstallation(client, &logBuffer); err != nil {
+		markFailed(stepIdx)
 		result.Message = fmt.Sprintf("安装验证失败: %v", err)
 		result.Logs = logBuffer.String()
 		return result, err
 	}
+	markSuccess(stepIdx)
 
 	logBuffer.WriteString("\n========================================\n")
 	logBuffer.WriteString("✓ Agent 部署成功！\n")

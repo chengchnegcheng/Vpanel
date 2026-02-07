@@ -369,8 +369,13 @@
     <!-- 部署进度对话框 -->
     <el-dialog v-model="deployProgressDialogVisible" title="部署进度" width="800px" :close-on-click-modal="false" :close-on-press-escape="false">
       <div class="deploy-progress">
-        <el-steps :active="deployStepActive" finish-status="success" align-center>
-          <el-step v-for="(step, index) in deploySteps" :key="index" :title="step" />
+        <el-steps :active="deployStepActive" finish-status="success" process-status="finish" align-center>
+          <el-step 
+            v-for="(step, index) in deploySteps" 
+            :key="index" 
+            :title="step.name || step" 
+            :status="getStepStatus(step, index)"
+          />
         </el-steps>
 
         <div v-if="deployLogs" class="deploy-logs">
@@ -693,6 +698,28 @@ const getLatencyClass = (latency) => {
   return 'latency-bad'
 }
 
+// 获取步骤状态（用于 el-steps 组件）
+const getStepStatus = (step, index) => {
+  // 如果 step 是对象（新格式），直接返回状态
+  if (typeof step === 'object' && step.status) {
+    const statusMap = {
+      'success': 'finish',
+      'failed': 'error',
+      'running': 'process',
+      'pending': 'wait'
+    }
+    return statusMap[step.status] || 'wait'
+  }
+  
+  // 兼容旧格式（纯字符串）
+  if (index < deployStepActive.value) {
+    return 'finish'
+  } else if (index === deployStepActive.value) {
+    return deployResult.value?.success === false ? 'error' : 'process'
+  }
+  return 'wait'
+}
+
 const formatTime = (time) => {
   if (!time) return '-'
   return new Date(time).toLocaleString('zh-CN')
@@ -834,7 +861,14 @@ const submitForm = async () => {
         // 如果有安装结果
         if (result.install_result) {
           deploySteps.value = result.install_result.steps || []
-          deployStepActive.value = result.install_result.success ? deploySteps.value.length : deployStepActive.value
+          // 计算激活的步骤索引（找到最后一个非 pending 的步骤）
+          deployStepActive.value = deploySteps.value.findIndex(s => 
+            (typeof s === 'object' && s.status === 'running') || 
+            (typeof s === 'object' && s.status === 'failed')
+          )
+          if (deployStepActive.value === -1) {
+            deployStepActive.value = result.install_result.success ? deploySteps.value.length : 0
+          }
           deployLogs.value = result.install_result.logs || ''
           deployResult.value = result.install_result
 
@@ -852,7 +886,13 @@ const submitForm = async () => {
       } catch (e) {
         const errorData = e.response?.data || {}
         deploySteps.value = errorData.steps || []
-        deployStepActive.value = deploySteps.value.length
+        // 计算激活的步骤索引
+        deployStepActive.value = deploySteps.value.findIndex(s => 
+          (typeof s === 'object' && s.status === 'failed')
+        )
+        if (deployStepActive.value === -1) {
+          deployStepActive.value = Math.max(0, deploySteps.value.length - 1)
+        }
         deployLogs.value = errorData.logs || e.message || '创建失败'
         deployResult.value = {
           success: false,
@@ -1022,7 +1062,14 @@ const submitDeploy = async () => {
       const result = await nodesApi.deployAgent(currentNode.value.id, deployData)
       
       deploySteps.value = result.steps || []
-      deployStepActive.value = result.success ? deploySteps.value.length : deployStepActive.value
+      // 计算激活的步骤索引（找到最后一个非 pending 的步骤）
+      deployStepActive.value = deploySteps.value.findIndex(s => 
+        (typeof s === 'object' && s.status === 'running') || 
+        (typeof s === 'object' && s.status === 'failed')
+      )
+      if (deployStepActive.value === -1) {
+        deployStepActive.value = result.success ? deploySteps.value.length : 0
+      }
       deployLogs.value = result.logs || ''
       deployResult.value = result
 
@@ -1036,7 +1083,13 @@ const submitDeploy = async () => {
       // 处理部署 API 错误
       const errorData = deployError.response?.data || {}
       deploySteps.value = errorData.steps || []
-      deployStepActive.value = deploySteps.value.length
+      // 计算激活的步骤索引
+      deployStepActive.value = deploySteps.value.findIndex(s => 
+        (typeof s === 'object' && s.status === 'failed')
+      )
+      if (deployStepActive.value === -1) {
+        deployStepActive.value = Math.max(0, deploySteps.value.length - 1)
+      }
       deployLogs.value = errorData.logs || deployError.message || '部署失败'
       deployResult.value = {
         success: false,

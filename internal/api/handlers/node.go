@@ -2,7 +2,6 @@
 package handlers
 
 import (
-	"context"
 	"net/http"
 	"strconv"
 
@@ -437,34 +436,48 @@ func (h *NodeHandler) Create(c *gin.Context) {
 			deployConfig.Port = 22
 		}
 		
-		// 异步执行部署，避免 HTTP 超时
-		go func() {
-			// 使用新的 context，不受 HTTP 请求超时影响
-			deployCtx := context.Background()
-			result, err := h.deployService.Deploy(deployCtx, deployConfig)
-			
-			if err != nil {
-				h.logger.Error("Auto-install failed", 
-					logger.Err(err), 
-					logger.F("node_id", n.ID),
-					logger.F("message", result.Message))
-			} else {
-				h.logger.Info("Auto-install completed successfully", 
-					logger.F("node_id", n.ID),
-					logger.F("host", req.SSH.Host))
-			}
-		}()
+		// 同步执行部署（前端需要等待结果）
+		h.logger.Info("Deploying agent synchronously", logger.F("node_id", n.ID))
+		result, err := h.deployService.Deploy(c.Request.Context(), deployConfig)
 		
-		// 立即返回响应，告知前端部署已开始
+		// 构建响应（包含部署结果）
+		resp := &NodeWithTokenResponse{
+			NodeResponse: *toNodeResponse(n),
+			Token:        n.Token,
+		}
+		
+		if err != nil {
+			h.logger.Error("Auto-install failed", 
+				logger.Err(err), 
+				logger.F("node_id", n.ID),
+				logger.F("message", result.Message))
+			
+			// 返回节点信息和安装失败结果
+			c.JSON(http.StatusCreated, gin.H{
+				"id":             resp.ID,
+				"name":           resp.Name,
+				"address":        resp.Address,
+				"port":           resp.Port,
+				"region":         resp.Region,
+				"token":          resp.Token,
+				"install_result": result,
+			})
+			return
+		}
+		
+		h.logger.Info("Auto-install completed successfully", 
+			logger.F("node_id", n.ID),
+			logger.F("host", req.SSH.Host))
+		
+		// 返回节点信息和安装成功结果
 		c.JSON(http.StatusCreated, gin.H{
-			"id":         n.ID,
-			"name":       n.Name,
-			"address":    n.Address,
-			"port":       n.Port,
-			"region":     n.Region,
-			"token":      n.Token,
-			"installing": true,
-			"message":    "节点创建成功，正在后台部署 Agent，请稍后查看节点状态",
+			"id":             resp.ID,
+			"name":           resp.Name,
+			"address":        resp.Address,
+			"port":           resp.Port,
+			"region":         resp.Region,
+			"token":          resp.Token,
+			"install_result": result,
 		})
 		return
 	}
