@@ -369,8 +369,8 @@
     <!-- 部署进度对话框 -->
     <el-dialog v-model="deployProgressDialogVisible" title="部署进度" width="800px" :close-on-click-modal="false" :close-on-press-escape="false">
       <div class="deploy-progress">
-        <!-- 加载状态 -->
-        <div v-if="!deployResult && deploySteps.length === 0" class="deploy-loading">
+        <!-- 加载状态 - 只在没有步骤且没有结果时显示 -->
+        <div v-if="!deployResult && deploySteps.length === 0 && !deployLogs" class="deploy-loading">
           <el-icon class="is-loading" :size="40"><Loading /></el-icon>
           <p style="margin-top: 16px; color: #909399;">正在部署 Agent，请稍候...</p>
         </div>
@@ -385,6 +385,7 @@
           />
         </el-steps>
 
+        <!-- 日志显示 -->
         <div v-if="deployLogs" class="deploy-logs">
           <div class="logs-header">
             <span>部署日志</span>
@@ -396,6 +397,7 @@
           <pre class="logs-content">{{ deployLogs }}</pre>
         </div>
 
+        <!-- 结果提示 -->
         <el-alert 
           v-if="deployResult"
           :type="deployResult.success ? 'success' : 'error'"
@@ -407,7 +409,7 @@
       </div>
 
       <template #footer>
-        <el-button v-if="deployResult" @click="closeDeployProgress">关闭</el-button>
+        <el-button v-if="deployResult || deployLogs" @click="closeDeployProgress">关闭</el-button>
       </template>
     </el-dialog>
 
@@ -897,21 +899,49 @@ const submitForm = async () => {
         }
       } catch (e) {
         console.error('创建节点错误:', e) // 调试日志
-        const errorData = e.response?.data || {}
-        deploySteps.value = errorData.steps || []
+        
+        // 处理不同类型的错误
+        let errorMessage = '创建失败'
+        let errorLogs = ''
+        let errorSteps = []
+        
+        // 尝试从多个位置获取错误详情
+        if (e.response?.data) {
+          // 格式化错误对象中保留的原始响应数据
+          const errorData = e.response.data
+          errorSteps = errorData.steps || []
+          errorLogs = errorData.logs || ''
+          errorMessage = errorData.message || '创建失败'
+        } else if (e.details?.steps || e.details?.logs) {
+          // 从 details 字段获取
+          errorSteps = e.details.steps || []
+          errorLogs = e.details.logs || ''
+          errorMessage = e.message || '创建失败'
+        } else if (e.message) {
+          // 网络错误或其他错误
+          errorMessage = e.message
+          errorLogs = `错误详情:\n${e.message}\n\n错误ID: ${e.errorId || 'N/A'}`
+        }
+        
+        deploySteps.value = errorSteps
         // 计算激活的步骤索引
         deployStepActive.value = deploySteps.value.findIndex(s => 
           (typeof s === 'object' && s.status === 'failed')
         )
-        if (deployStepActive.value === -1) {
+        if (deployStepActive.value === -1 && deploySteps.value.length > 0) {
           deployStepActive.value = Math.max(0, deploySteps.value.length - 1)
         }
-        deployLogs.value = errorData.logs || e.message || '创建失败'
+        
+        deployLogs.value = errorLogs
         deployResult.value = {
           success: false,
-          message: errorData.message || e.message || '创建失败'
+          message: errorMessage
         }
-        ElMessage.error(deployResult.value.message)
+        
+        // 如果有详细日志，不重复显示通用错误消息
+        if (!errorLogs && !e.errorId) {
+          ElMessage.error(errorMessage)
+        }
       }
     } else {
       // 手动安装模式 - 需要用户提供地址和端口
@@ -1094,21 +1124,44 @@ const submitDeploy = async () => {
       }
     } catch (deployError) {
       // 处理部署 API 错误
-      const errorData = deployError.response?.data || {}
-      deploySteps.value = errorData.steps || []
+      let errorMessage = 'Agent 部署失败'
+      let errorLogs = ''
+      let errorSteps = []
+      
+      // 尝试从多个位置获取错误详情
+      if (deployError.response?.data) {
+        const errorData = deployError.response.data
+        errorSteps = errorData.steps || []
+        errorLogs = errorData.logs || ''
+        errorMessage = errorData.message || 'Agent 部署失败'
+      } else if (deployError.details?.steps || deployError.details?.logs) {
+        errorSteps = deployError.details.steps || []
+        errorLogs = deployError.details.logs || ''
+        errorMessage = deployError.message || 'Agent 部署失败'
+      } else if (deployError.message) {
+        errorMessage = deployError.message
+        errorLogs = `错误详情:\n${deployError.message}\n\n错误ID: ${deployError.errorId || 'N/A'}`
+      }
+      
+      deploySteps.value = errorSteps
       // 计算激活的步骤索引
       deployStepActive.value = deploySteps.value.findIndex(s => 
         (typeof s === 'object' && s.status === 'failed')
       )
-      if (deployStepActive.value === -1) {
+      if (deployStepActive.value === -1 && deploySteps.value.length > 0) {
         deployStepActive.value = Math.max(0, deploySteps.value.length - 1)
       }
-      deployLogs.value = errorData.logs || deployError.message || '部署失败'
+      
+      deployLogs.value = errorLogs
       deployResult.value = {
         success: false,
-        message: errorData.message || deployError.message || '部署失败'
+        message: errorMessage
       }
-      ElMessage.error(deployResult.value.message)
+      
+      // 如果有详细日志，不重复显示通用错误消息
+      if (!errorLogs && !deployError.errorId) {
+        ElMessage.error(errorMessage)
+      }
     }
   } catch (e) {
     ElMessage.error(e.message || '部署失败')

@@ -162,6 +162,13 @@ api.interceptors.response.use(
     
     const formattedError = formatApiError(error)
     
+    // 保留原始响应数据（用于获取详细错误信息，如部署日志）
+    if (error.response?.data) {
+      formattedError.response = {
+        data: error.response.data
+      }
+    }
+    
     // 处理特定状态码
     if (error.response?.status === 401) {
       // 根据当前路径决定清除哪个令牌和跳转到哪个登录页
