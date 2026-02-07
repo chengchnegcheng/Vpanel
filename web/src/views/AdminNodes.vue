@@ -369,7 +369,14 @@
     <!-- 部署进度对话框 -->
     <el-dialog v-model="deployProgressDialogVisible" title="部署进度" width="800px" :close-on-click-modal="false" :close-on-press-escape="false">
       <div class="deploy-progress">
-        <el-steps :active="deployStepActive" finish-status="success" process-status="finish" align-center>
+        <!-- 加载状态 -->
+        <div v-if="!deployResult && deploySteps.length === 0" class="deploy-loading">
+          <el-icon class="is-loading" :size="40"><Loading /></el-icon>
+          <p style="margin-top: 16px; color: #909399;">正在部署 Agent，请稍候...</p>
+        </div>
+
+        <!-- 步骤显示 -->
+        <el-steps v-if="deploySteps.length > 0" :active="deployStepActive" finish-status="success" process-status="finish" align-center>
           <el-step 
             v-for="(step, index) in deploySteps" 
             :key="index" 
@@ -858,9 +865,12 @@ const submitForm = async () => {
       try {
         const result = await nodeStore.createNode(data)
         
+        console.log('创建节点响应:', result) // 调试日志
+        
         // 如果有安装结果
         if (result.install_result) {
           deploySteps.value = result.install_result.steps || []
+          console.log('部署步骤:', deploySteps.value) // 调试日志
           // 计算激活的步骤索引（找到最后一个非 pending 的步骤）
           deployStepActive.value = deploySteps.value.findIndex(s => 
             (typeof s === 'object' && s.status === 'running') || 
@@ -869,6 +879,7 @@ const submitForm = async () => {
           if (deployStepActive.value === -1) {
             deployStepActive.value = result.install_result.success ? deploySteps.value.length : 0
           }
+          console.log('激活步骤索引:', deployStepActive.value) // 调试日志
           deployLogs.value = result.install_result.logs || ''
           deployResult.value = result.install_result
 
@@ -879,11 +890,13 @@ const submitForm = async () => {
             ElMessage.error(result.install_result.message || '安装失败')
           }
         } else {
+          console.log('没有 install_result 字段') // 调试日志
           ElMessage.success('节点创建成功')
           deployProgressDialogVisible.value = false
           fetchNodes()
         }
       } catch (e) {
+        console.error('创建节点错误:', e) // 调试日志
         const errorData = e.response?.data || {}
         deploySteps.value = errorData.steps || []
         // 计算激活的步骤索引
@@ -1347,6 +1360,15 @@ onMounted(fetchNodes)
 
 .deploy-progress {
   padding: 20px 0;
+}
+
+.deploy-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 60px 20px;
+  color: var(--el-text-color-secondary);
 }
 
 .deploy-logs {
