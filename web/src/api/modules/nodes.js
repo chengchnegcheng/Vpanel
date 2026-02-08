@@ -38,7 +38,9 @@ export const nodesApi = {
    * @param {string[]} data.ip_whitelist - IP 白名单
    * @returns {Promise<Object>} 创建的节点 (包含 token)
    */
-  create: (data) => api.post('/admin/nodes', data),
+  create: (data) => api.post('/admin/nodes', data, { 
+    timeout: 300000 // 5 分钟超时（用于自动部署）
+  }),
 
   /**
    * 更新节点
@@ -164,7 +166,9 @@ export const nodesApi = {
    * @param {string} data.private_key - SSH 私钥 (可选)
    * @returns {Promise<Object>} 部署结果
    */
-  deployAgent: (id, data) => api.post(`/admin/nodes/${id}/deploy`, data),
+  deployAgent: (id, data) => api.post(`/admin/nodes/${id}/deploy`, data, {
+    timeout: 300000 // 5 分钟超时（上传和安装需要时间）
+  }),
 
   /**
    * 获取部署脚本

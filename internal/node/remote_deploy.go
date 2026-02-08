@@ -502,17 +502,15 @@ exit 1
 		}
 	}
 
-	// 下载失败或未配置公网地址，使用上传方式
-	logBuffer.WriteString("使用上传方式安装 Agent...\n")
+	// 下载失败或未配置公网地址，使用 SCP 上传方式
+	logBuffer.WriteString("使用 SCP 上传方式安装 Agent...\n")
 	
-	// 通过 base64 编码上传 Agent 二进制文件
-	// 这里需要读取本地编译好的 Agent 文件
+	// 读取本地 Agent 文件
 	agentPath := config.AgentBinaryPath
 	if agentPath == "" {
-		agentPath = "./bin/vpanel-agent" // 默认路径
+		agentPath = "./bin/vpanel-agent"
 	}
 
-	// 读取 Agent 文件内容
 	agentData, err := s.readAgentBinary(agentPath)
 	if err != nil {
 		logBuffer.WriteString(fmt.Sprintf("✗ 无法读取 Agent 文件: %v\n", err))
@@ -520,44 +518,16 @@ exit 1
 		return fmt.Errorf("无法读取 Agent 文件: %w", err)
 	}
 
-	// 使用 base64 编码传输
 	logBuffer.WriteString(fmt.Sprintf("正在上传 Agent (大小: %d bytes)...\n", len(agentData)))
 	
-	// 分块上传（每次 50KB）
-	chunkSize := 50 * 1024
-	totalChunks := (len(agentData) + chunkSize - 1) / chunkSize
-	
-	// 先清空目标文件
-	if err := s.executeCommand(client, "rm -f /usr/local/bin/vpanel-agent.b64", logBuffer); err != nil {
-		return fmt.Errorf("清空临时文件失败: %w", err)
+	// 使用 SCP 协议上传文件
+	if err := s.uploadFileSCP(client, agentData, "/usr/local/bin/vpanel-agent", logBuffer); err != nil {
+		return fmt.Errorf("Agent 上传失败: %w", err)
 	}
 
-	for i := 0; i < totalChunks; i++ {
-		start := i * chunkSize
-		end := start + chunkSize
-		if end > len(agentData) {
-			end = len(agentData)
-		}
-		
-		chunk := agentData[start:end]
-		encoded := base64Encode(chunk)
-		
-		uploadScript := fmt.Sprintf("echo '%s' >> /usr/local/bin/vpanel-agent.b64", encoded)
-		if err := s.executeCommand(client, uploadScript, logBuffer); err != nil {
-			return fmt.Errorf("上传分块 %d/%d 失败: %w", i+1, totalChunks, err)
-		}
-		
-		if (i+1)%10 == 0 || i == totalChunks-1 {
-			logBuffer.WriteString(fmt.Sprintf("上传进度: %d/%d\n", i+1, totalChunks))
-		}
-	}
-
-	// 解码并安装
-	decodeScript := `
-echo "正在解码 Agent..."
-base64 -d /usr/local/bin/vpanel-agent.b64 > /usr/local/bin/vpanel-agent
+	// 设置执行权限并验证
+	verifyScript := `
 chmod +x /usr/local/bin/vpanel-agent
-rm -f /usr/local/bin/vpanel-agent.b64
 
 # 验证文件
 FILE_SIZE=$(stat -c%s /usr/local/bin/vpanel-agent 2>/dev/null || stat -f%z /usr/local/bin/vpanel-agent 2>/dev/null || echo "0")
@@ -571,11 +541,11 @@ fi
 echo "✓ Agent 上传成功"
 `
 
-	if err := s.executeCommand(client, decodeScript, logBuffer); err != nil {
+	if err := s.executeCommand(client, verifyScript, logBuffer); err != nil {
 		return err
 	}
 
-	logBuffer.WriteString("✓ Agent 安装完成（通过上传）\n")
+	logBuffer.WriteString("✓ Agent 安装完成（通过 SCP 上传）\n")
 	return nil
 }
 
@@ -665,41 +635,69 @@ echo "✓ Xray 目录创建完成"
 
 // configureAgent creates the agent configuration file.
 func (s *RemoteDeployService) configureAgent(client *ssh.Client, config *DeployConfig, logBuffer *bytes.Buffer) error {
-	// 记录 Panel URL 用于调试
-	s.logger.Info("Configuring agent with Panel URL",
-		logger.F("panel_url", config.PanelURL),
-		logger.F("node_token", config.NodeToken))
+	// 验证 token 不为空
+	if config.NodeToken == "" {
+		return fmt.Errorf("节点 token 为空，无法配置 Agent")
+	}
 	
-	// 先停止旧的 Agent 服务和进程（如果存在）
+	// 记录配置信息用于调试
+	s.logger.Info("Configuring agent",
+		logger.F("panel_url", config.PanelURL),
+		logger.F("node_token_length", len(config.NodeToken)),
+		logger.F("node_token_prefix", config.NodeToken[:min(16, len(config.NodeToken))]),
+		logger.F("node_token_suffix", config.NodeToken[max(0, len(config.NodeToken)-8):]))
+	
+	logBuffer.WriteString(fmt.Sprintf("配置 Token 长度: %d\n", len(config.NodeToken)))
+	logBuffer.WriteString(fmt.Sprintf("配置 Token 前缀: %s\n", config.NodeToken[:min(16, len(config.NodeToken))]))
+	logBuffer.WriteString(fmt.Sprintf("配置 Token 后缀: %s\n\n", config.NodeToken[max(0, len(config.NodeToken)-8):]))
+	
+	// 第一步：彻底停止所有旧的 Agent 服务和进程
 	stopScript := `
+echo "=== 清理旧的 Agent 进程 ==="
+
 # 停止 systemd 服务
 if systemctl is-active --quiet vpanel-agent 2>/dev/null; then
-    echo "停止旧的 Agent 服务..."
+    echo "停止 systemd 服务..."
     systemctl stop vpanel-agent
     systemctl disable vpanel-agent 2>/dev/null || true
     sleep 2
 fi
 
-# 强制杀死所有 vpanel-agent 进程（确保没有残留进程）
+# 强制杀死所有 vpanel-agent 进程（多次尝试确保清理干净）
+for i in {1..3}; do
+    if pgrep -x vpanel-agent >/dev/null 2>&1; then
+        echo "第 $i 次尝试：发现残留的 Agent 进程，强制终止..."
+        pkill -9 vpanel-agent 2>/dev/null || true
+        sleep 1
+    else
+        echo "✓ 所有旧进程已清理"
+        break
+    fi
+done
+
+# 最终验证
 if pgrep -x vpanel-agent >/dev/null 2>&1; then
-    echo "发现残留的 Agent 进程，强制终止..."
-    pkill -9 vpanel-agent 2>/dev/null || true
+    echo "⚠ 警告：仍有 Agent 进程在运行，尝试使用 killall"
+    killall -9 vpanel-agent 2>/dev/null || true
     sleep 1
 fi
 
-# 验证进程已清理
-if pgrep -x vpanel-agent >/dev/null 2>&1; then
-    echo "⚠ 警告：仍有 Agent 进程在运行"
-else
-    echo "✓ 所有旧进程已清理"
+# 删除旧的配置文件（避免读取旧配置）
+if [ -f /etc/vpanel/agent.yaml ]; then
+    echo "备份并删除旧配置文件..."
+    cp /etc/vpanel/agent.yaml /etc/vpanel/agent.yaml.backup.$(date +%s) 2>/dev/null || true
+    rm -f /etc/vpanel/agent.yaml
 fi
+
+echo "✓ 清理完成"
 `
 	if err := s.executeCommand(client, stopScript, logBuffer); err != nil {
-		// 忽略停止失败的错误，可能是首次安装
-		logBuffer.WriteString("⚠ 停止旧服务失败（可能是首次安装）\n")
+		// 记录错误但继续执行
+		s.logger.Warn("停止旧服务时出现错误（可能是首次安装）", logger.Err(err))
+		logBuffer.WriteString("⚠ 停止旧服务时出现错误（可能是首次安装）\n")
 	}
 	
-	// Create agent config - 正确的配置结构
+	// 第二步：创建新的 Agent 配置
 	agentConfig := fmt.Sprintf(`node:
   token: "%s"
 
@@ -714,33 +712,39 @@ health:
   port: 18443
 `, config.NodeToken, config.PanelURL)
 
-	// 使用 base64 编码配置内容，避免 heredoc 格式问题
+	// 使用 base64 编码配置内容，避免特殊字符问题
 	encoded := base64Encode([]byte(agentConfig))
 	
-	// Write config file using base64- 强制覆盖旧配置
+	// 第三步：写入新配置文件
 	script := fmt.Sprintf(`
-# 备份旧配置（如果存在）
-if [ -f /etc/vpanel/agent.yaml ]; then
-    cp /etc/vpanel/agent.yaml /etc/vpanel/agent.yaml.backup.$(date +%%s) 2>/dev/null || true
-    echo "已备份旧配置"
-fi
+echo "=== 写入新的 Agent 配置 ==="
 
-# 写入新配置
+# 确保目录存在
+mkdir -p /etc/vpanel
+
+# 写入新配置（强制覆盖）
 echo '%s' | base64 -d > /etc/vpanel/agent.yaml
 chmod 644 /etc/vpanel/agent.yaml
-echo "✓ 配置文件已创建/更新"
-echo "配置内容："
+
+echo "✓ 配置文件已创建"
+echo ""
+echo "=== 配置内容验证 ==="
 cat /etc/vpanel/agent.yaml
 echo ""
-echo "Token 验证："
-grep "token:" /etc/vpanel/agent.yaml | head -1
+echo "=== Token 验证 ==="
+TOKEN_LINE=$(grep "token:" /etc/vpanel/agent.yaml | head -1)
+echo "$TOKEN_LINE"
+TOKEN_VALUE=$(echo "$TOKEN_LINE" | sed 's/.*token: *"\(.*\)".*/\1/')
+echo "Token 长度: ${#TOKEN_VALUE}"
+echo "Token 前缀: ${TOKEN_VALUE:0:16}"
+echo "Token 后缀: ${TOKEN_VALUE: -8}"
 `, encoded)
 
 	if err := s.executeCommand(client, script, logBuffer); err != nil {
-		return err
+		return fmt.Errorf("写入配置文件失败: %w", err)
 	}
 
-	// Create systemd service
+	// 第四步：创建 systemd 服务文件
 	serviceFile := `[Unit]
 Description=V Panel Agent
 After=network.target
@@ -756,14 +760,17 @@ RestartSec=5s
 WantedBy=multi-user.target
 `
 
-	script = fmt.Sprintf(`cat > /etc/systemd/system/vpanel-agent.service <<'EOF'
+	script = fmt.Sprintf(`
+echo "=== 创建 systemd 服务 ==="
+cat > /etc/systemd/system/vpanel-agent.service <<'EOF'
 %s
 EOF
 systemctl daemon-reload
+echo "✓ systemd 服务文件已创建"
 `, serviceFile)
 
 	if err := s.executeCommand(client, script, logBuffer); err != nil {
-		return err
+		return fmt.Errorf("创建服务文件失败: %w", err)
 	}
 
 	logBuffer.WriteString("✓ Agent 配置完成\n")
@@ -1134,4 +1141,38 @@ func (s *RemoteDeployService) readAgentBinary(path string) ([]byte, error) {
 // base64Encode 对数据进行 base64 编码
 func base64Encode(data []byte) string {
 	return base64.StdEncoding.EncodeToString(data)
+}
+
+// uploadFileSCP 使用 SCP 协议上传文件
+func (s *RemoteDeployService) uploadFileSCP(client *ssh.Client, data []byte, remotePath string, logBuffer *bytes.Buffer) error {
+	// 创建 SFTP 会话
+	session, err := client.NewSession()
+	if err != nil {
+		return fmt.Errorf("创建会话失败: %w", err)
+	}
+	defer session.Close()
+
+	// 使用 SCP 协议上传
+	// 格式: scp -t remotePath
+	go func() {
+		w, _ := session.StdinPipe()
+		defer w.Close()
+		
+		// 发送文件头: C0755 filesize filename
+		fmt.Fprintf(w, "C0755 %d %s\n", len(data), "vpanel-agent")
+		
+		// 发送文件内容
+		w.Write(data)
+		
+		// 发送结束标记
+		fmt.Fprint(w, "\x00")
+	}()
+
+	// 执行 SCP 命令
+	if err := session.Run(fmt.Sprintf("scp -t %s", remotePath)); err != nil {
+		return fmt.Errorf("SCP 上传失败: %w", err)
+	}
+
+	logBuffer.WriteString("✓ 文件上传完成\n")
+	return nil
 }

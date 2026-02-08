@@ -72,7 +72,9 @@ const handleLogin = async () => {
     ElMessage.success('登录成功')
     router.push('/')
   } catch (error) {
-    ElMessage.error(error || '登录失败')
+    // 只显示简洁的错误消息，不显示错误 ID
+    const message = typeof error === 'string' ? error : (error?.message || '用户名或密码错误')
+    ElMessage.error(message)
   }
 }
 </script>

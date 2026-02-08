@@ -92,7 +92,7 @@ func (h *NodeDeployHandler) DeployAgent(c *gin.Context) {
 
 	// Generate token if not exists
 	if nodeData.Token == "" {
-		token, err := h.nodeService.GenerateNodeToken(c.Request.Context(), nodeID)
+		_, err := h.nodeService.GenerateNodeToken(c.Request.Context(), nodeID)
 		if err != nil {
 			h.logger.Error("Failed to generate token",
 				logger.F("node_id", nodeID),
@@ -103,7 +103,24 @@ func (h *NodeDeployHandler) DeployAgent(c *gin.Context) {
 			})
 			return
 		}
-		nodeData.Token = token
+		
+		// 重新从数据库读取节点信息，确保获取最新的 token
+		nodeData, err = h.nodeService.GetByID(c.Request.Context(), nodeID)
+		if err != nil {
+			h.logger.Error("Failed to reload node after token generation",
+				logger.F("node_id", nodeID),
+				logger.F("error", err.Error()))
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"success": false,
+				"message": "Failed to reload node data",
+			})
+			return
+		}
+		
+		h.logger.Info("Generated and loaded new token for node",
+			logger.F("node_id", nodeID),
+			logger.F("token_length", len(nodeData.Token)),
+			logger.F("token_prefix", nodeData.Token[:min(8, len(nodeData.Token))]))
 	}
 
 	// Get panel URL - 优先级：节点保存的 PanelURL > 请求参数 > 配置文件 > 请求头 > 自动检测
@@ -226,7 +243,7 @@ func (h *NodeDeployHandler) GetDeployScript(c *gin.Context) {
 
 	// Generate token if not exists
 	if nodeData.Token == "" {
-		token, err := h.nodeService.GenerateNodeToken(c.Request.Context(), nodeID)
+		_, err := h.nodeService.GenerateNodeToken(c.Request.Context(), nodeID)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{
 				"success": false,
@@ -234,7 +251,16 @@ func (h *NodeDeployHandler) GetDeployScript(c *gin.Context) {
 			})
 			return
 		}
-		nodeData.Token = token
+		
+		// 重新从数据库读取节点信息，确保获取最新的 token
+		nodeData, err = h.nodeService.GetByID(c.Request.Context(), nodeID)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"success": false,
+				"message": "Failed to reload node data",
+			})
+			return
+		}
 	}
 
 	// Get panel URL from config or query parameter

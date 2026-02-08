@@ -72,16 +72,15 @@ export const useUserStore = defineStore('user', () => {
     } catch (err) {
       console.error('Login error:', err)
       
-      // 详细记录错误信息
-      if (err.response) {
-        console.error('Error response:', err.response.status, err.response.data)
-        error.value = err.response.data.error || err.message || '登录失败'
-      } else if (err.request) {
-        console.error('No response received:', err.request)
-        error.value = '网络错误，服务器未响应'
+      // 根据错误类型返回友好的错误消息
+      if (err.code === 'UNAUTHORIZED' || err.status === 401) {
+        error.value = '用户名或密码错误'
+      } else if (err.code === 'NETWORK_ERROR') {
+        error.value = '网络连接失败，请检查网络'
+      } else if (err.message) {
+        error.value = err.message
       } else {
-        console.error('Request setup error:', err.message)
-        error.value = err.message || '请求配置错误'
+        error.value = '登录失败，请稍后重试'
       }
       
       throw error.value

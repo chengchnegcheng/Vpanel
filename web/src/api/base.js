@@ -140,6 +140,10 @@ api.interceptors.request.use(
   error => Promise.reject(error)
 )
 
+// 用于防止重复显示相同错误消息
+let lastErrorMessage = ''
+let lastErrorTime = 0
+
 // 响应拦截器
 api.interceptors.response.use(
   response => {
@@ -173,34 +177,50 @@ api.interceptors.response.use(
     if (error.response?.status === 401) {
       // 根据当前路径决定清除哪个令牌和跳转到哪个登录页
       const currentPath = window.location.pathname
-      if (currentPath.startsWith('/user')) {
-        // 用户门户 - 清除用户令牌，跳转到用户登录页
-        sessionStorage.removeItem('userToken')
-        localStorage.removeItem('userToken')
-        sessionStorage.removeItem('userInfo')
-        localStorage.removeItem('userInfo')
-        router.push('/user/login')
-      } else if (currentPath.startsWith('/admin')) {
-        // 管理后台 - 清除管理员令牌，跳转到管理员登录页
-        sessionStorage.removeItem('token')
-        localStorage.removeItem('token')
-        sessionStorage.removeItem('userRole')
-        localStorage.removeItem('userRole')
-        router.push('/admin/login?redirect=' + encodeURIComponent(currentPath))
-      } else {
-        // 其他路径 - 默认清除所有令牌，跳转到管理员登录页
-        sessionStorage.removeItem('token')
-        localStorage.removeItem('token')
-        sessionStorage.removeItem('userToken')
-        localStorage.removeItem('userToken')
-        router.push('/admin/login')
+      
+      // 避免在登录页重复跳转
+      const isLoginPage = currentPath.includes('/login')
+      
+      if (!isLoginPage) {
+        if (currentPath.startsWith('/user')) {
+          // 用户门户 - 清除用户令牌，跳转到用户登录页
+          sessionStorage.removeItem('userToken')
+          localStorage.removeItem('userToken')
+          sessionStorage.removeItem('userInfo')
+          localStorage.removeItem('userInfo')
+          router.push('/user/login')
+        } else if (currentPath.startsWith('/admin')) {
+          // 管理后台 - 清除管理员令牌，跳转到管理员登录页
+          sessionStorage.removeItem('token')
+          localStorage.removeItem('token')
+          sessionStorage.removeItem('userRole')
+          localStorage.removeItem('userRole')
+          router.push('/admin/login?redirect=' + encodeURIComponent(currentPath))
+        } else {
+          // 其他路径 - 默认清除所有令牌，跳转到管理员登录页
+          sessionStorage.removeItem('token')
+          localStorage.removeItem('token')
+          sessionStorage.removeItem('userToken')
+          localStorage.removeItem('userToken')
+          router.push('/admin/login')
+        }
       }
+      
+      // 401 错误不显示错误消息，直接返回
+      return Promise.reject(formattedError)
     }
     
     // 只在非静默模式下显示错误消息
     if (!error.config?.silent) {
       const displayMessage = `${formattedError.message} (${formattedError.errorId})`
-      ElMessage.error(displayMessage)
+      const now = Date.now()
+      
+      // 防止 1 秒内显示相同的错误消息
+      if (displayMessage !== lastErrorMessage || now - lastErrorTime > 1000) {
+        ElMessage.error(displayMessage)
+        lastErrorMessage = displayMessage
+        lastErrorTime = now
+      }
     }
     
     // 返回格式化的错误
