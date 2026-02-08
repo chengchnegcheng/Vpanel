@@ -348,6 +348,12 @@ func (s *Service) Create(ctx context.Context, req *CreateNodeRequest) (*Node, er
 		s.logger.Error("Failed to generate token", logger.Err(err))
 		return nil, fmt.Errorf("生成认证 Token 失败: %w", err)
 	}
+	
+	// 记录生成的 token（用于调试）
+	s.logger.Info("Generated node token",
+		logger.F("token_length", len(token)),
+		logger.F("token_prefix", token[:8]),
+		logger.F("token_suffix", token[len(token)-8:]))
 
 	// 序列化 JSON 字段
 	tagsJSON, _ := json.Marshal(req.Tags)
@@ -428,7 +434,8 @@ func (s *Service) Create(ctx context.Context, req *CreateNodeRequest) (*Node, er
 		logger.F("node_id", repoNode.ID),
 		logger.F("name", repoNode.Name),
 		logger.F("address", repoNode.Address),
-		logger.F("port", repoNode.Port))
+		logger.F("port", repoNode.Port),
+		logger.F("token_saved", repoNode.Token[:8]+"..."))
 
 	return s.toNode(repoNode), nil
 }
@@ -938,20 +945,51 @@ func (s *Service) RevokeToken(ctx context.Context, nodeID int64) error {
 // ValidateToken validates a token and returns the associated node.
 func (s *Service) ValidateToken(ctx context.Context, token string) (*Node, error) {
 	if token == "" {
+		s.logger.Warn("Token validation failed: empty token")
 		return nil, ErrInvalidToken
 	}
 
+	// 记录验证的 token（用于调试）
+	s.logger.Info("Validating token",
+		logger.F("token_length", len(token)),
+		logger.F("token_prefix", token[:min(8, len(token))]),
+		logger.F("token_suffix", token[max(0, len(token)-8):]))
+
 	repoNode, err := s.nodeRepo.GetByToken(ctx, token)
 	if err != nil {
+		s.logger.Warn("Token not found in database",
+			logger.F("token_prefix", token[:min(8, len(token))]),
+			logger.Err(err))
 		return nil, ErrInvalidToken
 	}
 
 	// Check if token is revoked (empty token in DB means revoked)
 	if repoNode.Token == "" {
+		s.logger.Warn("Token is revoked", logger.F("node_id", repoNode.ID))
 		return nil, ErrTokenRevoked
 	}
 
+	s.logger.Info("Token validated successfully",
+		logger.F("node_id", repoNode.ID),
+		logger.F("node_name", repoNode.Name))
+
 	return s.toNode(repoNode), nil
+}
+
+// min returns the minimum of two integers
+func min(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
+}
+
+// max returns the maximum of two integers
+func max(a, b int) int {
+	if a > b {
+		return a
+	}
+	return b
 }
 
 // ============================================

@@ -731,6 +731,9 @@ chmod 644 /etc/vpanel/agent.yaml
 echo "✓ 配置文件已创建/更新"
 echo "配置内容："
 cat /etc/vpanel/agent.yaml
+echo ""
+echo "Token 验证："
+grep "token:" /etc/vpanel/agent.yaml | head -1
 `, encoded)
 
 	if err := s.executeCommand(client, script, logBuffer); err != nil {

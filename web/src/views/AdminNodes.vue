@@ -906,14 +906,16 @@ const submitForm = async () => {
         let errorSteps = []
         
         // 尝试从多个位置获取错误详情
-        if (e.response?.data) {
-          // 格式化错误对象中保留的原始响应数据
-          const errorData = e.response.data
-          errorSteps = errorData.steps || []
-          errorLogs = errorData.logs || ''
-          errorMessage = errorData.message || '创建失败'
+        // 注意：base.js 的响应拦截器会将原始响应数据保存在 e.response.data 中
+        const responseData = e.response?.data
+        
+        if (responseData?.steps || responseData?.logs) {
+          // 从保留的原始响应数据中获取部署详情
+          errorSteps = responseData.steps || []
+          errorLogs = responseData.logs || ''
+          errorMessage = responseData.message || e.message || '创建失败'
         } else if (e.details?.steps || e.details?.logs) {
-          // 从 details 字段获取
+          // 从 details 字段获取（备用）
           errorSteps = e.details.steps || []
           errorLogs = e.details.logs || ''
           errorMessage = e.message || '创建失败'
@@ -1129,16 +1131,21 @@ const submitDeploy = async () => {
       let errorSteps = []
       
       // 尝试从多个位置获取错误详情
-      if (deployError.response?.data) {
-        const errorData = deployError.response.data
-        errorSteps = errorData.steps || []
-        errorLogs = errorData.logs || ''
-        errorMessage = errorData.message || 'Agent 部署失败'
+      // 注意：base.js 的响应拦截器会将原始响应数据保存在 deployError.response.data 中
+      const responseData = deployError.response?.data
+      
+      if (responseData?.steps || responseData?.logs) {
+        // 从保留的原始响应数据中获取部署详情
+        errorSteps = responseData.steps || []
+        errorLogs = responseData.logs || ''
+        errorMessage = responseData.message || deployError.message || 'Agent 部署失败'
       } else if (deployError.details?.steps || deployError.details?.logs) {
+        // 从 details 字段获取（备用）
         errorSteps = deployError.details.steps || []
         errorLogs = deployError.details.logs || ''
         errorMessage = deployError.message || 'Agent 部署失败'
       } else if (deployError.message) {
+        // 网络错误或其他错误
         errorMessage = deployError.message
         errorLogs = `错误详情:\n${deployError.message}\n\n错误ID: ${deployError.errorId || 'N/A'}`
       }
