@@ -46,15 +46,16 @@ import (
 
 // Router manages API routes.
 type Router struct {
-	engine          *gin.Engine
-	config          *config.Config
-	logger          logger.Logger
-	authService     *auth.Service
-	proxyManager    proxy.Manager
-	repos           *repository.Repositories
-	settingsService *settings.Service
-	xrayManager     xray.Manager
-	logService      *logservice.Service
+	engine            *gin.Engine
+	config            *config.Config
+	logger            logger.Logger
+	authService       *auth.Service
+	proxyManager      proxy.Manager
+	repos             *repository.Repositories
+	settingsService   *settings.Service
+	xrayManager       xray.Manager
+	logService        *logservice.Service
+	nodeHealthChecker *node.HealthChecker
 }
 
 // NewRouter creates a new API router.
@@ -93,6 +94,7 @@ func NewRouter(
 		settingsService: settingsService,
 		xrayManager:     xrayManager,
 		logService:      logService,
+		nodeHealthChecker: nil, // 将在 Setup() 中初始化
 	}
 }
 
@@ -183,14 +185,14 @@ func (r *Router) Setup() {
 		r.logger,
 	)
 	nodeGroupService := node.NewGroupService(r.repos.NodeGroup, r.repos.Node, r.logger)
-	nodeHealthChecker := node.NewHealthChecker(nil, r.repos.Node, r.repos.HealthCheck, r.logger)
+	r.nodeHealthChecker = node.NewHealthChecker(nil, r.repos.Node, r.repos.HealthCheck, r.logger)
 	nodeTrafficService := node.NewTrafficService(r.repos.NodeTraffic, r.repos.NodeGroup, r.logger)
 	nodeDeployService := node.NewRemoteDeployService(r.logger)
 
 	// Create node management handlers
 	nodeHandler := handlers.NewNodeHandler(nodeService, nodeDeployService, r.logger)
 	nodeGroupHandler := handlers.NewNodeGroupHandler(nodeGroupService, r.logger)
-	nodeHealthHandler := handlers.NewNodeHealthHandler(nodeHealthChecker, r.repos.HealthCheck, r.repos.Node, r.logger)
+	nodeHealthHandler := handlers.NewNodeHealthHandler(r.nodeHealthChecker, r.repos.HealthCheck, r.repos.Node, r.logger)
 	nodeStatsHandler := handlers.NewNodeStatsHandler(nodeTrafficService, nodeService, nodeGroupService, r.logger)
 	nodeDeployHandler := handlers.NewNodeDeployHandler(nodeDeployService, nodeService, r.config, r.logger)
 	agentDownloadHandler := handlers.NewAgentDownloadHandler(r.logger)
@@ -903,4 +905,35 @@ func (r *Router) setupPortalRoutes(api *gin.RouterGroup) {
 			portalProtected.POST("/help/articles/:slug/helpful", portalHelpHandler.MarkHelpful)
 		}
 	}
+}
+
+// StartHealthChecker 启动健康检查服务
+func (r *Router) StartHealthChecker(ctx context.Context) error {
+	if r.nodeHealthChecker == nil {
+		r.logger.Warn("健康检查服务未初始化")
+		return nil
+	}
+	
+	if err := r.nodeHealthChecker.Start(ctx); err != nil {
+		r.logger.Error("启动健康检查服务失败", logger.Err(err))
+		return err
+	}
+	
+	r.logger.Info("健康检查服务已启动")
+	return nil
+}
+
+// StopHealthChecker 停止健康检查服务
+func (r *Router) StopHealthChecker(ctx context.Context) error {
+	if r.nodeHealthChecker == nil {
+		return nil
+	}
+	
+	if err := r.nodeHealthChecker.Stop(ctx); err != nil {
+		r.logger.Error("停止健康检查服务失败", logger.Err(err))
+		return err
+	}
+	
+	r.logger.Info("健康检查服务已停止")
+	return nil
 }

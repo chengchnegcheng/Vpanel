@@ -381,11 +381,16 @@ func (hc *HealthChecker) handleCheckResult(node *repository.Node, result *Health
 			hc.transitionToOnline(node, oldStatus)
 		}
 
-		// Update latency
+		// 总是更新延迟和最后在线时间（无论状态如何）
 		if err := hc.nodeRepo.UpdateMetrics(hc.ctx, node.ID, result.Latency, node.CurrentUsers); err != nil {
 			hc.logger.Error("Failed to update node metrics",
 				logger.Err(err),
 				logger.F("node_id", node.ID))
+		} else {
+			hc.logger.Debug("Updated node metrics",
+				logger.F("node_id", node.ID),
+				logger.F("latency", result.Latency),
+				logger.F("current_users", node.CurrentUsers))
 		}
 
 		// Update last seen

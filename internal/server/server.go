@@ -63,6 +63,13 @@ func (s *Server) Start() error {
 	)
 	s.router.Setup()
 
+	// Start health checker
+	ctx := context.Background()
+	if err := s.router.StartHealthChecker(ctx); err != nil {
+		s.logger.Warn("健康检查服务启动失败，继续启动服务器", logger.Err(err))
+		// 不阻止服务器启动
+	}
+
 	// Create HTTP server
 	addr := fmt.Sprintf("%s:%d", s.config.Server.Host, s.config.Server.Port)
 	s.httpServer = &http.Server{
@@ -98,6 +105,13 @@ func (s *Server) Start() error {
 // Stop stops the HTTP server gracefully.
 func (s *Server) Stop(ctx context.Context) error {
 	s.logger.Info("stopping HTTP server")
+
+	// Stop health checker first
+	if s.router != nil {
+		if err := s.router.StopHealthChecker(ctx); err != nil {
+			s.logger.Warn("健康检查服务停止失败", logger.Err(err))
+		}
+	}
 
 	if s.httpServer == nil {
 		return nil
