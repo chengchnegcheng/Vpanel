@@ -250,6 +250,10 @@ func (r *Router) Setup() {
 		errorReportHandler := handlers.NewErrorReportHandler(r.logger)
 		api.POST("/errors/report", errorReportHandler.ReportErrors)
 		
+		// Agent download endpoint (public, for remote deployment)
+		// 注意：这是公开端点，用于远程节点下载 Agent
+		api.GET("/admin/nodes/agent/download", agentDownloadHandler.DownloadAgent)
+		
 		// Auth routes (public)
 		auth := api.Group("/auth")
 		{
@@ -632,7 +636,7 @@ func (r *Router) Setup() {
 				adminNodes.GET("/statistics", nodeHandler.GetStatistics)
 				
 				// Remote deployment (必须在 /:id 之前，避免被参数路由匹配)
-				adminNodes.GET("/agent/download", agentDownloadHandler.DownloadAgent)
+				// Agent 下载已移到公开路由
 				adminNodes.POST("/test-connection", nodeDeployHandler.TestConnection)
 				
 				adminNodes.GET("/:id", nodeHandler.Get)

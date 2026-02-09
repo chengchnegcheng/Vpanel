@@ -178,7 +178,7 @@ api.interceptors.response.use(
       // 根据当前路径决定清除哪个令牌和跳转到哪个登录页
       const currentPath = window.location.pathname
       
-      // 避免在登录页重复跳转
+      // 避免在登录页重复跳转和清理
       const isLoginPage = currentPath.includes('/login')
       
       if (!isLoginPage) {
@@ -188,30 +188,37 @@ api.interceptors.response.use(
           localStorage.removeItem('userToken')
           sessionStorage.removeItem('userInfo')
           localStorage.removeItem('userInfo')
-          router.push('/user/login')
+          
+          // 使用 replace 避免产生历史记录
+          router.replace('/user/login')
         } else if (currentPath.startsWith('/admin')) {
           // 管理后台 - 清除管理员令牌，跳转到管理员登录页
           sessionStorage.removeItem('token')
           localStorage.removeItem('token')
           sessionStorage.removeItem('userRole')
           localStorage.removeItem('userRole')
-          router.push('/admin/login?redirect=' + encodeURIComponent(currentPath))
+          
+          // 使用 replace 避免产生历史记录
+          router.replace('/admin/login?redirect=' + encodeURIComponent(currentPath))
         } else {
-          // 其他路径 - 默认清除所有令牌，跳转到管理员登录页
+          // 其他路径 - 默认清除所有令牌，跳转到用户登录页
           sessionStorage.removeItem('token')
           localStorage.removeItem('token')
           sessionStorage.removeItem('userToken')
           localStorage.removeItem('userToken')
-          router.push('/admin/login')
+          
+          router.replace('/user/login')
         }
       }
       
-      // 401 错误不显示错误消息，直接返回
-      return Promise.reject(formattedError)
+      // 401 错误完全静默处理，不显示任何消息，直接返回
+      // 标记为 silent 避免后续处理显示错误
+      return Promise.reject({ ...formattedError, silent: true, code: 'UNAUTHORIZED' })
     }
     
     // 只在非静默模式下显示错误消息
-    if (!error.config?.silent) {
+    // 401 错误已经在上面标记为 silent，这里会被跳过
+    if (!error.config?.silent && !formattedError.silent) {
       const displayMessage = `${formattedError.message} (${formattedError.errorId})`
       const now = Date.now()
       

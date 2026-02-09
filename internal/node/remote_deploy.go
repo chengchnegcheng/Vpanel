@@ -517,7 +517,8 @@ exit 1
 	// 读取本地 Agent 文件
 	agentPath := config.AgentBinaryPath
 	if agentPath == "" {
-		agentPath = "./bin/vpanel-agent"
+		// 默认路径，readAgentBinary 会尝试多个位置
+		agentPath = ""
 	}
 
 	agentData, err := s.readAgentBinary(agentPath)
