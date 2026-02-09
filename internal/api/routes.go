@@ -909,17 +909,21 @@ func (r *Router) setupPortalRoutes(api *gin.RouterGroup) {
 
 // StartHealthChecker 启动健康检查服务
 func (r *Router) StartHealthChecker(ctx context.Context) error {
+	r.logger.Info("尝试启动健康检查服务...")
+	
 	if r.nodeHealthChecker == nil {
-		r.logger.Warn("健康检查服务未初始化")
+		r.logger.Warn("健康检查服务未初始化，跳过启动")
 		return nil
 	}
+	
+	r.logger.Info("健康检查器已初始化，正在启动...")
 	
 	if err := r.nodeHealthChecker.Start(ctx); err != nil {
 		r.logger.Error("启动健康检查服务失败", logger.Err(err))
 		return err
 	}
 	
-	r.logger.Info("健康检查服务已启动")
+	r.logger.Info("健康检查服务已成功启动")
 	return nil
 }
 

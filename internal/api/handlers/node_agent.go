@@ -205,8 +205,9 @@ func (h *NodeAgentHandler) Heartbeat(c *gin.Context) {
 
 	// Update metrics if provided
 	if req.Metrics != nil {
+		// 更新用户连接数
 		metrics := &node.NodeMetrics{
-			Latency:      0, // Will be calculated from health checks
+			Latency:      0, // 延迟由健康检查服务计算
 			CurrentUsers: req.Metrics.Connections,
 		}
 		if err := h.nodeService.UpdateMetrics(c.Request.Context(), nodeData.ID, metrics); err != nil {
@@ -214,6 +215,23 @@ func (h *NodeAgentHandler) Heartbeat(c *gin.Context) {
 				logger.F("node_id", nodeData.ID),
 				logger.F("error", err.Error()))
 		}
+		
+		// 更新负载信息（CPU、内存、磁盘）
+		if err := h.nodeRepo.UpdateLoadMetrics(c.Request.Context(), nodeData.ID, 
+			req.Metrics.CPUUsage, 
+			req.Metrics.MemoryUsage, 
+			req.Metrics.DiskUsage); err != nil {
+			h.logger.Error("Failed to update node load metrics",
+				logger.F("node_id", nodeData.ID),
+				logger.F("error", err.Error()))
+		}
+		
+		h.logger.Debug("Node metrics updated",
+			logger.F("node_id", nodeData.ID),
+			logger.F("connections", req.Metrics.Connections),
+			logger.F("cpu_usage", req.Metrics.CPUUsage),
+			logger.F("memory_usage", req.Metrics.MemoryUsage),
+			logger.F("disk_usage", req.Metrics.DiskUsage))
 	}
 
 	// Get any pending commands for this node

@@ -122,6 +122,7 @@ type NodeRepository interface {
 	UpdateStatus(ctx context.Context, id int64, status string) error
 	UpdateLastSeen(ctx context.Context, id int64, lastSeen time.Time) error
 	UpdateMetrics(ctx context.Context, id int64, latency int, currentUsers int) error
+	UpdateLoadMetrics(ctx context.Context, id int64, cpuUsage, memoryUsage, diskUsage float64) error
 
 	// Sync operations
 	UpdateSyncStatus(ctx context.Context, id int64, status string, syncedAt *time.Time) error
@@ -311,6 +312,22 @@ func (r *nodeRepository) UpdateMetrics(ctx context.Context, id int64, latency in
 	})
 	if result.Error != nil {
 		return errors.NewDatabaseError("failed to update node metrics", result.Error)
+	}
+	if result.RowsAffected == 0 {
+		return errors.NewNotFoundError("node", id)
+	}
+	return nil
+}
+
+// UpdateLoadMetrics updates a node's load metrics (CPU, memory, disk usage).
+func (r *nodeRepository) UpdateLoadMetrics(ctx context.Context, id int64, cpuUsage, memoryUsage, diskUsage float64) error {
+	result := r.db.WithContext(ctx).Model(&Node{}).Where("id = ?", id).Updates(map[string]interface{}{
+		"cpu_usage":    cpuUsage,
+		"memory_usage": memoryUsage,
+		"disk_usage":   diskUsage,
+	})
+	if result.Error != nil {
+		return errors.NewDatabaseError("failed to update node load metrics", result.Error)
 	}
 	if result.RowsAffected == 0 {
 		return errors.NewNotFoundError("node", id)
