@@ -162,6 +162,12 @@ func (a *Agent) Start(ctx context.Context) error {
 		// Continue anyway - Xray might be installed in a custom location
 	}
 
+	// Start Xray service if not running
+	if err := a.ensureXrayRunning(ctx); err != nil {
+		a.logger.Warn("failed to start xray service", logger.F("error", err.Error()))
+		// Continue anyway - Xray might be managed externally
+	}
+
 	// Start health server
 	if err := a.healthServer.Start(); err != nil {
 		return fmt.Errorf("failed to start health server: %w", err)
@@ -428,4 +434,83 @@ func GetXrayVersion(binaryPath string) string {
 		return "unknown"
 	}
 	return string(output)
+}
+
+// ensureXrayRunning ensures Xray service is running.
+func (a *Agent) ensureXrayRunning(ctx context.Context) error {
+	// Check if Xray is running
+	if a.isXrayRunning() {
+		a.logger.Info("Xray service is already running")
+		return nil
+	}
+
+	a.logger.Info("Starting Xray service...")
+
+	// Try to start Xray using systemctl (Linux)
+	if runtime.GOOS == "linux" {
+		cmd := exec.CommandContext(ctx, "systemctl", "start", "xray")
+		if err := cmd.Run(); err != nil {
+			a.logger.Warn("Failed to start xray via systemctl", logger.F("error", err.Error()))
+			// Try alternative method
+			return a.startXrayDirect(ctx)
+		}
+
+		// Wait a moment for service to start
+		time.Sleep(2 * time.Second)
+
+		if a.isXrayRunning() {
+			a.logger.Info("Xray service started successfully via systemctl")
+			return nil
+		}
+	}
+
+	// Fallback: start Xray directly
+	return a.startXrayDirect(ctx)
+}
+
+// isXrayRunning checks if Xray process is running.
+func (a *Agent) isXrayRunning() bool {
+	// Try to check via systemctl first (Linux)
+	if runtime.GOOS == "linux" {
+		cmd := exec.Command("systemctl", "is-active", "xray")
+		if err := cmd.Run(); err == nil {
+			return true
+		}
+	}
+
+	// Check if xray process exists
+	cmd := exec.Command("pgrep", "-x", "xray")
+	if err := cmd.Run(); err == nil {
+		return true
+	}
+
+	return false
+}
+
+// startXrayDirect starts Xray process directly.
+func (a *Agent) startXrayDirect(ctx context.Context) error {
+	a.logger.Info("Starting Xray directly...")
+
+	// Start Xray in background
+	cmd := exec.Command("xray", "run", "-c", a.config.Xray.ConfigPath)
+	if err := cmd.Start(); err != nil {
+		return fmt.Errorf("failed to start xray: %w", err)
+	}
+
+	// Detach from process
+	go func() {
+		if err := cmd.Wait(); err != nil {
+			a.logger.Error("Xray process exited", logger.F("error", err.Error()))
+		}
+	}()
+
+	// Wait a moment for process to start
+	time.Sleep(2 * time.Second)
+
+	if a.isXrayRunning() {
+		a.logger.Info("Xray started successfully")
+		return nil
+	}
+
+	return fmt.Errorf("xray failed to start")
 }
