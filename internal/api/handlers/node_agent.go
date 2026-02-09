@@ -205,6 +205,14 @@ func (h *NodeAgentHandler) Heartbeat(c *gin.Context) {
 
 	// Update metrics if provided
 	if req.Metrics != nil {
+		h.logger.Info("收到节点指标数据",
+			logger.F("node_id", nodeData.ID),
+			logger.F("connections", req.Metrics.Connections),
+			logger.F("cpu_usage", req.Metrics.CPUUsage),
+			logger.F("memory_usage", req.Metrics.MemoryUsage),
+			logger.F("disk_usage", req.Metrics.DiskUsage),
+			logger.F("xray_running", req.Metrics.XrayRunning))
+		
 		// 更新用户连接数
 		metrics := &node.NodeMetrics{
 			Latency:      0, // 延迟由健康检查服务计算
@@ -224,14 +232,16 @@ func (h *NodeAgentHandler) Heartbeat(c *gin.Context) {
 			h.logger.Error("Failed to update node load metrics",
 				logger.F("node_id", nodeData.ID),
 				logger.F("error", err.Error()))
+		} else {
+			h.logger.Info("节点负载指标已更新",
+				logger.F("node_id", nodeData.ID),
+				logger.F("cpu", req.Metrics.CPUUsage),
+				logger.F("memory", req.Metrics.MemoryUsage),
+				logger.F("disk", req.Metrics.DiskUsage))
 		}
-		
-		h.logger.Debug("Node metrics updated",
-			logger.F("node_id", nodeData.ID),
-			logger.F("connections", req.Metrics.Connections),
-			logger.F("cpu_usage", req.Metrics.CPUUsage),
-			logger.F("memory_usage", req.Metrics.MemoryUsage),
-			logger.F("disk_usage", req.Metrics.DiskUsage))
+	} else {
+		h.logger.Warn("心跳请求中没有指标数据",
+			logger.F("node_id", nodeData.ID))
 	}
 
 	// Get any pending commands for this node

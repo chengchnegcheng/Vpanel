@@ -367,6 +367,26 @@ func (hc *HealthChecker) handleCheckResult(node *repository.Node, result *Health
 
 	oldStatus := node.Status
 
+	// 总是更新延迟（无论健康检查是否成功）
+	// 延迟反映的是网络连通性，即使服务不健康也应该记录
+	if err := hc.nodeRepo.UpdateMetrics(hc.ctx, node.ID, result.Latency, node.CurrentUsers); err != nil {
+		hc.logger.Error("Failed to update node metrics",
+			logger.Err(err),
+			logger.F("node_id", node.ID))
+	} else {
+		hc.logger.Debug("Updated node metrics",
+			logger.F("node_id", node.ID),
+			logger.F("latency", result.Latency),
+			logger.F("current_users", node.CurrentUsers))
+	}
+
+	// 总是更新最后检查时间
+	if err := hc.nodeRepo.UpdateLastSeen(hc.ctx, node.ID, result.CheckedAt); err != nil {
+		hc.logger.Error("Failed to update node last seen",
+			logger.Err(err),
+			logger.F("node_id", node.ID))
+	}
+
 	if result.Status == repository.HealthCheckStatusSuccess {
 		// Reset failure counter, increment success counter
 		hc.consecutiveFailures[node.ID] = 0
@@ -379,25 +399,6 @@ func (hc *HealthChecker) handleCheckResult(node *repository.Node, result *Health
 		} else if node.Status == repository.NodeStatusOffline {
 			// Node came online
 			hc.transitionToOnline(node, oldStatus)
-		}
-
-		// 总是更新延迟和最后在线时间（无论状态如何）
-		if err := hc.nodeRepo.UpdateMetrics(hc.ctx, node.ID, result.Latency, node.CurrentUsers); err != nil {
-			hc.logger.Error("Failed to update node metrics",
-				logger.Err(err),
-				logger.F("node_id", node.ID))
-		} else {
-			hc.logger.Debug("Updated node metrics",
-				logger.F("node_id", node.ID),
-				logger.F("latency", result.Latency),
-				logger.F("current_users", node.CurrentUsers))
-		}
-
-		// Update last seen
-		if err := hc.nodeRepo.UpdateLastSeen(hc.ctx, node.ID, result.CheckedAt); err != nil {
-			hc.logger.Error("Failed to update node last seen",
-				logger.Err(err),
-				logger.F("node_id", node.ID))
 		}
 	} else {
 		// Reset success counter, increment failure counter
