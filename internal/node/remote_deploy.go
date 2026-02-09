@@ -134,6 +134,15 @@ func (s *RemoteDeployService) Deploy(ctx context.Context, config *DeployConfig) 
 	markSuccess(stepIdx)
 	logBuffer.WriteString("\n")
 
+	// Step 3.5: Stop old agent processes (before uploading new binary)
+	logBuffer.WriteString("清理旧的 Agent 进程...\n")
+	if err := s.stopOldAgentProcesses(client, &logBuffer); err != nil {
+		// 记录错误但继续执行（可能是首次安装）
+		s.logger.Warn("停止旧进程时出现错误（可能是首次安装）", logger.Err(err))
+		logBuffer.WriteString("⚠ 停止旧进程时出现错误（可能是首次安装）\n")
+	}
+	logBuffer.WriteString("\n")
+
 	// Step 4: Download and install agent
 	stepIdx = addStep("下载并安装 Agent")
 	logBuffer.WriteString("步骤 4/8: 下载并安装 Agent...\n")
@@ -520,29 +529,9 @@ exit 1
 
 	logBuffer.WriteString(fmt.Sprintf("正在上传 Agent (大小: %d bytes)...\n", len(agentData)))
 	
-	// 使用 SCP 协议上传文件
+	// 使用 SCP 协议上传文件（包含验证）
 	if err := s.uploadFileSCP(client, agentData, "/usr/local/bin/vpanel-agent", logBuffer); err != nil {
 		return fmt.Errorf("Agent 上传失败: %w", err)
-	}
-
-	// 设置执行权限并验证
-	verifyScript := `
-chmod +x /usr/local/bin/vpanel-agent
-
-# 验证文件
-FILE_SIZE=$(stat -c%s /usr/local/bin/vpanel-agent 2>/dev/null || stat -f%z /usr/local/bin/vpanel-agent 2>/dev/null || echo "0")
-echo "Agent 文件大小: ${FILE_SIZE} bytes"
-
-if [ "$FILE_SIZE" -lt 1000 ]; then
-    echo "错误: Agent 文件大小异常"
-    exit 1
-fi
-
-echo "✓ Agent 上传成功"
-`
-
-	if err := s.executeCommand(client, verifyScript, logBuffer); err != nil {
-		return err
 	}
 
 	logBuffer.WriteString("✓ Agent 安装完成（通过 SCP 上传）\n")
@@ -633,25 +622,8 @@ echo "✓ Xray 目录创建完成"
 	return nil
 }
 
-// configureAgent creates the agent configuration file.
-func (s *RemoteDeployService) configureAgent(client *ssh.Client, config *DeployConfig, logBuffer *bytes.Buffer) error {
-	// 验证 token 不为空
-	if config.NodeToken == "" {
-		return fmt.Errorf("节点 token 为空，无法配置 Agent")
-	}
-	
-	// 记录配置信息用于调试
-	s.logger.Info("Configuring agent",
-		logger.F("panel_url", config.PanelURL),
-		logger.F("node_token_length", len(config.NodeToken)),
-		logger.F("node_token_prefix", config.NodeToken[:min(16, len(config.NodeToken))]),
-		logger.F("node_token_suffix", config.NodeToken[max(0, len(config.NodeToken)-8):]))
-	
-	logBuffer.WriteString(fmt.Sprintf("配置 Token 长度: %d\n", len(config.NodeToken)))
-	logBuffer.WriteString(fmt.Sprintf("配置 Token 前缀: %s\n", config.NodeToken[:min(16, len(config.NodeToken))]))
-	logBuffer.WriteString(fmt.Sprintf("配置 Token 后缀: %s\n\n", config.NodeToken[max(0, len(config.NodeToken)-8):]))
-	
-	// 第一步：彻底停止所有旧的 Agent 服务和进程
+// stopOldAgentProcesses 停止所有旧的 Agent 进程
+func (s *RemoteDeployService) stopOldAgentProcesses(client *ssh.Client, logBuffer *bytes.Buffer) error {
 	stopScript := `
 echo "=== 清理旧的 Agent 进程 ==="
 
@@ -691,13 +663,28 @@ fi
 
 echo "✓ 清理完成"
 `
-	if err := s.executeCommand(client, stopScript, logBuffer); err != nil {
-		// 记录错误但继续执行
-		s.logger.Warn("停止旧服务时出现错误（可能是首次安装）", logger.Err(err))
-		logBuffer.WriteString("⚠ 停止旧服务时出现错误（可能是首次安装）\n")
+	return s.executeCommand(client, stopScript, logBuffer)
+}
+
+// configureAgent creates the agent configuration file.
+func (s *RemoteDeployService) configureAgent(client *ssh.Client, config *DeployConfig, logBuffer *bytes.Buffer) error {
+	// 验证 token 不为空
+	if config.NodeToken == "" {
+		return fmt.Errorf("节点 token 为空，无法配置 Agent")
 	}
 	
-	// 第二步：创建新的 Agent 配置
+	// 记录配置信息用于调试
+	s.logger.Info("Configuring agent",
+		logger.F("panel_url", config.PanelURL),
+		logger.F("node_token_length", len(config.NodeToken)),
+		logger.F("node_token_prefix", config.NodeToken[:min(16, len(config.NodeToken))]),
+		logger.F("node_token_suffix", config.NodeToken[max(0, len(config.NodeToken)-8):]))
+	
+	logBuffer.WriteString(fmt.Sprintf("配置 Token 长度: %d\n", len(config.NodeToken)))
+	logBuffer.WriteString(fmt.Sprintf("配置 Token 前缀: %s\n", config.NodeToken[:min(16, len(config.NodeToken))]))
+	logBuffer.WriteString(fmt.Sprintf("配置 Token 后缀: %s\n\n", config.NodeToken[max(0, len(config.NodeToken)-8):]))
+	
+	// 创建新的 Agent 配置
 	agentConfig := fmt.Sprintf(`node:
   token: "%s"
 
@@ -1145,32 +1132,71 @@ func base64Encode(data []byte) string {
 
 // uploadFileSCP 使用 SCP 协议上传文件
 func (s *RemoteDeployService) uploadFileSCP(client *ssh.Client, data []byte, remotePath string, logBuffer *bytes.Buffer) error {
-	// 创建 SFTP 会话
-	session, err := client.NewSession()
-	if err != nil {
-		return fmt.Errorf("创建会话失败: %w", err)
+	// 先停止可能正在运行的 Agent 进程，避免 "Text file busy" 错误
+	stopScript := `
+if systemctl is-active --quiet vpanel-agent 2>/dev/null; then
+    systemctl stop vpanel-agent 2>/dev/null || true
+fi
+pkill -9 vpanel-agent 2>/dev/null || true
+sleep 1
+`
+	s.executeCommand(client, stopScript, logBuffer)
+	
+	// 创建临时文件并上传
+	tmpPath := "/tmp/vpanel-agent.tmp"
+	
+	// 使用 base64 编码上传（更可靠）
+	encoded := base64Encode(data)
+	
+	// 分块上传（每块 100KB）
+	chunkSize := 100 * 1024
+	totalChunks := (len(encoded) + chunkSize - 1) / chunkSize
+	
+	logBuffer.WriteString(fmt.Sprintf("开始上传文件 (共 %d 块)...\n", totalChunks))
+	
+	// 清空临时文件
+	if err := s.executeCommand(client, fmt.Sprintf("rm -f %s", tmpPath), logBuffer); err != nil {
+		return fmt.Errorf("清空临时文件失败: %w", err)
 	}
-	defer session.Close()
+	
+	// 分块上传
+	for i := 0; i < len(encoded); i += chunkSize {
+		end := i + chunkSize
+		if end > len(encoded) {
+			end = len(encoded)
+		}
+		
+		chunk := encoded[i:end]
+		chunkNum := i/chunkSize + 1
+		
+		// 每 10 块显示一次进度
+		if chunkNum%10 == 0 || chunkNum == totalChunks {
+			logBuffer.WriteString(fmt.Sprintf("上传进度: %d/%d\n", chunkNum, totalChunks))
+		}
+		
+		uploadCmd := fmt.Sprintf("echo '%s' | base64 -d >> %s", chunk, tmpPath)
+		if err := s.executeCommand(client, uploadCmd, logBuffer); err != nil {
+			return fmt.Errorf("上传第 %d 块失败: %w", chunkNum, err)
+		}
+	}
+	
+	// 移动到目标位置并设置权限
+	moveScript := fmt.Sprintf(`
+mv -f %s %s
+chmod +x %s
 
-	// 使用 SCP 协议上传
-	// 格式: scp -t remotePath
-	go func() {
-		w, _ := session.StdinPipe()
-		defer w.Close()
-		
-		// 发送文件头: C0755 filesize filename
-		fmt.Fprintf(w, "C0755 %d %s\n", len(data), "vpanel-agent")
-		
-		// 发送文件内容
-		w.Write(data)
-		
-		// 发送结束标记
-		fmt.Fprint(w, "\x00")
-	}()
+# 验证文件
+FILE_SIZE=$(stat -c%%s %s 2>/dev/null || stat -f%%z %s 2>/dev/null || echo "0")
+echo "文件大小: ${FILE_SIZE} bytes"
 
-	// 执行 SCP 命令
-	if err := session.Run(fmt.Sprintf("scp -t %s", remotePath)); err != nil {
-		return fmt.Errorf("SCP 上传失败: %w", err)
+if [ "$FILE_SIZE" -lt 1000 ]; then
+    echo "错误: 文件大小异常"
+    exit 1
+fi
+`, tmpPath, remotePath, remotePath, remotePath, remotePath)
+	
+	if err := s.executeCommand(client, moveScript, logBuffer); err != nil {
+		return fmt.Errorf("移动文件失败: %w", err)
 	}
 
 	logBuffer.WriteString("✓ 文件上传完成\n")
