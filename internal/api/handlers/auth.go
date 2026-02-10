@@ -69,7 +69,7 @@ type UserResponse struct {
 func (h *AuthHandler) Login(c *gin.Context) {
 	var req LoginRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request body"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "请求参数无效，请检查用户名和密码"})
 		return
 	}
 
@@ -81,7 +81,7 @@ func (h *AuthHandler) Login(c *gin.Context) {
 	user, err := h.userRepo.GetByUsername(c.Request.Context(), req.Username)
 	if err != nil {
 		h.logger.Warn("login failed: user not found", logger.F("username", req.Username))
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid credentials"})
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "用户名或密码错误"})
 		return
 	}
 
@@ -104,14 +104,14 @@ func (h *AuthHandler) Login(c *gin.Context) {
 	if !user.Enabled {
 		h.logger.Warn("login failed: user disabled", logger.F("username", req.Username))
 		recordLogin(false)
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "Account is disabled"})
+		c.JSON(http.StatusForbidden, gin.H{"error": "账号已被禁用，请联系管理员"})
 		return
 	}
 
 	if !h.authService.VerifyPassword(req.Password, user.PasswordHash) {
 		h.logger.Warn("login failed: invalid password", logger.F("username", req.Username))
 		recordLogin(false)
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid credentials"})
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "用户名或密码错误"})
 		return
 	}
 
@@ -119,14 +119,14 @@ func (h *AuthHandler) Login(c *gin.Context) {
 	token, err := h.authService.GenerateToken(user.ID, user.Username, user.Role)
 	if err != nil {
 		h.logger.Error("failed to generate token", logger.F("error", err))
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to generate token"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "登录失败，请稍后重试"})
 		return
 	}
 
 	refreshToken, err := h.authService.GenerateRefreshToken(user.ID)
 	if err != nil {
 		h.logger.Error("failed to generate refresh token", logger.F("error", err))
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to generate refresh token"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "登录失败，请稍后重试"})
 		return
 	}
 
@@ -159,34 +159,34 @@ type RefreshTokenRequest struct {
 func (h *AuthHandler) RefreshToken(c *gin.Context) {
 	var req RefreshTokenRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request body"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "请求参数无效"})
 		return
 	}
 
 	// Validate refresh token
 	claims, err := h.authService.ValidateRefreshToken(req.RefreshToken)
 	if err != nil {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid refresh token"})
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "登录已过期，请重新登录"})
 		return
 	}
 
 	// Get user
 	user, err := h.userRepo.GetByID(c.Request.Context(), claims.UserID)
 	if err != nil {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "User not found"})
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "用户不存在"})
 		return
 	}
 
 	// Generate new tokens
 	token, err := h.authService.GenerateToken(user.ID, user.Username, user.Role)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to generate token"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "刷新令牌失败，请重新登录"})
 		return
 	}
 
 	refreshToken, err := h.authService.GenerateRefreshToken(user.ID)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to generate refresh token"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "刷新令牌失败，请重新登录"})
 		return
 	}
 
@@ -216,13 +216,13 @@ func (h *AuthHandler) Logout(c *gin.Context) {
 func (h *AuthHandler) GetCurrentUser(c *gin.Context) {
 	userID, exists := c.Get("user_id")
 	if !exists {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "Not authenticated"})
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "未登录或登录已过期"})
 		return
 	}
 
 	user, err := h.userRepo.GetByID(c.Request.Context(), userID.(int64))
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "User not found"})
+		c.JSON(http.StatusNotFound, gin.H{"error": "用户不存在"})
 		return
 	}
 
@@ -246,39 +246,39 @@ type ChangePasswordRequest struct {
 func (h *AuthHandler) ChangePassword(c *gin.Context) {
 	var req ChangePasswordRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request body"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "请求参数无效，密码长度至少6位"})
 		return
 	}
 
 	userID, _ := c.Get("user_id")
 	user, err := h.userRepo.GetByID(c.Request.Context(), userID.(int64))
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "User not found"})
+		c.JSON(http.StatusNotFound, gin.H{"error": "用户不存在"})
 		return
 	}
 
 	// Verify old password
 	if !h.authService.VerifyPassword(req.OldPassword, user.PasswordHash) {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid old password"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "当前密码错误"})
 		return
 	}
 
 	// Hash new password
 	newHash, err := h.authService.HashPassword(req.NewPassword)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to hash password"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "密码修改失败，请稍后重试"})
 		return
 	}
 
 	// Update password
 	user.PasswordHash = newHash
 	if err := h.userRepo.Update(c.Request.Context(), user); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update password"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "密码修改失败，请稍后重试"})
 		return
 	}
 
 	h.logger.Info("password changed", logger.F("user_id", userID))
-	c.JSON(http.StatusOK, gin.H{"message": "Password changed successfully"})
+	c.JSON(http.StatusOK, gin.H{"message": "密码修改成功"})
 }
 
 // ListUsers returns all users (admin only).

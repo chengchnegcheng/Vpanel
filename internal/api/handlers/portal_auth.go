@@ -475,18 +475,20 @@ func (h *PortalAuthHandler) handleError(c *gin.Context, err error) {
 		case pkgerrors.ErrCodeValidation, pkgerrors.ErrCodeBadRequest:
 			c.JSON(http.StatusBadRequest, gin.H{"error": appErr.Message})
 		case pkgerrors.ErrCodeUnauthorized:
-			c.JSON(http.StatusUnauthorized, gin.H{"error": appErr.Message})
+			// 统一认证失败提示
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "用户名或密码错误"})
 		case pkgerrors.ErrCodeForbidden:
 			c.JSON(http.StatusForbidden, gin.H{"error": appErr.Message})
 		case pkgerrors.ErrCodeConflict:
 			c.JSON(http.StatusConflict, gin.H{"error": appErr.Message})
 		case pkgerrors.ErrCodeRateLimit:
-			c.JSON(http.StatusTooManyRequests, gin.H{"error": appErr.Message})
+			c.JSON(http.StatusTooManyRequests, gin.H{"error": "登录尝试过于频繁，请稍后再试"})
 		case pkgerrors.ErrCodeNotFound:
-			c.JSON(http.StatusNotFound, gin.H{"error": appErr.Message})
+			// 不暴露用户是否存在
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "用户名或密码错误"})
 		default:
 			h.logger.Error("portal auth error", logger.F("error", err))
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "服务器内部错误"})
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "服务器内部错误，请稍后重试"})
 		}
 		return
 	}
@@ -495,20 +497,23 @@ func (h *PortalAuthHandler) handleError(c *gin.Context, err error) {
 	errStr := err.Error()
 	switch {
 	case contains(errStr, "validation"):
-		c.JSON(http.StatusBadRequest, gin.H{"error": errStr})
-	case contains(errStr, "unauthorized"), contains(errStr, "密码错误"):
-		c.JSON(http.StatusUnauthorized, gin.H{"error": errStr})
-	case contains(errStr, "forbidden"), contains(errStr, "禁用"):
-		c.JSON(http.StatusForbidden, gin.H{"error": errStr})
-	case contains(errStr, "conflict"), contains(errStr, "已存在"):
+		c.JSON(http.StatusBadRequest, gin.H{"error": "请求参数无效"})
+	case contains(errStr, "unauthorized"), contains(errStr, "密码错误"), contains(errStr, "invalid credentials"):
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "用户名或密码错误"})
+	case contains(errStr, "forbidden"), contains(errStr, "禁用"), contains(errStr, "disabled"):
+		c.JSON(http.StatusForbidden, gin.H{"error": "账号已被禁用，请联系管理员"})
+	case contains(errStr, "conflict"), contains(errStr, "已存在"), contains(errStr, "already exists"):
 		c.JSON(http.StatusConflict, gin.H{"error": errStr})
-	case contains(errStr, "rate limit"), contains(errStr, "过于频繁"):
-		c.JSON(http.StatusTooManyRequests, gin.H{"error": errStr})
+	case contains(errStr, "rate limit"), contains(errStr, "过于频繁"), contains(errStr, "too many"):
+		c.JSON(http.StatusTooManyRequests, gin.H{"error": "登录尝试过于频繁，请稍后再试"})
 	case contains(errStr, "not found"):
-		c.JSON(http.StatusNotFound, gin.H{"error": errStr})
+		// 不暴露用户是否存在
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "用户名或密码错误"})
+	case contains(errStr, "expired"), contains(errStr, "过期"):
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "账号已过期，请续费"})
 	default:
 		h.logger.Error("portal auth error", logger.F("error", err))
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "服务器内部错误"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "服务器内部错误，请稍后重试"})
 	}
 }
 

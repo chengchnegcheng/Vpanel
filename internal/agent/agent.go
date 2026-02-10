@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"os"
 	"os/exec"
 	"runtime"
 	"sync"
@@ -158,14 +159,16 @@ func (a *Agent) Start(ctx context.Context) error {
 	// Ensure Xray is installed
 	installer := NewXrayInstaller(a.logger)
 	if err := installer.EnsureXrayInstalled(ctx, a.config.Xray.ConfigPath); err != nil {
-		a.logger.Error("failed to ensure xray installation", logger.F("error", err.Error()))
+		a.logger.Error("Xray 安装检查失败", logger.F("error", err.Error()))
 		// Continue anyway - Xray might be installed in a custom location
+	} else {
+		a.logger.Info("Xray 安装检查完成")
 	}
 
 	// Start Xray service if not running
 	if err := a.ensureXrayRunning(ctx); err != nil {
-		a.logger.Warn("failed to start xray service", logger.F("error", err.Error()))
-		// Continue anyway - Xray might be managed externally
+		a.logger.Error("Xray 启动失败", logger.F("error", err.Error()))
+		// Continue anyway - Xray might be managed externally or will be started later
 	}
 
 	// Start health server
@@ -440,17 +443,35 @@ func GetXrayVersion(binaryPath string) string {
 func (a *Agent) ensureXrayRunning(ctx context.Context) error {
 	// Check if Xray is running
 	if a.isXrayRunning() {
-		a.logger.Info("Xray service is already running")
+		a.logger.Info("Xray 服务已在运行")
 		return nil
 	}
 
-	a.logger.Info("Starting Xray service...")
+	a.logger.Info("Xray 未运行，尝试启动...")
+
+	// Check if Xray binary exists
+	if _, err := exec.LookPath("xray"); err != nil {
+		a.logger.Error("未找到 Xray 可执行文件", logger.F("error", err.Error()))
+		return fmt.Errorf("xray binary not found: %w", err)
+	}
+
+	// Check if config file exists
+	if _, err := os.Stat(a.config.Xray.ConfigPath); err != nil {
+		a.logger.Error("Xray 配置文件不存在", 
+			logger.F("config_path", a.config.Xray.ConfigPath),
+			logger.F("error", err.Error()))
+		return fmt.Errorf("xray config not found: %w", err)
+	}
 
 	// Try to start Xray using systemctl (Linux)
 	if runtime.GOOS == "linux" {
+		a.logger.Info("尝试通过 systemctl 启动 Xray...")
 		cmd := exec.CommandContext(ctx, "systemctl", "start", "xray")
-		if err := cmd.Run(); err != nil {
-			a.logger.Warn("Failed to start xray via systemctl", logger.F("error", err.Error()))
+		output, err := cmd.CombinedOutput()
+		if err != nil {
+			a.logger.Warn("systemctl 启动失败", 
+				logger.F("error", err.Error()),
+				logger.F("output", string(output)))
 			// Try alternative method
 			return a.startXrayDirect(ctx)
 		}
@@ -459,9 +480,10 @@ func (a *Agent) ensureXrayRunning(ctx context.Context) error {
 		time.Sleep(2 * time.Second)
 
 		if a.isXrayRunning() {
-			a.logger.Info("Xray service started successfully via systemctl")
+			a.logger.Info("Xray 服务通过 systemctl 启动成功")
 			return nil
 		}
+		a.logger.Warn("systemctl 启动后 Xray 仍未运行，尝试直接启动")
 	}
 
 	// Fallback: start Xray directly
@@ -489,28 +511,61 @@ func (a *Agent) isXrayRunning() bool {
 
 // startXrayDirect starts Xray process directly.
 func (a *Agent) startXrayDirect(ctx context.Context) error {
-	a.logger.Info("Starting Xray directly...")
+	a.logger.Info("直接启动 Xray 进程...", 
+		logger.F("config_path", a.config.Xray.ConfigPath))
+
+	// Validate config before starting
+	validateCmd := exec.Command("xray", "test", "-c", a.config.Xray.ConfigPath)
+	if output, err := validateCmd.CombinedOutput(); err != nil {
+		a.logger.Error("Xray 配置验证失败", 
+			logger.F("error", err.Error()),
+			logger.F("output", string(output)))
+		return fmt.Errorf("xray config validation failed: %w", err)
+	}
+	a.logger.Info("Xray 配置验证通过")
 
 	// Start Xray in background
 	cmd := exec.Command("xray", "run", "-c", a.config.Xray.ConfigPath)
+	
+	// Capture stdout and stderr
+	cmd.Stdout = &logWriter{logger: a.logger, prefix: "[Xray-stdout]"}
+	cmd.Stderr = &logWriter{logger: a.logger, prefix: "[Xray-stderr]"}
+	
 	if err := cmd.Start(); err != nil {
+		a.logger.Error("启动 Xray 进程失败", logger.F("error", err.Error()))
 		return fmt.Errorf("failed to start xray: %w", err)
 	}
 
-	// Detach from process
+	a.logger.Info("Xray 进程已启动", logger.F("pid", cmd.Process.Pid))
+
+	// Monitor process in background
 	go func() {
 		if err := cmd.Wait(); err != nil {
-			a.logger.Error("Xray process exited", logger.F("error", err.Error()))
+			a.logger.Error("Xray 进程异常退出", logger.F("error", err.Error()))
+		} else {
+			a.logger.Warn("Xray 进程正常退出")
 		}
 	}()
 
 	// Wait a moment for process to start
-	time.Sleep(2 * time.Second)
+	time.Sleep(3 * time.Second)
 
 	if a.isXrayRunning() {
-		a.logger.Info("Xray started successfully")
+		a.logger.Info("Xray 启动成功")
 		return nil
 	}
 
+	a.logger.Error("Xray 启动失败：进程未运行")
 	return fmt.Errorf("xray failed to start")
+}
+
+// logWriter implements io.Writer to redirect Xray output to logger
+type logWriter struct {
+	logger logger.Logger
+	prefix string
+}
+
+func (w *logWriter) Write(p []byte) (n int, err error) {
+	w.logger.Info(w.prefix, logger.F("output", string(p)))
+	return len(p), nil
 }
