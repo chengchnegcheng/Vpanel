@@ -11,9 +11,11 @@ import (
 	"encoding/pem"
 	"fmt"
 	"math/big"
+	"net"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"sync"
 	"time"
@@ -57,17 +59,21 @@ func NewService(
 
 // ApplyRequest represents a certificate application request.
 type ApplyRequest struct {
-	Domain   string
-	Email    string
-	Provider string // "letsencrypt" or "zerossl"
-	Method   string // "http" or "dns"
+	Domain      string
+	Email       string
+	Provider    string            // "letsencrypt" or "zerossl"
+	Method      string            // "http" or "dns"
+	DNSProvider string            // DNS provider for dns method, e.g., "dns_cf" for Cloudflare
+	Webroot     string            // Webroot path for http method
+	DNSEnv      map[string]string // DNS API credentials (e.g., CF_Token, CF_Account_ID)
 }
 
 // Apply applies for a new certificate using acme.sh.
 func (s *Service) Apply(ctx context.Context, req *ApplyRequest) (*repository.Certificate, error) {
 	s.logger.Info("申请证书",
 		logger.F("domain", req.Domain),
-		logger.F("provider", req.Provider))
+		logger.F("provider", req.Provider),
+		logger.F("method", req.Method))
 
 	// 检查 acme.sh 是否安装
 	if !s.isAcmeInstalled() {
@@ -82,6 +88,41 @@ func (s *Service) Apply(ctx context.Context, req *ApplyRequest) (*repository.Cer
 		req.Method = "http"
 	}
 
+	// 验证请求参数
+	if req.Method == "dns" {
+		if req.DNSProvider == "" {
+			return nil, fmt.Errorf("DNS 验证方式需要指定 DNS 提供商，如: dns_cf (Cloudflare)")
+		}
+		// 检查 DNS API 凭证
+		if len(req.DNSEnv) == 0 {
+			return nil, fmt.Errorf("DNS 验证方式需要提供 API 凭证")
+		}
+	}
+	if req.Method == "http" {
+		if req.Webroot == "" {
+			req.Webroot = "/var/www/html" // 默认 webroot
+		}
+		// 检查 webroot 目录是否存在
+		if _, err := os.Stat(req.Webroot); os.IsNotExist(err) {
+			return nil, fmt.Errorf("webroot 目录不存在: %s", req.Webroot)
+		}
+	}
+
+	// 验证域名格式
+	if !s.isValidDomain(req.Domain) {
+		return nil, fmt.Errorf("无效的域名格式: %s", req.Domain)
+	}
+
+	// HTTP 验证方式需要检查域名解析
+	if req.Method == "http" {
+		if err := s.checkDomainResolution(req.Domain); err != nil {
+			s.logger.Warn("域名解析检查失败", 
+				logger.F("domain", req.Domain),
+				logger.F("error", err.Error()))
+			// 不阻止申请，只是警告
+		}
+	}
+
 	// 创建证书记录
 	cert := &repository.Certificate{
 		Domain:    req.Domain,
@@ -94,17 +135,57 @@ func (s *Service) Apply(ctx context.Context, req *ApplyRequest) (*repository.Cer
 		return nil, fmt.Errorf("创建证书记录失败: %w", err)
 	}
 
-	// 异步申请证书
+	// 异步申请证书（使用独立的 context）
 	go func() {
-		if err := s.issueWithAcme(req, cert); err != nil {
-			s.logger.Error("证书申请失败",
+		// 创建带超时的 context（30 分钟）
+		applyCtx, cancel := context.WithTimeout(context.Background(), 30*time.Minute)
+		defer cancel()
+
+		// 先测试申请
+		if err := s.issueWithAcmeTest(applyCtx, req, cert); err != nil {
+			s.logger.Error("测试证书申请失败",
 				logger.F("domain", req.Domain),
 				logger.F("error", err.Error()))
 			
 			cert.Status = "failed"
-			cert.ErrorMessage = err.Error()
+			cert.ErrorMessage = s.parseAcmeError(err)
 			s.certRepo.Update(context.Background(), cert)
+			return
 		}
+
+		s.logger.Info("测试证书申请成功，开始正式申请", logger.F("domain", req.Domain))
+
+		// 正式申请（带重试）
+		var lastErr error
+		for i := 0; i < 3; i++ {
+			if i > 0 {
+				s.logger.Info("重试证书申请", 
+					logger.F("domain", req.Domain),
+					logger.F("attempt", i+1))
+				time.Sleep(time.Duration(i*5) * time.Second) // 递增延迟
+			}
+
+			if err := s.issueWithAcme(applyCtx, req, cert); err != nil {
+				lastErr = err
+				s.logger.Warn("证书申请失败",
+					logger.F("domain", req.Domain),
+					logger.F("attempt", i+1),
+					logger.F("error", err.Error()))
+				continue
+			}
+
+			// 成功
+			return
+		}
+
+		// 所有重试都失败
+		s.logger.Error("证书申请最终失败",
+			logger.F("domain", req.Domain),
+			logger.F("error", lastErr.Error()))
+		
+		cert.Status = "failed"
+		cert.ErrorMessage = s.parseAcmeError(lastErr)
+		s.certRepo.Update(context.Background(), cert)
 	}()
 
 	return cert, nil
@@ -122,8 +203,69 @@ func (s *Service) isAcmeInstalled() bool {
 	return err == nil
 }
 
-// issueWithAcme issues a certificate using acme.sh.
-func (s *Service) issueWithAcme(req *ApplyRequest, cert *repository.Certificate) error {
+// isValidDomain validates domain name format.
+func (s *Service) isValidDomain(domain string) bool {
+	// 域名正则表达式
+	domainRegex := regexp.MustCompile(`^([a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?\.)+[a-zA-Z]{2,}$`)
+	return domainRegex.MatchString(domain)
+}
+
+// checkDomainResolution checks if domain resolves to an IP address.
+func (s *Service) checkDomainResolution(domain string) error {
+	ips, err := net.LookupIP(domain)
+	if err != nil {
+		return fmt.Errorf("域名解析失败: %w", err)
+	}
+	
+	if len(ips) == 0 {
+		return fmt.Errorf("域名未解析到任何 IP 地址")
+	}
+	
+	s.logger.Info("域名解析成功",
+		logger.F("domain", domain),
+		logger.F("ips", ips))
+	
+	return nil
+}
+
+// parseAcmeError parses acme.sh error output and returns user-friendly message.
+func (s *Service) parseAcmeError(err error) string {
+	if err == nil {
+		return ""
+	}
+
+	errMsg := err.Error()
+	
+	// 常见错误模式匹配
+	patterns := map[string]string{
+		"Timeout":                           "申请超时，请检查网络连接",
+		"DNS problem":                       "DNS 解析问题，请检查域名是否正确解析",
+		"Connection refused":                "连接被拒绝，请检查防火墙和端口配置",
+		"too many certificates":             "证书申请次数过多，请稍后再试（Let's Encrypt 频率限制）",
+		"rate limit":                        "触发频率限制，请等待后再试",
+		"CAA record":                        "CAA 记录阻止了证书申请，请检查 DNS CAA 记录",
+		"Invalid response":                  "验证失败，请检查域名解析和 webroot 配置",
+		"Verify error":                      "域名验证失败，请确保域名正确解析到本服务器",
+		"Create new order error":            "创建订单失败，请检查 ACME 服务器状态",
+		"No EAB credentials found":          "缺少 EAB 凭证（ZeroSSL 需要）",
+		"The domain is in HSTS preload":     "域名在 HSTS 预加载列表中，必须使用 HTTPS",
+	}
+
+	for pattern, friendlyMsg := range patterns {
+		if strings.Contains(errMsg, pattern) {
+			return friendlyMsg
+		}
+	}
+
+	// 返回原始错误（截断过长的输出）
+	if len(errMsg) > 500 {
+		return errMsg[:500] + "..."
+	}
+	return errMsg
+}
+
+// issueWithAcmeTest issues a test certificate to verify configuration.
+func (s *Service) issueWithAcmeTest(ctx context.Context, req *ApplyRequest, cert *repository.Certificate) error {
 	homeDir, err := os.UserHomeDir()
 	if err != nil {
 		return fmt.Errorf("获取用户目录失败: %w", err)
@@ -131,32 +273,103 @@ func (s *Service) issueWithAcme(req *ApplyRequest, cert *repository.Certificate)
 
 	acmePath := filepath.Join(homeDir, ".acme.sh", "acme.sh")
 
-	// 构建命令参数
+	// 构建测试命令参数
 	args := []string{
 		"--issue",
+		"--server", "letsencrypt_test", // 使用测试服务器
 		"-d", req.Domain,
 		"--keylength", "ec-256", // 使用 ECC 证书
 	}
 
-	// 设置 CA
-	if req.Provider == "zerossl" {
-		args = append(args, "--server", "zerossl")
-	} else {
-		args = append(args, "--server", "letsencrypt")
+	// 添加 Email（如果提供）
+	if req.Email != "" {
+		args = append(args, "--accountemail", req.Email)
 	}
 
 	// 设置验证方式
 	if req.Method == "dns" {
-		args = append(args, "--dns")
+		args = append(args, "--dns", req.DNSProvider)
 	} else {
-		// HTTP 验证需要 webroot
-		args = append(args, "-w", "/var/www/html")
+		// HTTP 验证
+		args = append(args, "-w", req.Webroot)
+	}
+
+	// 执行测试申请命令
+	s.logger.Info("执行 acme.sh 测试申请", logger.F("args", strings.Join(args, " ")))
+	
+	cmd := exec.CommandContext(ctx, acmePath, args...)
+	
+	// 设置 DNS API 环境变量
+	if req.Method == "dns" && len(req.DNSEnv) > 0 {
+		cmd.Env = os.Environ()
+		for key, value := range req.DNSEnv {
+			cmd.Env = append(cmd.Env, fmt.Sprintf("%s=%s", key, value))
+		}
+	}
+	
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("acme.sh 测试申请失败: %s, output: %s", err.Error(), string(output))
+	}
+
+	s.logger.Info("测试证书申请成功", logger.F("domain", req.Domain))
+	return nil
+}
+
+// issueWithAcme issues a certificate using acme.sh.
+func (s *Service) issueWithAcme(ctx context.Context, req *ApplyRequest, cert *repository.Certificate) error {
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		return fmt.Errorf("获取用户目录失败: %w", err)
+	}
+
+	acmePath := filepath.Join(homeDir, ".acme.sh", "acme.sh")
+
+	// 设置默认 CA
+	setCAArgs := []string{"--set-default-ca", "--server", req.Provider}
+	cmd := exec.CommandContext(ctx, acmePath, setCAArgs...)
+	if output, err := cmd.CombinedOutput(); err != nil {
+		s.logger.Warn("设置默认 CA 失败", 
+			logger.F("error", err.Error()),
+			logger.F("output", string(output)))
+	}
+
+	// 构建正式申请命令参数
+	args := []string{
+		"--issue",
+		"-d", req.Domain,
+		"--keylength", "ec-256", // 使用 ECC 证书
+		"--force",               // 强制更新（覆盖测试证书）
+	}
+
+	// 添加 Email（如果提供）
+	if req.Email != "" {
+		args = append(args, "--accountemail", req.Email)
+	}
+
+	// 设置验证方式
+	if req.Method == "dns" {
+		args = append(args, "--dns", req.DNSProvider)
+	} else {
+		// HTTP 验证
+		args = append(args, "-w", req.Webroot)
 	}
 
 	// 执行申请命令
-	s.logger.Info("执行 acme.sh 申请", logger.F("args", strings.Join(args, " ")))
+	s.logger.Info("执行 acme.sh 正式申请", logger.F("args", strings.Join(args, " ")))
 	
-	cmd := exec.Command(acmePath, args...)
+	cmd = exec.CommandContext(ctx, acmePath, args...)
+	
+	// 设置 DNS API 环境变量
+	if req.Method == "dns" && len(req.DNSEnv) > 0 {
+		cmd.Env = os.Environ()
+		for key, value := range req.DNSEnv {
+			cmd.Env = append(cmd.Env, fmt.Sprintf("%s=%s", key, value))
+			// 不记录敏感信息到日志
+			s.logger.Debug("设置 DNS 环境变量", logger.F("key", key))
+		}
+	}
+	
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("acme.sh 申请失败: %s, output: %s", err.Error(), string(output))
@@ -166,7 +379,7 @@ func (s *Service) issueWithAcme(req *ApplyRequest, cert *repository.Certificate)
 
 	// 安装证书到指定目录
 	certPath := filepath.Join(s.certDir, req.Domain)
-	if err := os.MkdirAll(certPath, 0755); err != nil {
+	if err := os.MkdirAll(certPath, 0750); err != nil {
 		return fmt.Errorf("创建证书目录失败: %w", err)
 	}
 
@@ -181,9 +394,14 @@ func (s *Service) issueWithAcme(req *ApplyRequest, cert *repository.Certificate)
 		"--ecc",
 	}
 
-	cmd = exec.Command(acmePath, installArgs...)
+	cmd = exec.CommandContext(ctx, acmePath, installArgs...)
 	if output, err := cmd.CombinedOutput(); err != nil {
 		return fmt.Errorf("安装证书失败: %s, output: %s", err.Error(), string(output))
+	}
+
+	// 设置私钥文件权限为 0600（仅所有者可读写）
+	if err := os.Chmod(keyFile, 0600); err != nil {
+		s.logger.Warn("设置私钥文件权限失败", logger.Err(err))
 	}
 
 	// 读取证书信息
