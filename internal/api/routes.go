@@ -118,7 +118,7 @@ func (r *Router) Setup() {
 	statsHandler := handlers.NewStatsHandler(r.logger, r.repos, nil)
 	settingsHandler := handlers.NewSettingsHandler(r.logger, r.settingsService)
 	xrayHandler := handlers.NewXrayHandler(r.xrayManager, r.logger)
-	certificatesHandler := handlers.NewCertificatesHandler(r.logger)
+	certificateHandler := handlers.NewCertificateHandler(r.repos.Certificate, r.logger)
 	logHandler := handlers.NewLogHandler(r.logService, r.logger)
 
 	// Create IP restriction service and handler
@@ -389,13 +389,15 @@ func (r *Router) Setup() {
 			certificatesRoutes := protected.Group("/certificates")
 			certificatesRoutes.Use(authMiddleware.RequireRole("admin"))
 			{
-				certificatesRoutes.GET("", certificatesHandler.List)
-				certificatesRoutes.POST("/apply", certificatesHandler.Apply)
-				certificatesRoutes.POST("/upload", certificatesHandler.Upload)
-				certificatesRoutes.POST("/:id/renew", certificatesHandler.Renew)
-				certificatesRoutes.GET("/:id/validate", certificatesHandler.Validate)
-				certificatesRoutes.DELETE("/:id", certificatesHandler.Delete)
-				certificatesRoutes.PUT("/:id/auto-renew", certificatesHandler.UpdateAutoRenew)
+				certificatesRoutes.GET("", certificateHandler.List)
+				certificatesRoutes.GET("/:id", certificateHandler.Get)
+				certificatesRoutes.GET("/domain/:domain", certificateHandler.GetByDomain)
+				certificatesRoutes.POST("", certificateHandler.Create)
+				certificatesRoutes.PUT("/:id", certificateHandler.Update)
+				certificatesRoutes.DELETE("/:id", certificateHandler.Delete)
+				certificatesRoutes.POST("/apply", certificateHandler.Apply)
+				certificatesRoutes.POST("/:id/renew", certificateHandler.Renew)
+				certificatesRoutes.GET("/expiring", certificateHandler.GetExpiring)
 			}
 
 			// Logs routes (admin only)

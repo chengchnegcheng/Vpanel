@@ -44,6 +44,10 @@ ALTER TABLE nodes ADD COLUMN alert_memory_threshold REAL DEFAULT 80;
 ALTER TABLE nodes ADD COLUMN description TEXT;
 ALTER TABLE nodes ADD COLUMN remarks TEXT;
 
+-- Add Xray status columns
+ALTER TABLE nodes ADD COLUMN xray_running BOOLEAN DEFAULT 0;
+ALTER TABLE nodes ADD COLUMN xray_version VARCHAR(64);
+
 -- Create index for group_id
 CREATE INDEX IF NOT EXISTS idx_nodes_group_id ON nodes(group_id);
 

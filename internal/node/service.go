@@ -95,6 +95,10 @@ type Node struct {
 	Description string `json:"description"`
 	Remarks     string `json:"remarks"`
 	
+	// Xray 状态
+	XrayRunning bool   `json:"xray_running"`
+	XrayVersion string `json:"xray_version"`
+	
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
 }
@@ -1137,6 +1141,10 @@ func (s *Service) toNode(rn *repository.Node) *Node {
 		Description: rn.Description,
 		Remarks:     rn.Remarks,
 		
+		// Xray 状态
+		XrayRunning: rn.XrayRunning,
+		XrayVersion: rn.XrayVersion,
+		
 		CreatedAt: rn.CreatedAt,
 		UpdatedAt: rn.UpdatedAt,
 	}
@@ -1214,4 +1222,43 @@ func (s *Service) ValidateNodeConfig(req *CreateNodeRequest) error {
 	}
 	
 	return nil
+}
+
+// GetXrayConfig generates and returns the Xray configuration for a node.
+func (s *Service) GetXrayConfig(ctx context.Context, nodeID int64) (map[string]interface{}, error) {
+	// 检查节点是否存在
+	node, err := s.GetByID(ctx, nodeID)
+	if err != nil {
+		return nil, err
+	}
+
+	// TODO: 实现 Xray 配置生成逻辑
+	// 这里返回一个示例配置
+	config := map[string]interface{}{
+		"log": map[string]interface{}{
+			"loglevel": "warning",
+		},
+		"inbounds": []map[string]interface{}{
+			{
+				"port":     node.Port,
+				"protocol": "vless",
+				"settings": map[string]interface{}{
+					"clients":    []interface{}{},
+					"decryption": "none",
+				},
+				"streamSettings": map[string]interface{}{
+					"network":  "tcp",
+					"security": "tls",
+				},
+			},
+		},
+		"outbounds": []map[string]interface{}{
+			{
+				"protocol": "freedom",
+				"tag":      "direct",
+			},
+		},
+	}
+
+	return config, nil
 }

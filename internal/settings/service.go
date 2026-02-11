@@ -17,6 +17,13 @@ type SystemSettings struct {
 	DefaultTrafficLimit int64  `json:"default_traffic_limit"`
 	DefaultExpiryDays   int    `json:"default_expiry_days"`
 
+	// Panel settings
+	PanelAccessIP   string `json:"panel_access_ip"`   // 面板访问 IP
+	PanelPort       int    `json:"panel_port"`        // 面板监听端口
+	PanelCertPath   string `json:"panel_cert_path"`   // 面板证书公钥路径
+	PanelKeyPath    string `json:"panel_key_path"`    // 面板证书私钥路径
+	PanelAPIDomain  string `json:"panel_api_domain"`  // 面板 API 域名
+
 	// SMTP settings
 	SMTPHost     string `json:"smtp_host"`
 	SMTPPort     int    `json:"smtp_port"`
@@ -44,6 +51,7 @@ func DefaultSettings() *SystemSettings {
 		AllowRegistration:   false,
 		DefaultTrafficLimit: 0, // Unlimited
 		DefaultExpiryDays:   30,
+		PanelPort:           10086, // 默认面板端口
 		SMTPPort:            587,
 		RateLimitEnabled:    true,
 		RateLimitRequests:   100,
@@ -155,6 +163,25 @@ func (s *Service) GetSystemSettings(ctx context.Context) (*SystemSettings, error
 			settings.DefaultExpiryDays = days
 		}
 	}
+	// Panel settings
+	if v, ok := allSettings["panel_access_ip"]; ok {
+		settings.PanelAccessIP = v
+	}
+	if v, ok := allSettings["panel_port"]; ok && v != "" {
+		var port int
+		if json.Unmarshal([]byte(v), &port) == nil {
+			settings.PanelPort = port
+		}
+	}
+	if v, ok := allSettings["panel_cert_path"]; ok {
+		settings.PanelCertPath = v
+	}
+	if v, ok := allSettings["panel_key_path"]; ok {
+		settings.PanelKeyPath = v
+	}
+	if v, ok := allSettings["panel_api_domain"]; ok {
+		settings.PanelAPIDomain = v
+	}
 	if v, ok := allSettings["smtp_host"]; ok {
 		settings.SMTPHost = v
 	}
@@ -217,6 +244,15 @@ func (s *Service) UpdateSystemSettings(ctx context.Context, settings *SystemSett
 	if data, err := json.Marshal(settings.DefaultExpiryDays); err == nil {
 		updates["default_expiry_days"] = string(data)
 	}
+
+	// Panel settings
+	updates["panel_access_ip"] = settings.PanelAccessIP
+	if data, err := json.Marshal(settings.PanelPort); err == nil {
+		updates["panel_port"] = string(data)
+	}
+	updates["panel_cert_path"] = settings.PanelCertPath
+	updates["panel_key_path"] = settings.PanelKeyPath
+	updates["panel_api_domain"] = settings.PanelAPIDomain
 
 	updates["smtp_host"] = settings.SMTPHost
 	if data, err := json.Marshal(settings.SMTPPort); err == nil {

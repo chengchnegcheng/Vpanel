@@ -71,6 +71,10 @@ type Node struct {
 	Description string `gorm:"type:text"` // 节点描述
 	Remarks     string `gorm:"type:text"` // 管理员备注
 	
+	// Xray 状态
+	XrayRunning bool   `gorm:"default:false"` // Xray 是否运行
+	XrayVersion string `gorm:"size:64"`       // Xray 版本
+	
 	CreatedAt time.Time  `gorm:"autoCreateTime"`
 	UpdatedAt time.Time  `gorm:"autoUpdateTime"`
 }
@@ -123,6 +127,7 @@ type NodeRepository interface {
 	UpdateLastSeen(ctx context.Context, id int64, lastSeen time.Time) error
 	UpdateMetrics(ctx context.Context, id int64, latency int, currentUsers int) error
 	UpdateLoadMetrics(ctx context.Context, id int64, cpuUsage, memoryUsage, diskUsage float64) error
+	UpdateXrayStatus(ctx context.Context, id int64, xrayRunning bool, xrayVersion string) error
 
 	// Sync operations
 	UpdateSyncStatus(ctx context.Context, id int64, status string, syncedAt *time.Time) error
@@ -328,6 +333,21 @@ func (r *nodeRepository) UpdateLoadMetrics(ctx context.Context, id int64, cpuUsa
 	})
 	if result.Error != nil {
 		return errors.NewDatabaseError("failed to update node load metrics", result.Error)
+	}
+	if result.RowsAffected == 0 {
+		return errors.NewNotFoundError("node", id)
+	}
+	return nil
+}
+
+// UpdateXrayStatus updates a node's Xray status and version.
+func (r *nodeRepository) UpdateXrayStatus(ctx context.Context, id int64, xrayRunning bool, xrayVersion string) error {
+	result := r.db.WithContext(ctx).Model(&Node{}).Where("id = ?", id).Updates(map[string]interface{}{
+		"xray_running": xrayRunning,
+		"xray_version": xrayVersion,
+	})
+	if result.Error != nil {
+		return errors.NewDatabaseError("failed to update node xray status", result.Error)
 	}
 	if result.RowsAffected == 0 {
 		return errors.NewNotFoundError("node", id)

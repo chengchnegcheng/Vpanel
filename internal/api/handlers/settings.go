@@ -52,6 +52,13 @@ type UpdateSettingsRequest struct {
 	DefaultTrafficLimit *int64  `json:"default_traffic_limit"`
 	DefaultExpiryDays   *int    `json:"default_expiry_days"`
 
+	// Panel settings
+	PanelAccessIP  *string `json:"panel_access_ip"`
+	PanelPort      *int    `json:"panel_port"`
+	PanelCertPath  *string `json:"panel_cert_path"`
+	PanelKeyPath   *string `json:"panel_key_path"`
+	PanelAPIDomain *string `json:"panel_api_domain"`
+
 	// SMTP settings
 	SMTPHost     *string `json:"smtp_host"`
 	SMTPPort     *int    `json:"smtp_port"`
@@ -106,6 +113,22 @@ func (h *SettingsHandler) UpdateSettings(c *gin.Context) {
 	}
 	if req.DefaultExpiryDays != nil {
 		currentSettings.DefaultExpiryDays = *req.DefaultExpiryDays
+	}
+	// Panel settings
+	if req.PanelAccessIP != nil {
+		currentSettings.PanelAccessIP = *req.PanelAccessIP
+	}
+	if req.PanelPort != nil {
+		currentSettings.PanelPort = *req.PanelPort
+	}
+	if req.PanelCertPath != nil {
+		currentSettings.PanelCertPath = *req.PanelCertPath
+	}
+	if req.PanelKeyPath != nil {
+		currentSettings.PanelKeyPath = *req.PanelKeyPath
+	}
+	if req.PanelAPIDomain != nil {
+		currentSettings.PanelAPIDomain = *req.PanelAPIDomain
 	}
 	if req.SMTPHost != nil {
 		currentSettings.SMTPHost = *req.SMTPHost

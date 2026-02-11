@@ -239,6 +239,20 @@ func (h *NodeAgentHandler) Heartbeat(c *gin.Context) {
 				logger.F("memory", req.Metrics.MemoryUsage),
 				logger.F("disk", req.Metrics.DiskUsage))
 		}
+		
+		// 更新 Xray 状态
+		if err := h.nodeRepo.UpdateXrayStatus(c.Request.Context(), nodeData.ID,
+			req.Metrics.XrayRunning,
+			req.Metrics.XrayVersion); err != nil {
+			h.logger.Error("Failed to update xray status",
+				logger.F("node_id", nodeData.ID),
+				logger.F("error", err.Error()))
+		} else {
+			h.logger.Debug("Xray 状态已更新",
+				logger.F("node_id", nodeData.ID),
+				logger.F("xray_running", req.Metrics.XrayRunning),
+				logger.F("xray_version", req.Metrics.XrayVersion))
+		}
 	} else {
 		h.logger.Warn("心跳请求中没有指标数据",
 			logger.F("node_id", nodeData.ID))

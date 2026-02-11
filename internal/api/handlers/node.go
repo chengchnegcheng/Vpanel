@@ -85,6 +85,10 @@ type NodeResponse struct {
 	Description string `json:"description,omitempty"`
 	Remarks     string `json:"remarks,omitempty"`
 	
+	// Xray 状态
+	XrayRunning bool   `json:"xray_running"`
+	XrayVersion string `json:"xray_version,omitempty"`
+	
 	CreatedAt string `json:"created_at"`
 	UpdatedAt string `json:"updated_at"`
 }
@@ -243,6 +247,10 @@ func toNodeResponse(n *node.Node) *NodeResponse {
 		// 备注和描述
 		Description: n.Description,
 		Remarks:     n.Remarks,
+		
+		// Xray 状态
+		XrayRunning: n.XrayRunning,
+		XrayVersion: n.XrayVersion,
 		
 		CreatedAt: n.CreatedAt.Format("2006-01-02T15:04:05Z"),
 		UpdatedAt: n.UpdatedAt.Format("2006-01-02T15:04:05Z"),
@@ -727,4 +735,29 @@ func (h *NodeHandler) UpdateStatus(c *gin.Context) {
 	h.logger.Info("Node status updated", logger.F("node_id", id), logger.F("status", req.Status))
 
 	c.JSON(http.StatusOK, gin.H{"message": "Status updated successfully"})
+}
+
+// GetXrayConfig returns the Xray configuration for a node.
+// GET /api/admin/nodes/:id/xray/config
+func (h *NodeHandler) GetXrayConfig(c *gin.Context) {
+	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid node ID"})
+		return
+	}
+
+	config, err := h.nodeService.GetXrayConfig(c.Request.Context(), id)
+	if err != nil {
+		if err == node.ErrNodeNotFound {
+			c.JSON(http.StatusNotFound, gin.H{"error": "Node not found"})
+			return
+		}
+		h.logger.Error("Failed to get Xray config", logger.Err(err), logger.F("id", id))
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get Xray configuration"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"config": config,
+	})
 }

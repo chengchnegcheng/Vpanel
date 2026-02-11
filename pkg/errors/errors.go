@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
 )
 
@@ -381,6 +382,18 @@ func IsForbidden(err error) bool {
 // IsConflict checks if the error is a conflict error.
 func IsConflict(err error) bool {
 	return GetCode(err) == ErrCodeConflict
+}
+
+// IsDuplicateKey checks if the error is a database duplicate key error.
+func IsDuplicateKey(err error) bool {
+	if err == nil {
+		return false
+	}
+	// Check for GORM duplicate key errors
+	errStr := err.Error()
+	return strings.Contains(errStr, "UNIQUE constraint failed") ||
+		strings.Contains(errStr, "Duplicate entry") ||
+		strings.Contains(errStr, "duplicate key value")
 }
 
 // ToErrorResponse converts any error to an ErrorResponse.
