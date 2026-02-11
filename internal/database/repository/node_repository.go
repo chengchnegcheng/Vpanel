@@ -75,6 +75,9 @@ type Node struct {
 	XrayRunning bool   `gorm:"default:false"` // Xray 是否运行
 	XrayVersion string `gorm:"size:64"`       // Xray 版本
 	
+	// 证书关联
+	CertificateID *int64 `gorm:"index"` // 关联的证书 ID
+	
 	CreatedAt time.Time  `gorm:"autoCreateTime"`
 	UpdatedAt time.Time  `gorm:"autoUpdateTime"`
 }

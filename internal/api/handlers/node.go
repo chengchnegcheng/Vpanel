@@ -89,6 +89,9 @@ type NodeResponse struct {
 	XrayRunning bool   `json:"xray_running"`
 	XrayVersion string `json:"xray_version,omitempty"`
 	
+	// 证书关联
+	CertificateID *int64 `json:"certificate_id,omitempty"`
+	
 	CreatedAt string `json:"created_at"`
 	UpdatedAt string `json:"updated_at"`
 }
@@ -140,6 +143,9 @@ type CreateNodeRequest struct {
 	// 备注和描述
 	Description string `json:"description"`
 	Remarks     string `json:"remarks"`
+	
+	// 证书关联
+	CertificateID *int64 `json:"certificate_id"`
 }
 
 // SSHConfig SSH 连接配置
@@ -190,6 +196,9 @@ type UpdateNodeRequest struct {
 	// 备注和描述
 	Description *string `json:"description"`
 	Remarks     *string `json:"remarks"`
+	
+	// 证书关联
+	CertificateID *int64 `json:"certificate_id"`
 }
 
 // toNodeResponse converts a node to API response format.
@@ -251,6 +260,9 @@ func toNodeResponse(n *node.Node) *NodeResponse {
 		// Xray 状态
 		XrayRunning: n.XrayRunning,
 		XrayVersion: n.XrayVersion,
+		
+		// 证书关联
+		CertificateID: n.CertificateID,
 		
 		CreatedAt: n.CreatedAt.Format("2006-01-02T15:04:05Z"),
 		UpdatedAt: n.UpdatedAt.Format("2006-01-02T15:04:05Z"),
@@ -386,6 +398,9 @@ func (h *NodeHandler) Create(c *gin.Context) {
 		// 备注和描述
 		Description: req.Description,
 		Remarks:     req.Remarks,
+		
+		// 证书关联
+		CertificateID: req.CertificateID,
 	}
 
 	n, err := h.nodeService.Create(c.Request.Context(), createReq)
@@ -551,6 +566,9 @@ func (h *NodeHandler) Update(c *gin.Context) {
 		// 备注和描述
 		Description: req.Description,
 		Remarks:     req.Remarks,
+		
+		// 证书关联
+		CertificateID: req.CertificateID,
 	}
 
 	n, err := h.nodeService.Update(c.Request.Context(), id, updateReq)

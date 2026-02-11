@@ -118,7 +118,7 @@ func (r *Router) Setup() {
 	statsHandler := handlers.NewStatsHandler(r.logger, r.repos, nil)
 	settingsHandler := handlers.NewSettingsHandler(r.logger, r.settingsService)
 	xrayHandler := handlers.NewXrayHandler(r.xrayManager, r.logger)
-	certificateHandler := handlers.NewCertificateHandler(r.repos.Certificate, r.logger)
+	certificateHandler := handlers.NewCertificateHandler(r.repos.Certificate, r.repos.Node, r.logger)
 	logHandler := handlers.NewLogHandler(r.logService, r.logger)
 
 	// Create IP restriction service and handler
@@ -390,6 +390,7 @@ func (r *Router) Setup() {
 			certificatesRoutes.Use(authMiddleware.RequireRole("admin"))
 			{
 				certificatesRoutes.GET("", certificateHandler.List)
+				certificatesRoutes.GET("/all", certificateHandler.ListAll) // 用于下拉选择
 				certificatesRoutes.GET("/:id", certificateHandler.Get)
 				certificatesRoutes.GET("/domain/:domain", certificateHandler.GetByDomain)
 				certificatesRoutes.POST("", certificateHandler.Create)
@@ -398,6 +399,11 @@ func (r *Router) Setup() {
 				certificatesRoutes.POST("/apply", certificateHandler.Apply)
 				certificatesRoutes.POST("/:id/renew", certificateHandler.Renew)
 				certificatesRoutes.GET("/expiring", certificateHandler.GetExpiring)
+				
+				// 证书分配到节点
+				certificatesRoutes.POST("/:id/assign", certificateHandler.AssignToNodes)
+				certificatesRoutes.GET("/:id/nodes", certificateHandler.GetAssignedNodes)
+				certificatesRoutes.DELETE("/:id/nodes/:nodeId", certificateHandler.UnassignFromNode)
 			}
 
 			// Logs routes (admin only)

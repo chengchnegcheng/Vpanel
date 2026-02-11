@@ -16,13 +16,15 @@ import (
 // CertificateHandler handles certificate management requests.
 type CertificateHandler struct {
 	certRepo repository.CertificateRepository
+	nodeRepo repository.NodeRepository
 	logger   logger.Logger
 }
 
 // NewCertificateHandler creates a new certificate handler.
-func NewCertificateHandler(certRepo repository.CertificateRepository, log logger.Logger) *CertificateHandler {
+func NewCertificateHandler(certRepo repository.CertificateRepository, nodeRepo repository.NodeRepository, log logger.Logger) *CertificateHandler {
 	return &CertificateHandler{
 		certRepo: certRepo,
+		nodeRepo: nodeRepo,
 		logger:   log,
 	}
 }
@@ -328,6 +330,47 @@ func (h *CertificateHandler) Renew(c *gin.Context) {
 	})
 }
 
+// ListAll returns all certificates (for dropdown selection).
+// GET /api/admin/certificates/all
+func (h *CertificateHandler) ListAll(c *gin.Context) {
+	ctx := c.Request.Context()
+
+	certs, err := h.certRepo.List(ctx, 0, 1000) // 获取所有证书
+	if err != nil {
+		h.logger.Error("Failed to list all certificates", logger.Err(err))
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"code":    500,
+			"message": "获取证书列表失败",
+		})
+		return
+	}
+
+	// 简化的响应，只返回必要字段
+	type SimpleCert struct {
+		ID        int64  `json:"id"`
+		Domain    string `json:"domain"`
+		ExpiresAt string `json:"expires_at,omitempty"`
+	}
+
+	simpleCerts := make([]SimpleCert, 0, len(certs))
+	for _, cert := range certs {
+		sc := SimpleCert{
+			ID:     cert.ID,
+			Domain: cert.Domain,
+		}
+		if !cert.ExpiresAt.IsZero() {
+			sc.ExpiresAt = cert.ExpiresAt.Format("2006-01-02")
+		}
+		simpleCerts = append(simpleCerts, sc)
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"code":    200,
+		"message": "success",
+		"data":    simpleCerts,
+	})
+}
+
 // GetExpiring returns certificates that are expiring soon.
 // GET /api/admin/certificates/expiring
 func (h *CertificateHandler) GetExpiring(c *gin.Context) {
@@ -349,5 +392,260 @@ func (h *CertificateHandler) GetExpiring(c *gin.Context) {
 		"certificates": response,
 		"total":        len(response),
 		"days":         days,
+	})
+}
+
+// AssignToNodesRequest represents a request to assign certificate to nodes.
+type AssignToNodesRequest struct {
+	NodeIDs []int64 `json:"node_ids" binding:"required"`
+}
+
+// AssignToNodes assigns a certificate to one or more nodes.
+// POST /api/admin/certificates/:id/assign
+func (h *CertificateHandler) AssignToNodes(c *gin.Context) {
+	certID, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"code":    400,
+			"message": "无效的证书 ID",
+		})
+		return
+	}
+
+	var req AssignToNodesRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"code":    400,
+			"message": "请求参数错误",
+		})
+		return
+	}
+
+	if len(req.NodeIDs) == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"code":    400,
+			"message": "请至少选择一个节点",
+		})
+		return
+	}
+
+	ctx := c.Request.Context()
+
+	// 验证证书是否存在
+	cert, err := h.certRepo.GetByID(ctx, certID)
+	if err != nil {
+		h.logger.Error("Failed to get certificate", logger.Err(err), logger.F("cert_id", certID))
+		c.JSON(http.StatusNotFound, gin.H{
+			"code":    404,
+			"message": "证书不存在",
+		})
+		return
+	}
+
+	// 更新每个节点的 certificate_id
+	successCount := 0
+	failedNodes := make([]int64, 0)
+
+	for _, nodeID := range req.NodeIDs {
+		// 获取节点
+		node, err := h.nodeRepo.GetByID(ctx, nodeID)
+		if err != nil {
+			h.logger.Warn("Node not found, skipping",
+				logger.F("node_id", nodeID),
+				logger.Err(err))
+			failedNodes = append(failedNodes, nodeID)
+			continue
+		}
+
+		// 更新节点的证书 ID
+		node.CertificateID = &certID
+		if err := h.nodeRepo.Update(ctx, node); err != nil {
+			h.logger.Error("Failed to update node certificate",
+				logger.F("node_id", nodeID),
+				logger.F("cert_id", certID),
+				logger.Err(err))
+			failedNodes = append(failedNodes, nodeID)
+			continue
+		}
+
+		successCount++
+		h.logger.Info("Certificate assigned to node",
+			logger.F("cert_id", certID),
+			logger.F("cert_domain", cert.Domain),
+			logger.F("node_id", nodeID),
+			logger.F("node_name", node.Name))
+	}
+
+	// 返回结果
+	if successCount == 0 {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"code":    500,
+			"message": "所有节点分配失败",
+			"data": gin.H{
+				"failed_nodes": failedNodes,
+			},
+		})
+		return
+	}
+
+	if len(failedNodes) > 0 {
+		c.JSON(http.StatusOK, gin.H{
+			"code":    200,
+			"message": "部分节点分配成功",
+			"data": gin.H{
+				"success_count": successCount,
+				"failed_count":  len(failedNodes),
+				"failed_nodes":  failedNodes,
+			},
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"code":    200,
+		"message": "证书分配成功",
+		"data": gin.H{
+			"success_count": successCount,
+			"certificate": gin.H{
+				"id":     cert.ID,
+				"domain": cert.Domain,
+			},
+		},
+	})
+}
+
+// GetAssignedNodes returns all nodes assigned to a certificate.
+// GET /api/admin/certificates/:id/nodes
+func (h *CertificateHandler) GetAssignedNodes(c *gin.Context) {
+	certID, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"code":    400,
+			"message": "无效的证书 ID",
+		})
+		return
+	}
+
+	ctx := c.Request.Context()
+
+	// 验证证书是否存在
+	_, err = h.certRepo.GetByID(ctx, certID)
+	if err != nil {
+		h.logger.Error("Failed to get certificate", logger.Err(err), logger.F("cert_id", certID))
+		c.JSON(http.StatusNotFound, gin.H{
+			"code":    404,
+			"message": "证书不存在",
+		})
+		return
+	}
+
+	// 获取所有节点，筛选出使用此证书的节点
+	allNodes, err := h.nodeRepo.List(ctx, &repository.NodeFilter{Limit: 10000})
+	if err != nil {
+		h.logger.Error("Failed to list nodes", logger.Err(err))
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"code":    500,
+			"message": "获取节点列表失败",
+		})
+		return
+	}
+
+	// 筛选使用此证书的节点
+	type NodeInfo struct {
+		ID      int64  `json:"id"`
+		Name    string `json:"name"`
+		Address string `json:"address"`
+		Port    int    `json:"port"`
+		Status  string `json:"status"`
+	}
+
+	assignedNodes := make([]NodeInfo, 0)
+	for _, node := range allNodes {
+		if node.CertificateID != nil && *node.CertificateID == certID {
+			assignedNodes = append(assignedNodes, NodeInfo{
+				ID:      node.ID,
+				Name:    node.Name,
+				Address: node.Address,
+				Port:    node.Port,
+				Status:  node.Status,
+			})
+		}
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"code":    200,
+		"message": "success",
+		"data": gin.H{
+			"nodes": assignedNodes,
+			"total": len(assignedNodes),
+		},
+	})
+}
+
+// UnassignFromNode removes certificate assignment from a node.
+// DELETE /api/admin/certificates/:id/nodes/:nodeId
+func (h *CertificateHandler) UnassignFromNode(c *gin.Context) {
+	certID, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"code":    400,
+			"message": "无效的证书 ID",
+		})
+		return
+	}
+
+	nodeID, err := strconv.ParseInt(c.Param("nodeId"), 10, 64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"code":    400,
+			"message": "无效的节点 ID",
+		})
+		return
+	}
+
+	ctx := c.Request.Context()
+
+	// 获取节点
+	node, err := h.nodeRepo.GetByID(ctx, nodeID)
+	if err != nil {
+		h.logger.Error("Failed to get node", logger.Err(err), logger.F("node_id", nodeID))
+		c.JSON(http.StatusNotFound, gin.H{
+			"code":    404,
+			"message": "节点不存在",
+		})
+		return
+	}
+
+	// 检查节点是否使用此证书
+	if node.CertificateID == nil || *node.CertificateID != certID {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"code":    400,
+			"message": "该节点未使用此证书",
+		})
+		return
+	}
+
+	// 移除证书分配
+	node.CertificateID = nil
+	if err := h.nodeRepo.Update(ctx, node); err != nil {
+		h.logger.Error("Failed to unassign certificate from node",
+			logger.F("node_id", nodeID),
+			logger.F("cert_id", certID),
+			logger.Err(err))
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"code":    500,
+			"message": "移除证书分配失败",
+		})
+		return
+	}
+
+	h.logger.Info("Certificate unassigned from node",
+		logger.F("cert_id", certID),
+		logger.F("node_id", nodeID),
+		logger.F("node_name", node.Name))
+
+	c.JSON(http.StatusOK, gin.H{
+		"code":    200,
+		"message": "证书分配已移除",
 	})
 }

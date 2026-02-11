@@ -99,6 +99,9 @@ type Node struct {
 	XrayRunning bool   `json:"xray_running"`
 	XrayVersion string `json:"xray_version"`
 	
+	// 证书关联
+	CertificateID *int64 `json:"certificate_id,omitempty"`
+	
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
 }
@@ -149,6 +152,9 @@ type CreateNodeRequest struct {
 	// 备注和描述
 	Description string `json:"description"`
 	Remarks     string `json:"remarks"`
+	
+	// 证书关联
+	CertificateID *int64 `json:"certificate_id"`
 }
 
 // UpdateNodeRequest represents a request to update a node.
@@ -191,6 +197,9 @@ type UpdateNodeRequest struct {
 	// 备注和描述
 	Description *string `json:"description"`
 	Remarks     *string `json:"remarks"`
+	
+	// 证书关联
+	CertificateID *int64 `json:"certificate_id"`
 }
 
 // NodeFilter defines filter options for listing nodes.
@@ -427,6 +436,9 @@ func (s *Service) Create(ctx context.Context, req *CreateNodeRequest) (*Node, er
 		// 描述
 		Description: req.Description,
 		Remarks:     req.Remarks,
+		
+		// 证书关联
+		CertificateID: req.CertificateID,
 	}
 
 	if err := s.nodeRepo.Create(ctx, repoNode); err != nil {
@@ -642,6 +654,10 @@ func (s *Service) Update(ctx context.Context, id int64, req *UpdateNodeRequest) 
 
 	if req.Remarks != nil {
 		repoNode.Remarks = *req.Remarks
+	}
+
+	if req.CertificateID != nil {
+		repoNode.CertificateID = req.CertificateID
 	}
 
 	if err := s.nodeRepo.Update(ctx, repoNode); err != nil {
@@ -1144,6 +1160,9 @@ func (s *Service) toNode(rn *repository.Node) *Node {
 		// Xray 状态
 		XrayRunning: rn.XrayRunning,
 		XrayVersion: rn.XrayVersion,
+		
+		// 证书关联
+		CertificateID: rn.CertificateID,
 		
 		CreatedAt: rn.CreatedAt,
 		UpdatedAt: rn.UpdatedAt,
