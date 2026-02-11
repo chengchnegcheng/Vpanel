@@ -196,6 +196,9 @@ func (d *Database) AutoMigrate() error {
 		&repository.HealthCheck{},
 		&repository.UserNodeAssignment{},
 		&repository.NodeTraffic{},
+		// Certificate Management models
+		&repository.Certificate{},
+		&repository.CertificateDeployment{},
 		// IP Restriction models
 		&ip.IPWhitelist{},
 		&ip.IPBlacklist{},

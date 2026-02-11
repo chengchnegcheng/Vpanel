@@ -58,22 +58,23 @@ type HealthCheckResult struct {
 type HealthChecker struct {
 	config          *HealthCheckConfig
 	nodeRepo        repository.NodeRepository
+	certRepo        repository.CertificateRepository
 	healthCheckRepo repository.HealthCheckRepository
 	logger          logger.Logger
 	httpClient      *http.Client
 	notificationSvc *notification.Service
 
 	// State tracking for consecutive failures/successes
-	consecutiveFailures map[int64]int
+	consecutiveFailures  map[int64]int
 	consecutiveSuccesses map[int64]int
-	stateMu             sync.RWMutex
+	stateMu              sync.RWMutex
 
 	// Control
-	ctx        context.Context
-	cancel     context.CancelFunc
-	wg         sync.WaitGroup
-	running    bool
-	runningMu  sync.Mutex
+	ctx       context.Context
+	cancel    context.CancelFunc
+	wg        sync.WaitGroup
+	running   bool
+	runningMu sync.Mutex
 
 	// Notification callback
 	onStatusChange func(nodeID int64, oldStatus, newStatus string)
@@ -83,6 +84,7 @@ type HealthChecker struct {
 func NewHealthChecker(
 	config *HealthCheckConfig,
 	nodeRepo repository.NodeRepository,
+	certRepo repository.CertificateRepository,
 	healthCheckRepo repository.HealthCheckRepository,
 	log logger.Logger,
 ) *HealthChecker {
@@ -93,6 +95,7 @@ func NewHealthChecker(
 	return &HealthChecker{
 		config:               config,
 		nodeRepo:             nodeRepo,
+		certRepo:             certRepo,
 		healthCheckRepo:      healthCheckRepo,
 		logger:               log,
 		httpClient:           &http.Client{Timeout: config.Timeout},
@@ -294,16 +297,26 @@ func (hc *HealthChecker) performCheck(node *repository.Node) *HealthCheckResult 
 	if result.APIOk {
 		result.XrayOk = hc.checkXray(node.Address, node.Port)
 	}
+	
+	// Check certificate expiration if node has a certificate
+	certWarning := hc.checkCertificateExpiration(node)
 
 	result.Latency = int(time.Since(start).Milliseconds())
 
 	// Determine overall status
 	if result.TCPOk && result.APIOk && result.XrayOk {
 		result.Status = repository.HealthCheckStatusSuccess
-		result.Message = "All checks passed"
+		if certWarning != "" {
+			result.Message = fmt.Sprintf("All checks passed. %s", certWarning)
+		} else {
+			result.Message = "All checks passed"
+		}
 	} else {
 		result.Status = repository.HealthCheckStatusFailed
 		result.Message = hc.buildFailureMessage(result)
+		if certWarning != "" {
+			result.Message = fmt.Sprintf("%s. %s", result.Message, certWarning)
+		}
 	}
 
 	return result
@@ -661,4 +674,65 @@ func (hc *HealthChecker) sendStatusChangeNotification(node *repository.Node, old
 			logger.F("old_status", oldStatus),
 			logger.F("new_status", newStatus))
 	}
+}
+
+// checkCertificateExpiration 检查节点关联证书的过期状态
+func (hc *HealthChecker) checkCertificateExpiration(node *repository.Node) string {
+	// 如果节点没有关联证书，跳过检查
+	if node.CertificateID == nil {
+		return ""
+	}
+	
+	// 获取证书信息
+	cert, err := hc.certRepo.GetByID(hc.ctx, *node.CertificateID)
+	if err != nil {
+		hc.logger.Warn("Failed to get certificate for health check",
+			logger.F("node_id", node.ID),
+			logger.F("cert_id", *node.CertificateID),
+			logger.Err(err))
+		return ""
+	}
+	
+	// 检查证书过期时间
+	if cert.ExpiresAt.IsZero() {
+		return ""
+	}
+	
+	now := time.Now()
+	timeUntilExpiry := cert.ExpiresAt.Sub(now)
+	daysLeft := int(timeUntilExpiry.Hours() / 24)
+	
+	// 证书已过期
+	if daysLeft < 0 {
+		warning := fmt.Sprintf("证书已过期 %d 天", -daysLeft)
+		hc.logger.Error("Certificate expired",
+			logger.F("node_id", node.ID),
+			logger.F("node_name", node.Name),
+			logger.F("domain", cert.Domain),
+			logger.F("days_expired", -daysLeft))
+		
+		// TODO: 发送告警通知（需要实现通知服务）
+		
+		return warning
+	}
+	
+	// 证书即将过期（30天内）
+	if daysLeft <= 30 {
+		warning := fmt.Sprintf("证书将在 %d 天后过期", daysLeft)
+		
+		// 仅在7天内记录警告日志
+		if daysLeft <= 7 {
+			hc.logger.Warn("Certificate expiring soon",
+				logger.F("node_id", node.ID),
+				logger.F("node_name", node.Name),
+				logger.F("domain", cert.Domain),
+				logger.F("days_left", daysLeft))
+			
+			// TODO: 发送告警通知（需要实现通知服务）
+		}
+		
+		return warning
+	}
+	
+	return ""
 }

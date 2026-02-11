@@ -13,14 +13,21 @@ import (
 
 // Certificate represents an SSL/TLS certificate in the database.
 type Certificate struct {
-	ID          int64     `gorm:"primaryKey;autoIncrement"`
-	Domain      string    `gorm:"uniqueIndex;size:255;not null"`
-	Certificate string    `gorm:"type:text"`
-	PrivateKey  string    `gorm:"type:text"`
-	AutoRenew   bool      `gorm:"default:true"`
-	ExpiresAt   time.Time `gorm:"not null;index"`
-	CreatedAt   time.Time `gorm:"autoCreateTime"`
-	UpdatedAt   time.Time `gorm:"autoUpdateTime"`
+	ID           int64      `gorm:"primaryKey;autoIncrement"`
+	Domain       string     `gorm:"uniqueIndex;size:255;not null"`
+	Provider     string     `gorm:"size:50;default:manual"` // letsencrypt, zerossl, manual, self-signed
+	CertPath     string     `gorm:"size:500"`               // 证书文件路径
+	KeyPath      string     `gorm:"size:500"`               // 私钥文件路径
+	Certificate  string     `gorm:"type:text"`              // 证书内容（可选，用于备份）
+	PrivateKey   string     `gorm:"type:text"`              // 私钥内容（可选，用于备份）
+	AutoRenew    bool       `gorm:"default:true"`
+	Status       string     `gorm:"size:32;default:active"` // pending, active, failed, expired
+	ErrorMessage string     `gorm:"type:text"`              // 错误信息
+	IssueDate    *time.Time `gorm:""`                       // 签发日期
+	ExpireDate   *time.Time `gorm:"index"`                  // 过期日期
+	ExpiresAt    time.Time  `gorm:"not null;index"`         // 兼容旧字段
+	CreatedAt    time.Time  `gorm:"autoCreateTime"`
+	UpdatedAt    time.Time  `gorm:"autoUpdateTime"`
 }
 
 // TableName returns the table name for Certificate.

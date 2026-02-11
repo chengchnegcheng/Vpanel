@@ -106,6 +106,7 @@ func (r *Router) Setup() {
 	r.engine.Use(middleware.LoggerWithService(r.logger, r.logService))
 	r.engine.Use(middleware.CORS(r.config.Server.CORSOrigins))
 	r.engine.Use(middleware.RequestID())
+	r.engine.Use(middleware.ErrorHandler(r.logger)) // 统一错误处理
 	// Removed global rate limit - too restrictive for development
 	// r.engine.Use(middleware.RateLimit(100)) // 100 requests per second per IP
 
@@ -185,7 +186,7 @@ func (r *Router) Setup() {
 		r.logger,
 	)
 	nodeGroupService := node.NewGroupService(r.repos.NodeGroup, r.repos.Node, r.logger)
-	r.nodeHealthChecker = node.NewHealthChecker(nil, r.repos.Node, r.repos.HealthCheck, r.logger)
+	r.nodeHealthChecker = node.NewHealthChecker(nil, r.repos.Node, r.repos.Certificate, r.repos.HealthCheck, r.logger)
 	nodeTrafficService := node.NewTrafficService(r.repos.NodeTraffic, r.repos.NodeGroup, r.logger)
 	nodeDeployService := node.NewRemoteDeployService(r.logger)
 

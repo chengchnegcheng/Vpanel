@@ -296,9 +296,13 @@ func (a *Agent) heartbeatLoop() {
 
 // sendHeartbeat sends a heartbeat to the Panel.
 func (a *Agent) sendHeartbeat() {
+	// 读取当前状态（避免长时间持有锁）
 	a.mu.RLock()
-	if !a.registered {
-		a.mu.RUnlock()
+	registered := a.registered
+	nodeID := a.nodeID
+	a.mu.RUnlock()
+
+	if !registered {
 		// Try to register first with reconnection logic
 		if a.panelClient.ShouldReconnect() {
 			if err := a.panelClient.WaitForReconnect(a.ctx); err != nil {
@@ -308,6 +312,10 @@ func (a *Agent) sendHeartbeat() {
 				a.logger.Warn("registration failed during heartbeat",
 					logger.F("error", err.Error()),
 					logger.F("consecutive_fails", a.panelClient.GetConsecutiveFails()))
+				// 注册失败时更新状态
+				a.mu.Lock()
+				a.registered = false
+				a.mu.Unlock()
 			}
 		} else {
 			a.logger.Error("max reconnection attempts reached, giving up",
@@ -315,8 +323,6 @@ func (a *Agent) sendHeartbeat() {
 		}
 		return
 	}
-	nodeID := a.nodeID
-	a.mu.RUnlock()
 
 	// Collect metrics
 	metrics := a.collectMetrics()
@@ -329,7 +335,7 @@ func (a *Agent) sendHeartbeat() {
 
 	resp, err := a.panelClient.Heartbeat(a.ctx, req)
 	if err != nil {
-		a.logger.Warn("heartbeat failed",
+		a.logger.Error("heartbeat failed",
 			logger.F("error", err.Error()),
 			logger.F("node_id", nodeID),
 			logger.F("consecutive_fails", a.panelClient.GetConsecutiveFails()))
@@ -538,12 +544,32 @@ func (a *Agent) startXrayDirect(ctx context.Context) error {
 
 	a.logger.Info("Xray 进程已启动", logger.F("pid", cmd.Process.Pid))
 
-	// Monitor process in background
+	// Monitor process in background with context control
+	a.wg.Add(1)
 	go func() {
-		if err := cmd.Wait(); err != nil {
-			a.logger.Error("Xray 进程异常退出", logger.F("error", err.Error()))
-		} else {
-			a.logger.Warn("Xray 进程正常退出")
+		defer a.wg.Done()
+		
+		// 创建一个 channel 来接收进程退出信号
+		done := make(chan error, 1)
+		go func() {
+			done <- cmd.Wait()
+		}()
+		
+		// 等待进程退出或 context 取消
+		select {
+		case <-a.ctx.Done():
+			// Agent 停止，终止 Xray 进程
+			if cmd.Process != nil {
+				a.logger.Info("Agent 停止，终止 Xray 进程")
+				cmd.Process.Kill()
+			}
+			return
+		case err := <-done:
+			if err != nil {
+				a.logger.Error("Xray 进程异常退出", logger.F("error", err.Error()))
+			} else {
+				a.logger.Warn("Xray 进程正常退出")
+			}
 		}
 	}()
 

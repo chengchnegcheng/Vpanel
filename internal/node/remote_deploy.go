@@ -4,7 +4,9 @@ package node
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"encoding/base64"
+	"encoding/hex"
 	"fmt"
 	"os"
 	"strings"
@@ -55,6 +57,19 @@ type DeployResult struct {
 
 // Deploy deploys the agent to a remote server.
 func (s *RemoteDeployService) Deploy(ctx context.Context, config *DeployConfig) (*DeployResult, error) {
+	// 验证配置
+	if err := s.validateDeployConfig(config); err != nil {
+		return &DeployResult{
+			Success: false,
+			Message: fmt.Sprintf("配置验证失败: %v", err),
+			Steps:   []DeployStep{{Name: "配置验证", Status: "failed"}},
+		}, err
+	}
+
+	// 添加总体超时控制
+	ctx, cancel := context.WithTimeout(ctx, 15*time.Minute)
+	defer cancel()
+
 	result := &DeployResult{
 		Steps:   []DeployStep{},
 		Success: false,
@@ -530,8 +545,13 @@ exit 1
 
 	logBuffer.WriteString(fmt.Sprintf("正在上传 Agent (大小: %d bytes)...\n", len(agentData)))
 	
+	// 计算本地文件哈希
+	localHash := sha256.Sum256(agentData)
+	localHashStr := hex.EncodeToString(localHash[:])
+	s.logger.Info("Agent 文件哈希", logger.F("sha256", localHashStr))
+	
 	// 使用 SCP 协议上传文件（包含验证）
-	if err := s.uploadFileSCP(client, agentData, "/usr/local/bin/vpanel-agent", logBuffer); err != nil {
+	if err := s.uploadFileSCP(client, agentData, "/usr/local/bin/vpanel-agent", localHashStr, logBuffer); err != nil {
 		return fmt.Errorf("Agent 上传失败: %w", err)
 	}
 
@@ -806,29 +826,82 @@ fi
 // verifyInstallation verifies the installation.
 func (s *RemoteDeployService) verifyInstallation(client *ssh.Client, logBuffer *bytes.Buffer) error {
 	script := `
-# Check if agent is running
+echo "=== 验证安装 ==="
+
+# 1. 检查 Agent 服务状态
 if systemctl is-active --quiet vpanel-agent; then
     echo "✓ Agent 服务运行中"
 else
     echo "✗ Agent 服务未运行"
+    systemctl status vpanel-agent --no-pager || true
     exit 1
 fi
 
-# Check if Xray is installed
+# 2. 检查 Agent 进程
+if pgrep -x vpanel-agent >/dev/null 2>&1; then
+    AGENT_PID=$(pgrep -x vpanel-agent)
+    echo "✓ Agent 进程运行中 (PID: $AGENT_PID)"
+else
+    echo "✗ Agent 进程未运行"
+    exit 1
+fi
+
+# 3. 检查 Xray 安装
 if command -v xray &> /dev/null; then
-    echo "✓ Xray 已安装: $(xray version | head -1)"
+    XRAY_VERSION=$(xray version 2>/dev/null | head -1 || echo "unknown")
+    echo "✓ Xray 已安装: $XRAY_VERSION"
 else
     echo "✗ Xray 未安装"
     exit 1
 fi
 
-# Check config file
+# 4. 检查配置文件
 if [ -f /etc/vpanel/agent.yaml ]; then
     echo "✓ 配置文件存在"
+    
+    # 验证配置文件可读
+    if [ -r /etc/vpanel/agent.yaml ]; then
+        echo "✓ 配置文件可读"
+        
+        # 检查 Token 是否存在
+        if grep -q "token:" /etc/vpanel/agent.yaml; then
+            TOKEN_LINE=$(grep "token:" /etc/vpanel/agent.yaml | head -1)
+            TOKEN_VALUE=$(echo "$TOKEN_LINE" | sed 's/.*token: *"\(.*\)".*/\1/')
+            TOKEN_LEN=${#TOKEN_VALUE}
+            if [ "$TOKEN_LEN" -ge 32 ]; then
+                echo "✓ Token 配置正确 (长度: $TOKEN_LEN)"
+            else
+                echo "✗ Token 长度不足 (长度: $TOKEN_LEN)"
+                exit 1
+            fi
+        else
+            echo "✗ 配置文件中未找到 Token"
+            exit 1
+        fi
+    else
+        echo "✗ 配置文件不可读"
+        exit 1
+    fi
 else
     echo "✗ 配置文件不存在"
     exit 1
 fi
+
+# 5. 检查健康检查端口
+HEALTH_PORT=18443
+if netstat -tuln 2>/dev/null | grep -q ":$HEALTH_PORT " || ss -tuln 2>/dev/null | grep -q ":$HEALTH_PORT "; then
+    echo "✓ 健康检查端口 $HEALTH_PORT 已监听"
+else
+    echo "⚠ 健康检查端口 $HEALTH_PORT 未监听（可能正在启动）"
+fi
+
+# 6. 检查最近日志（查看是否有错误）
+echo ""
+echo "=== 最近日志 ==="
+journalctl -u vpanel-agent -n 10 --no-pager 2>/dev/null || echo "无法读取日志"
+
+echo ""
+echo "✓ 安装验证完成"
 `
 
 	if err := s.executeCommand(client, script, logBuffer); err != nil {
@@ -1098,6 +1171,39 @@ func (s *RemoteDeployService) TestConnection(ctx context.Context, config *Deploy
 	return nil
 }
 
+// validateDeployConfig 验证部署配置
+func (s *RemoteDeployService) validateDeployConfig(config *DeployConfig) error {
+	if config.Host == "" {
+		return fmt.Errorf("服务器地址不能为空")
+	}
+	
+	if config.Username == "" {
+		return fmt.Errorf("用户名不能为空")
+	}
+	
+	if config.Password == "" && config.PrivateKey == "" {
+		return fmt.Errorf("必须提供密码或私钥")
+	}
+	
+	if config.NodeToken == "" {
+		return fmt.Errorf("节点 Token 不能为空")
+	}
+	
+	if len(config.NodeToken) < 32 {
+		return fmt.Errorf("节点 Token 长度不足（至少 32 字符，当前 %d 字符）", len(config.NodeToken))
+	}
+	
+	if config.PanelURL == "" {
+		return fmt.Errorf("Panel URL 不能为空")
+	}
+	
+	if strings.Contains(config.PanelURL, "localhost") || strings.Contains(config.PanelURL, "127.0.0.1") {
+		return fmt.Errorf("Panel URL 不能使用 localhost 或 127.0.0.1，远程节点无法访问")
+	}
+	
+	return nil
+}
+
 // readAgentBinary 读取本地 Agent 二进制文件
 func (s *RemoteDeployService) readAgentBinary(path string) ([]byte, error) {
 	// 尝试多个可能的路径
@@ -1132,7 +1238,7 @@ func base64Encode(data []byte) string {
 }
 
 // uploadFileSCP 使用 SCP 协议上传文件
-func (s *RemoteDeployService) uploadFileSCP(client *ssh.Client, data []byte, remotePath string, logBuffer *bytes.Buffer) error {
+func (s *RemoteDeployService) uploadFileSCP(client *ssh.Client, data []byte, remotePath string, expectedHash string, logBuffer *bytes.Buffer) error {
 	// 先停止可能正在运行的 Agent 进程，避免 "Text file busy" 错误
 	stopScript := `
 if systemctl is-active --quiet vpanel-agent 2>/dev/null; then
@@ -1186,7 +1292,7 @@ sleep 1
 mv -f %s %s
 chmod +x %s
 
-# 验证文件
+# 验证文件大小
 FILE_SIZE=$(stat -c%%s %s 2>/dev/null || stat -f%%z %s 2>/dev/null || echo "0")
 echo "文件大小: ${FILE_SIZE} bytes"
 
@@ -1194,12 +1300,32 @@ if [ "$FILE_SIZE" -lt 1000 ]; then
     echo "错误: 文件大小异常"
     exit 1
 fi
-`, tmpPath, remotePath, remotePath, remotePath, remotePath)
+
+# 计算文件哈希
+REMOTE_HASH=$(sha256sum %s 2>/dev/null | awk '{print $1}' || shasum -a 256 %s 2>/dev/null | awk '{print $1}')
+echo "远程文件哈希: ${REMOTE_HASH}"
+`, tmpPath, remotePath, remotePath, remotePath, remotePath, remotePath, remotePath)
 	
 	if err := s.executeCommand(client, moveScript, logBuffer); err != nil {
 		return fmt.Errorf("移动文件失败: %w", err)
 	}
 
-	logBuffer.WriteString("✓ 文件上传完成\n")
+	// 验证哈希值
+	verifyScript := fmt.Sprintf(`
+REMOTE_HASH=$(sha256sum %s 2>/dev/null | awk '{print $1}' || shasum -a 256 %s 2>/dev/null | awk '{print $1}')
+if [ "$REMOTE_HASH" != "%s" ]; then
+    echo "✗ 文件校验失败"
+    echo "  期望: %s"
+    echo "  实际: ${REMOTE_HASH}"
+    exit 1
+fi
+echo "✓ 文件校验通过"
+`, remotePath, remotePath, expectedHash, expectedHash)
+	
+	if err := s.executeCommand(client, verifyScript, logBuffer); err != nil {
+		return fmt.Errorf("文件完整性校验失败: %w", err)
+	}
+
+	logBuffer.WriteString("✓ 文件上传完成并通过校验\n")
 	return nil
 }

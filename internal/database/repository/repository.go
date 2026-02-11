@@ -258,6 +258,7 @@ type Repositories struct {
 	HelpArticle  HelpArticleRepository
 	AuthToken    AuthTokenRepository
 	Certificate  CertificateRepository
+	CertificateDeployment CertificateDeploymentRepository
 	// Commercial System repositories
 	Plan         PlanRepository
 	Order        OrderRepository
@@ -321,5 +322,6 @@ func NewRepositories(db *gorm.DB) *Repositories {
 		UserNodeAssignment: NewUserNodeAssignmentRepository(db),
 		NodeTraffic:        NewNodeTrafficRepository(db),
 		Certificate:        NewCertificateRepository(db),
+		CertificateDeployment: NewCertificateDeploymentRepository(db),
 	}
 }

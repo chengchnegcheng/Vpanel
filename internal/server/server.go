@@ -12,6 +12,7 @@ import (
 
 	"v/internal/api"
 	"v/internal/auth"
+	"v/internal/certificate"
 	"v/internal/config"
 	"v/internal/database/repository"
 	logservice "v/internal/log"
@@ -21,14 +22,15 @@ import (
 
 // Server represents the HTTP server.
 type Server struct {
-	config       *config.Config
-	logger       logger.Logger
-	httpServer   *http.Server
-	router       *api.Router
-	authService  *auth.Service
-	proxyManager proxy.Manager
-	repos        *repository.Repositories
-	logService   *logservice.Service
+	config           *config.Config
+	logger           logger.Logger
+	httpServer       *http.Server
+	router           *api.Router
+	authService      *auth.Service
+	proxyManager     proxy.Manager
+	repos            *repository.Repositories
+	logService       *logservice.Service
+	certificateService *certificate.Service
 }
 
 // New creates a new Server.
@@ -40,13 +42,28 @@ func New(
 	repos *repository.Repositories,
 	logService *logservice.Service,
 ) *Server {
+	// 确保证书存储目录存在
+	if err := os.MkdirAll(cfg.Certificate.StoragePath, 0755); err != nil {
+		log.Error("创建证书存储目录失败", logger.Err(err))
+	}
+	
+	// 初始化证书服务
+	certificateService := certificate.NewService(
+		repos.Certificate,
+		repos.Node,
+		repos.CertificateDeployment,
+		log,
+		cfg.Certificate.StoragePath,
+	)
+	
 	return &Server{
-		config:       cfg,
-		logger:       log,
-		authService:  authService,
-		proxyManager: proxyManager,
-		repos:        repos,
-		logService:   logService,
+		config:             cfg,
+		logger:             log,
+		authService:        authService,
+		proxyManager:       proxyManager,
+		repos:              repos,
+		logService:         logService,
+		certificateService: certificateService,
 	}
 }
 
@@ -68,6 +85,19 @@ func (s *Server) Start() error {
 	if err := s.router.StartHealthChecker(ctx); err != nil {
 		s.logger.Warn("健康检查服务启动失败，继续启动服务器", logger.Err(err))
 		// 不阻止服务器启动
+	}
+	
+	// 启动证书自动续期服务
+	if s.config.Certificate.AutoRenewEnabled {
+		if err := s.certificateService.StartAutoRenew(ctx); err != nil {
+			s.logger.Warn("证书自动续期服务启动失败，继续启动服务器", logger.Err(err))
+		} else {
+			s.logger.Info("证书自动续期服务已启动",
+				logger.F("check_interval", s.config.Certificate.CheckInterval),
+				logger.F("renew_threshold", s.config.Certificate.RenewThreshold))
+		}
+	} else {
+		s.logger.Info("证书自动续期已禁用")
 	}
 
 	// Create HTTP server
@@ -106,7 +136,14 @@ func (s *Server) Start() error {
 func (s *Server) Stop(ctx context.Context) error {
 	s.logger.Info("stopping HTTP server")
 
-	// Stop health checker first
+	// 停止证书自动续期服务
+	if s.certificateService != nil {
+		if err := s.certificateService.StopAutoRenew(); err != nil {
+			s.logger.Warn("证书自动续期服务停止失败", logger.Err(err))
+		}
+	}
+
+	// Stop health checker
 	if s.router != nil {
 		if err := s.router.StopHealthChecker(ctx); err != nil {
 			s.logger.Warn("健康检查服务停止失败", logger.Err(err))

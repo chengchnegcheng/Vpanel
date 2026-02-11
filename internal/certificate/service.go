@@ -7,6 +7,7 @@ import (
 	"crypto/rsa"
 	"crypto/x509"
 	"crypto/x509/pkix"
+	"encoding/base64"
 	"encoding/pem"
 	"fmt"
 	"math/big"
@@ -14,7 +15,10 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
+
+	"golang.org/x/crypto/ssh"
 
 	"v/internal/database/repository"
 	"v/internal/logger"
@@ -22,21 +26,32 @@ import (
 
 // Service provides certificate management operations.
 type Service struct {
-	certRepo repository.CertificateRepository
-	logger   logger.Logger
-	certDir  string // 证书存储目录
+	certRepo       repository.CertificateRepository
+	nodeRepo       repository.NodeRepository
+	deploymentRepo repository.CertificateDeploymentRepository
+	logger         logger.Logger
+	certDir        string // 证书存储目录
+	
+	// 自动续期控制
+	renewCtx    context.Context
+	renewCancel context.CancelFunc
+	renewWg     sync.WaitGroup
 }
 
 // NewService creates a new certificate service.
 func NewService(
 	certRepo repository.CertificateRepository,
+	nodeRepo repository.NodeRepository,
+	deploymentRepo repository.CertificateDeploymentRepository,
 	log logger.Logger,
 	certDir string,
 ) *Service {
 	return &Service{
-		certRepo: certRepo,
-		logger:   log,
-		certDir:  certDir,
+		certRepo:       certRepo,
+		nodeRepo:       nodeRepo,
+		deploymentRepo: deploymentRepo,
+		logger:         log,
+		certDir:        certDir,
 	}
 }
 
@@ -516,3 +531,419 @@ func (s *Service) GenerateSelfSigned(ctx context.Context, domain string) (*repos
 	s.logger.Info("自签名证书生成成功", logger.F("domain", domain))
 	return cert, nil
 }
+
+// StartAutoRenew 启动自动续期定时任务
+func (s *Service) StartAutoRenew(ctx context.Context) error {
+	s.renewCtx, s.renewCancel = context.WithCancel(ctx)
+	
+	s.renewWg.Add(1)
+	go s.autoRenewLoop()
+	
+	s.logger.Info("证书自动续期服务已启动")
+	return nil
+}
+
+// StopAutoRenew 停止自动续期定时任务
+func (s *Service) StopAutoRenew() error {
+	if s.renewCancel != nil {
+		s.renewCancel()
+	}
+	
+	// 等待 goroutine 结束
+	done := make(chan struct{})
+	go func() {
+		s.renewWg.Wait()
+		close(done)
+	}()
+	
+	select {
+	case <-done:
+		s.logger.Info("证书自动续期服务已停止")
+		return nil
+	case <-time.After(10 * time.Second):
+		return fmt.Errorf("停止自动续期服务超时")
+	}
+}
+
+// autoRenewLoop 自动续期循环
+func (s *Service) autoRenewLoop() {
+	defer s.renewWg.Done()
+	
+	// 每天检查一次
+	ticker := time.NewTicker(24 * time.Hour)
+	defer ticker.Stop()
+	
+	// 启动时立即检查一次
+	s.checkAndRenewCertificates()
+	
+	for {
+		select {
+		case <-s.renewCtx.Done():
+			return
+		case <-ticker.C:
+			s.checkAndRenewCertificates()
+		}
+	}
+}
+
+// checkAndRenewCertificates 检查并续期证书
+func (s *Service) checkAndRenewCertificates() {
+	ctx := context.Background()
+	
+	certs, err := s.certRepo.GetAutoRenew(ctx)
+	if err != nil {
+		s.logger.Error("获取自动续期证书列表失败", logger.Err(err))
+		return
+	}
+	
+	now := time.Now()
+	renewThreshold := 30 * 24 * time.Hour // 30 天内过期
+	
+	for _, cert := range certs {
+		if cert.ExpireDate == nil {
+			continue
+		}
+		
+		timeUntilExpiry := cert.ExpireDate.Sub(now)
+		
+		// 检查是否即将过期
+		if timeUntilExpiry < renewThreshold && timeUntilExpiry > 0 {
+			daysLeft := int(timeUntilExpiry.Hours() / 24)
+			s.logger.Info("证书即将过期，开始自动续期",
+				logger.F("domain", cert.Domain),
+				logger.F("days_left", daysLeft))
+			
+			if err := s.Renew(ctx, cert.ID); err != nil {
+				s.logger.Error("自动续期失败",
+					logger.F("domain", cert.Domain),
+					logger.F("error", err.Error()))
+			} else {
+				s.logger.Info("自动续期成功", logger.F("domain", cert.Domain))
+				
+				// 续期成功后，部署到关联的节点
+				if err := s.DeployToAssignedNodes(ctx, cert.ID); err != nil {
+					s.logger.Error("部署证书到节点失败",
+						logger.F("domain", cert.Domain),
+						logger.F("error", err.Error()))
+				}
+			}
+		}
+	}
+}
+
+// DeployToNode 部署证书到指定节点
+func (s *Service) DeployToNode(ctx context.Context, certID int64, nodeID int64) error {
+	// 创建部署记录
+	deployment := &repository.CertificateDeployment{
+		CertificateID: certID,
+		NodeID:        nodeID,
+		Status:        "pending",
+	}
+	
+	if err := s.deploymentRepo.Create(ctx, deployment); err != nil {
+		return fmt.Errorf("创建部署记录失败: %w", err)
+	}
+	
+	// 获取证书
+	cert, err := s.certRepo.GetByID(ctx, certID)
+	if err != nil {
+		deployment.Status = "failed"
+		deployment.Message = fmt.Sprintf("获取证书失败: %v", err)
+		s.deploymentRepo.Update(ctx, deployment)
+		return fmt.Errorf("获取证书失败: %w", err)
+	}
+	
+	// 获取节点
+	node, err := s.nodeRepo.GetByID(ctx, nodeID)
+	if err != nil {
+		deployment.Status = "failed"
+		deployment.Message = fmt.Sprintf("获取节点失败: %v", err)
+		s.deploymentRepo.Update(ctx, deployment)
+		return fmt.Errorf("获取节点失败: %w", err)
+	}
+	
+	s.logger.Info("开始部署证书到节点",
+		logger.F("domain", cert.Domain),
+		logger.F("node", node.Name))
+	
+	// 读取证书文件
+	certData, err := os.ReadFile(cert.CertPath)
+	if err != nil {
+		deployment.Status = "failed"
+		deployment.Message = fmt.Sprintf("读取证书文件失败: %v", err)
+		s.deploymentRepo.Update(ctx, deployment)
+		return fmt.Errorf("读取证书文件失败: %w", err)
+	}
+	
+	keyData, err := os.ReadFile(cert.KeyPath)
+	if err != nil {
+		deployment.Status = "failed"
+		deployment.Message = fmt.Sprintf("读取私钥文件失败: %v", err)
+		s.deploymentRepo.Update(ctx, deployment)
+		return fmt.Errorf("读取私钥文件失败: %w", err)
+	}
+	
+	// 通过 SSH 部署到节点
+	if err := s.deployViaSSH(node, cert.Domain, certData, keyData); err != nil {
+		deployment.Status = "failed"
+		deployment.Message = fmt.Sprintf("SSH 部署失败: %v", err)
+		s.deploymentRepo.Update(ctx, deployment)
+		return fmt.Errorf("SSH 部署失败: %w", err)
+	}
+	
+	// 更新部署记录为成功
+	now := time.Now()
+	deployment.Status = "success"
+	deployment.Message = "部署成功"
+	deployment.DeployedAt = &now
+	s.deploymentRepo.Update(ctx, deployment)
+	
+	s.logger.Info("证书部署成功",
+		logger.F("domain", cert.Domain),
+		logger.F("node", node.Name))
+	
+	return nil
+}
+
+// DeployToAssignedNodes 部署证书到所有关联的节点
+func (s *Service) DeployToAssignedNodes(ctx context.Context, certID int64) error {
+	// 获取所有节点
+	nodes, err := s.nodeRepo.List(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("获取节点列表失败: %w", err)
+	}
+	
+	// 找出关联此证书的节点
+	assignedNodes := make([]*repository.Node, 0)
+	for _, node := range nodes {
+		if node.CertificateID != nil && *node.CertificateID == certID {
+			assignedNodes = append(assignedNodes, node)
+		}
+	}
+	
+	if len(assignedNodes) == 0 {
+		s.logger.Info("没有节点关联此证书", logger.F("cert_id", certID))
+		return nil
+	}
+	
+	s.logger.Info("开始部署证书到关联节点",
+		logger.F("cert_id", certID),
+		logger.F("node_count", len(assignedNodes)))
+	
+	// 并发部署到所有节点
+	var wg sync.WaitGroup
+	errChan := make(chan error, len(assignedNodes))
+	
+	for _, node := range assignedNodes {
+		wg.Add(1)
+		go func(n *repository.Node) {
+			defer wg.Done()
+			if err := s.DeployToNode(ctx, certID, n.ID); err != nil {
+				errChan <- fmt.Errorf("节点 %s 部署失败: %w", n.Name, err)
+			}
+		}(node)
+	}
+	
+	wg.Wait()
+	close(errChan)
+	
+	// 收集错误
+	var errors []error
+	for err := range errChan {
+		errors = append(errors, err)
+	}
+	
+	if len(errors) > 0 {
+		return fmt.Errorf("部分节点部署失败: %v", errors)
+	}
+	
+	return nil
+}
+
+// deployViaSSH 通过 SSH 部署证书到节点
+func (s *Service) deployViaSSH(node *repository.Node, domain string, certData, keyData []byte) error {
+	// 确定 SSH 连接参数
+	sshHost := node.SSHHost
+	if sshHost == "" {
+		sshHost = node.Address
+	}
+	
+	sshPort := node.SSHPort
+	if sshPort == 0 {
+		sshPort = 22
+	}
+	
+	sshUser := node.SSHUser
+	if sshUser == "" {
+		sshUser = "root"
+	}
+	
+	s.logger.Info("建立 SSH 连接",
+		logger.F("host", sshHost),
+		logger.F("port", sshPort),
+		logger.F("user", sshUser))
+	
+	// 配置 SSH 认证
+	var authMethods []ssh.AuthMethod
+	
+	// 优先使用密钥认证
+	if node.SSHKeyPath != "" {
+		keyData, err := os.ReadFile(node.SSHKeyPath)
+		if err != nil {
+			return fmt.Errorf("读取 SSH 私钥失败: %w", err)
+		}
+		
+		signer, err := ssh.ParsePrivateKey(keyData)
+		if err != nil {
+			return fmt.Errorf("解析 SSH 私钥失败: %w", err)
+		}
+		
+		authMethods = append(authMethods, ssh.PublicKeys(signer))
+	}
+	
+	// 密码认证
+	if node.SSHPassword != "" {
+		authMethods = append(authMethods, ssh.Password(node.SSHPassword))
+		authMethods = append(authMethods, ssh.KeyboardInteractive(func(user, instruction string, questions []string, echos []bool) ([]string, error) {
+			answers := make([]string, len(questions))
+			for i := range answers {
+				answers[i] = node.SSHPassword
+			}
+			return answers, nil
+		}))
+	}
+	
+	if len(authMethods) == 0 {
+		return fmt.Errorf("未配置 SSH 认证方式")
+	}
+	
+	// 建立 SSH 连接
+	config := &ssh.ClientConfig{
+		User:            sshUser,
+		Auth:            authMethods,
+		HostKeyCallback: ssh.InsecureIgnoreHostKey(), // TODO: 使用已知主机密钥验证
+		Timeout:         30 * time.Second,
+	}
+	
+	addr := fmt.Sprintf("%s:%d", sshHost, sshPort)
+	client, err := ssh.Dial("tcp", addr, config)
+	if err != nil {
+		return fmt.Errorf("SSH 连接失败: %w", err)
+	}
+	defer client.Close()
+	
+	s.logger.Info("SSH 连接成功")
+	
+	// 创建证书目录
+	certDir := fmt.Sprintf("/etc/xray/certs/%s", domain)
+	if err := s.executeSSHCommand(client, fmt.Sprintf("mkdir -p %s", certDir)); err != nil {
+		return fmt.Errorf("创建证书目录失败: %w", err)
+	}
+	
+	// 上传证书文件
+	certPath := fmt.Sprintf("%s/fullchain.pem", certDir)
+	if err := s.uploadFileSSH(client, certPath, certData); err != nil {
+		return fmt.Errorf("上传证书文件失败: %w", err)
+	}
+	
+	// 上传私钥文件
+	keyPath := fmt.Sprintf("%s/privkey.pem", certDir)
+	if err := s.uploadFileSSH(client, keyPath, keyData); err != nil {
+		return fmt.Errorf("上传私钥文件失败: %w", err)
+	}
+	
+	// 设置文件权限
+	if err := s.executeSSHCommand(client, fmt.Sprintf("chmod 644 %s", certPath)); err != nil {
+		return fmt.Errorf("设置证书权限失败: %w", err)
+	}
+	
+	if err := s.executeSSHCommand(client, fmt.Sprintf("chmod 600 %s", keyPath)); err != nil {
+		return fmt.Errorf("设置私钥权限失败: %w", err)
+	}
+	
+	// 更新节点的 TLS 配置
+	if err := s.executeSSHCommand(client, fmt.Sprintf(`
+		# 备份当前配置
+		if [ -f /etc/xray/config.json ]; then
+			cp /etc/xray/config.json /etc/xray/config.json.backup.$(date +%%s)
+		fi
+	`)); err != nil {
+		s.logger.Warn("备份配置失败", logger.Err(err))
+	}
+	
+	// 重启 Xray 服务以应用新证书
+	s.logger.Info("重启 Xray 服务")
+	if err := s.executeSSHCommand(client, "systemctl restart xray || service xray restart"); err != nil {
+		s.logger.Warn("重启 Xray 服务失败", logger.Err(err))
+		// 不返回错误，因为证书已经部署成功
+	}
+	
+	s.logger.Info("证书部署完成",
+		logger.F("node", node.Name),
+		logger.F("domain", domain))
+	
+	return nil
+}
+
+// executeSSHCommand 执行 SSH 命令
+func (s *Service) executeSSHCommand(client *ssh.Client, command string) error {
+	session, err := client.NewSession()
+	if err != nil {
+		return fmt.Errorf("创建 SSH 会话失败: %w", err)
+	}
+	defer session.Close()
+	
+	output, err := session.CombinedOutput(command)
+	if err != nil {
+		return fmt.Errorf("命令执行失败: %w, output: %s", err, string(output))
+	}
+	
+	return nil
+}
+
+// uploadFileSSH 通过 SSH 上传文件
+func (s *Service) uploadFileSSH(client *ssh.Client, remotePath string, data []byte) error {
+	session, err := client.NewSession()
+	if err != nil {
+		return fmt.Errorf("创建 SSH 会话失败: %w", err)
+	}
+	defer session.Close()
+	
+	// 使用 base64 编码传输文件内容
+	encoded := base64.StdEncoding.EncodeToString(data)
+	
+	// 分块传输（每块 100KB）
+	chunkSize := 100 * 1024
+	totalChunks := (len(encoded) + chunkSize - 1) / chunkSize
+	
+	// 清空目标文件
+	if err := s.executeSSHCommand(client, fmt.Sprintf("rm -f %s", remotePath)); err != nil {
+		return err
+	}
+	
+	// 分块上传
+	for i := 0; i < len(encoded); i += chunkSize {
+		end := i + chunkSize
+		if end > len(encoded) {
+			end = len(encoded)
+		}
+		
+		chunk := encoded[i:end]
+		chunkNum := i/chunkSize + 1
+		
+		if chunkNum%10 == 0 || chunkNum == totalChunks {
+			s.logger.Debug("上传进度",
+				logger.F("chunk", chunkNum),
+				logger.F("total", totalChunks))
+		}
+		
+		// 使用 echo 和 base64 解码写入文件
+		cmd := fmt.Sprintf("echo '%s' | base64 -d >> %s", chunk, remotePath)
+		if err := s.executeSSHCommand(client, cmd); err != nil {
+			return fmt.Errorf("上传第 %d 块失败: %w", chunkNum, err)
+		}
+	}
+	
+	return nil
+}
+

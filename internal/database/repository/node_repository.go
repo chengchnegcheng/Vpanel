@@ -78,6 +78,13 @@ type Node struct {
 	// 证书关联
 	CertificateID *int64 `gorm:"index"` // 关联的证书 ID
 	
+	// SSH 配置（用于证书部署和远程管理）
+	SSHHost     string `gorm:"size:256"` // SSH 主机地址（默认使用 Address）
+	SSHPort     int    `gorm:"default:22"` // SSH 端口
+	SSHUser     string `gorm:"size:64;default:root"` // SSH 用户名
+	SSHPassword string `gorm:"size:256"` // SSH 密码（加密存储）
+	SSHKeyPath  string `gorm:"size:512"` // SSH 私钥路径
+	
 	CreatedAt time.Time  `gorm:"autoCreateTime"`
 	UpdatedAt time.Time  `gorm:"autoUpdateTime"`
 }

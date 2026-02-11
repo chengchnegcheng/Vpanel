@@ -17,12 +17,13 @@ import (
 
 // Config represents the complete application configuration.
 type Config struct {
-	Version  string         `yaml:"-"`
-	Server   ServerConfig   `yaml:"server"`
-	Database DatabaseConfig `yaml:"database"`
-	Auth     AuthConfig     `yaml:"auth"`
-	Xray     XrayConfig     `yaml:"xray"`
-	Log      LogConfig      `yaml:"log"`
+	Version     string            `yaml:"-"`
+	Server      ServerConfig      `yaml:"server"`
+	Database    DatabaseConfig    `yaml:"database"`
+	Auth        AuthConfig        `yaml:"auth"`
+	Xray        XrayConfig        `yaml:"xray"`
+	Log         LogConfig         `yaml:"log"`
+	Certificate CertificateConfig `yaml:"certificate"`
 }
 
 // ServerConfig contains HTTP server settings.
@@ -81,6 +82,14 @@ type LogConfig struct {
 	BufferSize      int           `yaml:"buffer_size" env:"V_LOG_BUFFER_SIZE" default:"1000"`
 	BatchSize       int           `yaml:"batch_size" env:"V_LOG_BATCH_SIZE" default:"100"`
 	FlushInterval   time.Duration `yaml:"flush_interval" env:"V_LOG_FLUSH_INTERVAL" default:"5s"`
+}
+
+// CertificateConfig contains certificate management settings.
+type CertificateConfig struct {
+	StoragePath      string        `yaml:"storage_path" env:"V_CERT_STORAGE_PATH" default:"./data/certificates"`
+	AutoRenewEnabled bool          `yaml:"auto_renew_enabled" env:"V_CERT_AUTO_RENEW_ENABLED" default:"true"`
+	CheckInterval    time.Duration `yaml:"check_interval" env:"V_CERT_CHECK_INTERVAL" default:"24h"`
+	RenewThreshold   int           `yaml:"renew_threshold" env:"V_CERT_RENEW_THRESHOLD" default:"30"` // 提前多少天续期
 }
 
 // ValidationError represents a configuration validation error.
@@ -192,6 +201,9 @@ func (cfg *Config) Validate() error {
 
 	// Validate log config
 	cfg.validateLog(errs)
+
+	// Validate certificate config
+	cfg.validateCertificate(errs)
 
 	if errs.HasErrors() {
 		return errs
@@ -351,6 +363,21 @@ func (cfg *Config) validateLog(errs *ValidationErrors) {
 		if !strings.HasPrefix(cfg.Log.Output, "/") && !strings.HasPrefix(cfg.Log.Output, "./") {
 			errs.Add("log.output", "must be one of: stdout, stderr, or a file path")
 		}
+	}
+}
+
+// validateCertificate validates certificate configuration.
+func (cfg *Config) validateCertificate(errs *ValidationErrors) {
+	if cfg.Certificate.StoragePath == "" {
+		errs.Add("certificate.storage_path", "must not be empty")
+	}
+
+	if cfg.Certificate.CheckInterval <= 0 {
+		errs.Add("certificate.check_interval", "must be positive")
+	}
+
+	if cfg.Certificate.RenewThreshold < 1 || cfg.Certificate.RenewThreshold > 90 {
+		errs.Add("certificate.renew_threshold", "must be between 1 and 90 days")
 	}
 }
 

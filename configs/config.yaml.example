@@ -61,3 +61,14 @@ log:
   format: "json"
   # Log output: stdout, stderr, or file path
   output: "stdout"
+
+# Certificate management configuration
+certificate:
+  # Certificate storage path
+  storage_path: "./data/certificates"
+  # Enable automatic certificate renewal
+  auto_renew_enabled: true
+  # Check interval for certificate expiration (default: 24h)
+  check_interval: "24h"
+  # Renew threshold in days (renew when certificate expires within this many days)
+  renew_threshold: 30
