@@ -8,8 +8,10 @@ import (
 
 	"github.com/gin-gonic/gin"
 
+	"v/internal/api/middleware"
 	"v/internal/logger"
 	"v/internal/xray"
+	"v/pkg/errors"
 )
 
 // XrayHandler handles Xray-related API requests.
@@ -42,7 +44,7 @@ func (h *XrayHandler) GetStatus(c *gin.Context) {
 	status, err := h.manager.GetStatus(c.Request.Context())
 	if err != nil {
 		h.logger.Error("failed to get xray status", logger.F("error", err))
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get Xray status"})
+		middleware.HandleInternalError(c, errors.MsgXrayNotRunning, err)
 		return
 	}
 
@@ -54,7 +56,7 @@ func (h *XrayHandler) GetStatus(c *gin.Context) {
 func (h *XrayHandler) Restart(c *gin.Context) {
 	if err := h.manager.Restart(c.Request.Context()); err != nil {
 		h.logger.Error("failed to restart xray", logger.F("error", err))
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to restart Xray"})
+		middleware.HandleInternalError(c, errors.MsgXrayRestartFailed, err)
 		return
 	}
 

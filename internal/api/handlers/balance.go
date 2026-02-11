@@ -7,6 +7,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 
+	"v/internal/api/middleware"
 	"v/internal/commercial/balance"
 	"v/internal/logger"
 )
@@ -51,7 +52,7 @@ func (h *BalanceHandler) GetBalance(c *gin.Context) {
 	bal, err := h.balanceService.GetBalance(c.Request.Context(), userID.(int64))
 	if err != nil {
 		h.logger.Error("Failed to get balance", logger.Err(err))
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get balance"})
+		middleware.HandleInternalError(c, "获取余额失败", err)
 		return
 	}
 

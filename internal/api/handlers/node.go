@@ -7,8 +7,10 @@ import (
 
 	"github.com/gin-gonic/gin"
 
+	"v/internal/api/middleware"
 	"v/internal/logger"
 	"v/internal/node"
+	"v/pkg/errors"
 )
 
 // NodeHandler handles node management API requests.
@@ -313,7 +315,7 @@ func (h *NodeHandler) List(c *gin.Context) {
 	nodes, total, err := h.nodeService.List(c.Request.Context(), filter)
 	if err != nil {
 		h.logger.Error("Failed to list nodes", logger.Err(err))
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to list nodes"})
+		middleware.HandleInternalError(c, errors.MsgNodeCreateFailed, err)
 		return
 	}
 
@@ -333,18 +335,18 @@ func (h *NodeHandler) List(c *gin.Context) {
 func (h *NodeHandler) Get(c *gin.Context) {
 	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid node ID"})
+		middleware.HandleBadRequest(c, errors.MsgFieldInvalidFormat)
 		return
 	}
 
 	n, err := h.nodeService.GetByID(c.Request.Context(), id)
 	if err != nil {
 		if err == node.ErrNodeNotFound {
-			c.JSON(http.StatusNotFound, gin.H{"error": "Node not found"})
+			middleware.HandleNotFound(c, "node", id)
 			return
 		}
 		h.logger.Error("Failed to get node", logger.Err(err), logger.F("id", id))
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get node"})
+		middleware.HandleInternalError(c, errors.MsgNodeNotFound, err)
 		return
 	}
 
@@ -357,7 +359,7 @@ func (h *NodeHandler) Get(c *gin.Context) {
 func (h *NodeHandler) Create(c *gin.Context) {
 	var req CreateNodeRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request body"})
+		middleware.HandleBadRequest(c, errors.MsgInvalidRequest)
 		return
 	}
 

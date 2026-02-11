@@ -98,14 +98,19 @@ const (
 
 // 认证相关错误消息
 const (
-	MsgTokenExpired       = "登录已过期，请重新登录"
-	MsgTokenInvalid       = "无效的访问令牌"
+	MsgTokenExpired        = "登录已过期，请重新登录"
+	MsgTokenInvalid        = "无效的访问令牌"
 	MsgRefreshTokenExpired = "刷新令牌已过期，请重新登录"
-	Msg2FARequired        = "需要二次验证"
-	Msg2FAInvalid         = "二次验证码错误"
-	MsgEmailNotVerified   = "邮箱未验证，请先验证邮箱"
+	Msg2FARequired         = "需要二次验证"
+	Msg2FAInvalid          = "二次验证码错误"
+	MsgEmailNotVerified    = "邮箱未验证，请先验证邮箱"
 	MsgVerificationExpired = "验证链接已过期"
 	MsgVerificationInvalid = "验证链接无效"
+	MsgAccountLocked       = "账号已被锁定，请30分钟后重试或联系管理员"
+	MsgTooManyLoginAttempts = "登录失败次数过多，请稍后再试"
+	MsgForcePasswordChange = "需要修改密码才能继续使用"
+	MsgSessionConflict     = "账号在其他地方登录，当前会话已失效"
+	MsgIPNotAllowed        = "当前 IP 地址不允许登录"
 )
 
 // 文件和上传相关错误消息
@@ -165,6 +170,20 @@ const (
 	MsgNumberInvalid     = "数字格式无效"
 	MsgNumberTooSmall    = "数值过小"
 	MsgNumberTooLarge    = "数值过大"
+)
+
+// 网络和连接相关错误消息
+const (
+	MsgNetworkError       = "网络连接失败，请检查网络后重试"
+	MsgConnectionTimeout  = "连接超时，请稍后重试"
+	MsgServiceMaintenance = "系统维护中，请稍后访问"
+)
+
+// 操作反馈相关错误消息
+const (
+	MsgOperationSuccess    = "操作成功"
+	MsgOperationInProgress = "操作正在进行中，请稍候"
+	MsgOperationQueued     = "操作已加入队列，稍后执行"
 )
 
 // NewUserFriendlyError 创建用户友好的错误

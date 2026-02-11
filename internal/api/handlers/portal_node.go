@@ -7,8 +7,10 @@ import (
 
 	"github.com/gin-gonic/gin"
 
+	"v/internal/api/middleware"
 	"v/internal/logger"
 	"v/internal/portal/node"
+	"v/pkg/errors"
 )
 
 // PortalNodeHandler handles portal node requests.
@@ -29,7 +31,7 @@ func NewPortalNodeHandler(nodeService *node.Service, log logger.Logger) *PortalN
 func (h *PortalNodeHandler) ListNodes(c *gin.Context) {
 	userID, exists := c.Get("user_id")
 	if !exists {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "未认证"})
+		middleware.HandleUnauthorized(c, errors.MsgUnauthorized)
 		return
 	}
 
@@ -43,7 +45,7 @@ func (h *PortalNodeHandler) ListNodes(c *gin.Context) {
 	nodes, err := h.nodeService.ListNodes(c.Request.Context(), userID.(int64), filter)
 	if err != nil {
 		h.logger.Error("failed to list nodes", logger.F("error", err))
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "获取节点列表失败"})
+		middleware.HandleInternalError(c, "获取节点列表失败", err)
 		return
 	}
 
@@ -75,13 +77,13 @@ func (h *PortalNodeHandler) GetNode(c *gin.Context) {
 	idStr := c.Param("id")
 	id, err := strconv.ParseInt(idStr, 10, 64)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "无效的节点ID"})
+		middleware.HandleBadRequest(c, "无效的节点ID")
 		return
 	}
 
 	nodeInfo, err := h.nodeService.GetNode(c.Request.Context(), id)
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "节点不存在"})
+		middleware.HandleNotFound(c, "node", id)
 		return
 	}
 
