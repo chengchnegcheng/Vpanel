@@ -1,99 +1,103 @@
 <template>
   <div class="certificates-container">
-    <div class="page-header">
-      <div class="page-heading">
-        <h1 class="page-title">
-          证书管理
-        </h1>
-        <p class="page-subtitle">
-          集中处理证书申请、上传、续期和可用性检查
-        </p>
-      </div>
-      <div class="page-actions">
-        <el-button
-          type="primary"
-          @click="handleApply"
-        >
-          申请证书
-        </el-button>
-        <el-button
-          type="success"
-          @click="handleUpload"
-        >
-          上传证书
-        </el-button>
-        <el-button @click="handleRefresh">
-          刷新
-        </el-button>
-      </div>
-    </div>
 
-    <div class="overview-strip">
-      <div class="overview-card">
-        <span class="overview-label">当前匹配</span>
-        <strong class="overview-value">{{ displayCertificateTotal }}</strong>
-      </div>
-      <div class="overview-card">
-        <span class="overview-label">有效证书</span>
-        <strong class="overview-value is-success">{{ validCertificateCount }}</strong>
-      </div>
-      <div class="overview-card">
-        <span class="overview-label">即将过期</span>
-        <strong class="overview-value is-warning">{{ expiringCertificateCount }}</strong>
-      </div>
-      <div class="overview-card">
-        <span class="overview-label">异常证书</span>
-        <strong class="overview-value is-danger">{{ failedCertificateCount }}</strong>
-      </div>
-    </div>
+    <AdminStickyChrome>
+      <div class="page-header">
+            <div class="page-heading">
+              <h1 class="page-title">
+                证书管理
+              </h1>
+              <p class="page-subtitle">
+                集中处理证书申请、上传、续期和可用性检查
+              </p>
+            </div>
+            <div class="page-actions">
+              <el-button
+                type="primary"
+                @click="handleApply"
+              >
+                申请证书
+              </el-button>
+              <el-button
+                type="success"
+                @click="handleUpload"
+              >
+                上传证书
+              </el-button>
+              <el-button @click="handleRefresh">
+                刷新
+              </el-button>
+            </div>
+          </div>
 
-    <div class="toolbar-card">
-      <div class="toolbar-filters">
-        <el-input
-          v-model="searchQuery"
-          class="toolbar-search"
-          clearable
-          placeholder="搜索域名或提供商"
-          @input="handleFilterChange"
-        >
-          <template #prefix>
-            <el-icon><Search /></el-icon>
-          </template>
-        </el-input>
-        <el-select
-          v-model="providerFilter"
-          clearable
-          placeholder="提供商"
-          @change="handleFilterChange"
-        >
-          <el-option
-            v-for="provider in providerOptions"
-            :key="provider"
-            :label="formatProviderLabel(provider)"
-            :value="provider"
-          />
-        </el-select>
-        <el-select
-          v-model="statusFilter"
-          clearable
-          placeholder="状态"
-          @change="handleFilterChange"
-        >
-          <el-option
-            v-for="option in statusOptions"
-            :key="option.value"
-            :label="option.label"
-            :value="option.value"
-          />
-        </el-select>
-        <el-button @click="resetFilters">
-          重置
-        </el-button>
-      </div>
-      <div class="toolbar-actions">
-        <span class="toolbar-summary">当前筛选 {{ displayCertificateTotal }} 张证书，当前页 {{ paginatedCertificates.length }} 张</span>
-      </div>
-    </div>
+          <div class="overview-strip">
+            <div class="overview-card">
+              <span class="overview-label">当前匹配</span>
+              <strong class="overview-value">{{ displayCertificateTotal }}</strong>
+            </div>
+            <div class="overview-card">
+              <span class="overview-label">有效证书</span>
+              <strong class="overview-value is-success">{{ validCertificateCount }}</strong>
+            </div>
+            <div class="overview-card">
+              <span class="overview-label">即将过期</span>
+              <strong class="overview-value is-warning">{{ expiringCertificateCount }}</strong>
+            </div>
+            <div class="overview-card">
+              <span class="overview-label">异常证书</span>
+              <strong class="overview-value is-danger">{{ failedCertificateCount }}</strong>
+            </div>
+          </div>
+
+          <div class="toolbar-card">
+            <div class="toolbar-filters">
+              <el-input
+                v-model="searchQuery"
+                class="toolbar-search"
+                clearable
+                placeholder="搜索域名或提供商"
+                @input="handleFilterChange"
+              >
+                <template #prefix>
+                  <el-icon><Search /></el-icon>
+                </template>
+              </el-input>
+              <el-select
+                v-model="providerFilter"
+                clearable
+                placeholder="提供商"
+                @change="handleFilterChange"
+              >
+                <el-option
+                  v-for="provider in providerOptions"
+                  :key="provider"
+                  :label="formatProviderLabel(provider)"
+                  :value="provider"
+                />
+              </el-select>
+              <el-select
+                v-model="statusFilter"
+                clearable
+                placeholder="状态"
+                @change="handleFilterChange"
+              >
+                <el-option
+                  v-for="option in statusOptions"
+                  :key="option.value"
+                  :label="option.label"
+                  :value="option.value"
+                />
+              </el-select>
+              <el-button @click="resetFilters">
+                重置
+              </el-button>
+            </div>
+            <div class="toolbar-actions">
+              <span class="toolbar-summary">当前筛选 {{ displayCertificateTotal }} 张证书，当前页 {{ paginatedCertificates.length }} 张</span>
+            </div>
+          </div>
+    </AdminStickyChrome>
+    <div class="admin-page-body">
 
     <el-card class="box-card">
       <template #header>
@@ -933,10 +937,12 @@
         </div>
       </div>
     </el-dialog>
-  </div>
+    </div>
+</div>
 </template>
 
 <script setup>
+import AdminStickyChrome from '@/components/AdminStickyChrome.vue'
 import { computed, ref, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
@@ -1628,7 +1634,8 @@ const handleRenew = async (row) => {
   } catch (error) {
     if (error === 'cancel' || error === 'close') return
     console.error('Failed to renew certificate:', error)
-    ElMessage.error('续期证书失败')
+    ElMessage.error(extractErrorMessage(error) || row.errorMessage || '续期证书失败，请查看证书状态中的错误详情')
+    await fetchCertificates()
   }
 }
 

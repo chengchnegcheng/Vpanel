@@ -1,58 +1,62 @@
 <template>
   <div class="admin-payment-settings-page">
-    <div class="page-header">
-      <div class="page-heading">
-        <h1 class="page-title">
-          支付/充值配置
-        </h1>
-        <p class="page-subtitle">
-          在商业化管理中统一维护订单支付与余额充值所需的支付宝和微信支付商户参数
-        </p>
-      </div>
-      <div class="page-actions">
-        <el-button
-          :loading="loading"
-          @click="loadSettings"
-        >
-          刷新
-        </el-button>
-        <el-button
-          type="primary"
-          :loading="saving"
-          @click="saveSettings"
-        >
-          保存配置
-        </el-button>
-      </div>
-    </div>
+    
+    <AdminStickyChrome>
+      <div class="page-header">
+            <div class="page-heading">
+              <h1 class="page-title">
+                支付/充值配置
+              </h1>
+              <p class="page-subtitle">
+                在商业化管理中统一维护订单支付与余额充值所需的支付宝和微信支付商户参数
+              </p>
+            </div>
+            <div class="page-actions">
+              <el-button
+                :loading="loading"
+                @click="loadSettings"
+              >
+                刷新
+              </el-button>
+              <el-button
+                type="primary"
+                :loading="saving"
+                @click="saveSettings"
+              >
+                保存配置
+              </el-button>
+            </div>
+          </div>
 
-    <div class="overview-strip">
-      <div class="overview-card">
-        <span class="overview-label">前台在线方式</span>
-        <strong class="overview-value">{{ onlineMethodCountLabel }}</strong>
-      </div>
-      <div class="overview-card">
-        <span class="overview-label">已配置网关</span>
-        <strong class="overview-value is-primary">{{ configuredGatewayCount }} / 2</strong>
-      </div>
-      <div class="overview-card">
-        <span class="overview-label">沙箱模式</span>
-        <strong class="overview-value is-warning">{{ sandboxGatewayCount }} 个</strong>
-      </div>
-      <div class="overview-card">
-        <span class="overview-label">前台可见方式</span>
-        <strong class="overview-value is-success">{{ availableMethodHeadline }}</strong>
-      </div>
-    </div>
+          <div class="overview-strip">
+            <div class="overview-card">
+              <span class="overview-label">前台在线方式</span>
+              <strong class="overview-value">{{ onlineMethodCountLabel }}</strong>
+            </div>
+            <div class="overview-card">
+              <span class="overview-label">已配置网关</span>
+              <strong class="overview-value is-primary">{{ configuredGatewayCount }} / 2</strong>
+            </div>
+            <div class="overview-card">
+              <span class="overview-label">沙箱模式</span>
+              <strong class="overview-value is-warning">{{ sandboxGatewayCount }} 个</strong>
+            </div>
+            <div class="overview-card">
+              <span class="overview-label">前台可见方式</span>
+              <strong class="overview-value is-success">{{ availableMethodHeadline }}</strong>
+            </div>
+          </div>
 
-    <div class="toolbar-card">
-      <div class="toolbar-filters">
-        <span class="toolbar-summary">用户前台当前展示：{{ availableMethodsLabel }}</span>
-      </div>
-      <div class="toolbar-actions">
-        <span class="toolbar-summary">只有在线支付方式已启用且参数完整时，用户前台才会出现对应入口；余额支付不依赖外部商户参数，但余额充值依赖在线支付网关。</span>
-      </div>
-    </div>
+          <div class="toolbar-card">
+            <div class="toolbar-filters">
+              <span class="toolbar-summary">用户前台当前展示：{{ availableMethodsLabel }}</span>
+            </div>
+            <div class="toolbar-actions">
+              <span class="toolbar-summary">只有在线支付方式已启用且参数完整时，用户前台才会出现对应入口；余额支付不依赖外部商户参数，但余额充值依赖在线支付网关。</span>
+            </div>
+          </div>
+    </AdminStickyChrome>
+    <div class="admin-page-body">
 
     <el-alert
       title="保存后会立即刷新运行中的支付/充值网关"
@@ -270,10 +274,12 @@
         </div>
       </el-card>
     </el-form>
-  </div>
+    </div>
+</div>
 </template>
 
 <script setup>
+import AdminStickyChrome from '@/components/AdminStickyChrome.vue'
 import { computed, onMounted, reactive, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import { paymentsApi, settingsApi } from '@/api'

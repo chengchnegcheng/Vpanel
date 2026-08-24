@@ -1,13 +1,17 @@
 <template>
   <div class="ip-restriction-container">
-    <div class="page-header">
-      <div class="page-heading">
-        <h1>IP 限制管理</h1>
-        <p class="page-subtitle">
-          查看在线设备、封禁策略和地域访问分布
-        </p>
-      </div>
-    </div>
+    
+    <AdminStickyChrome>
+      <div class="page-header">
+            <div class="page-heading">
+              <h1>IP 限制管理</h1>
+              <p class="page-subtitle">
+                查看在线设备、封禁策略和地域访问分布
+              </p>
+            </div>
+          </div>
+    </AdminStickyChrome>
+    <div class="admin-page-body">
     
     <el-tabs
       v-model="activeTab"
@@ -735,7 +739,7 @@
           <el-pagination
             v-model:current-page="historyPage"
             v-model:page-size="historyPageSize"
-            :page-sizes="[20, 50, 100, 200]"
+            :page-sizes="[10, 20, 50, 100]"
             layout="total, sizes, prev, pager, next"
             :total="historyTotal"
             @size-change="fetchIPHistory"
@@ -918,10 +922,12 @@
         </el-button>
       </template>
     </el-dialog>
-  </div>
+    </div>
+</div>
 </template>
 
 <script setup>
+import AdminStickyChrome from '@/components/AdminStickyChrome.vue'
 import { ref, reactive, computed, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { 
@@ -1444,7 +1450,7 @@ const ipHistory = ref([])
 const historyUserId = ref(null)
 const historyDateRange = ref(null)
 const historyPage = ref(1)
-const historyPageSize = ref(20)
+const historyPageSize = ref(10)
 const historyTotal = ref(0)
 const userOptions = ref([])
 

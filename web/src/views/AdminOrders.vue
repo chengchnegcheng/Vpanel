@@ -1,131 +1,135 @@
 <template>
   <div class="admin-orders-page">
-    <div class="page-header">
-      <div class="page-heading">
-        <h1 class="page-title">
-          订单管理
-        </h1>
-        <p class="page-subtitle">
-          查看订单、处理状态流转和执行人工退款
-        </p>
-      </div>
-    </div>
+    
+    <AdminStickyChrome>
+      <div class="page-header">
+            <div class="page-heading">
+              <h1 class="page-title">
+                订单管理
+              </h1>
+              <p class="page-subtitle">
+                查看订单、处理状态流转和执行人工退款
+              </p>
+            </div>
+          </div>
 
-    <div class="overview-strip">
-      <div class="overview-card">
-        <span class="overview-label">订单总数</span>
-        <strong class="overview-value">{{ pagination.total }}</strong>
-      </div>
-      <div class="overview-card">
-        <span class="overview-label">当前页待支付</span>
-        <strong class="overview-value is-warning">{{ pendingOrderCount }}</strong>
-      </div>
-      <div class="overview-card">
-        <span class="overview-label">当前页可退款</span>
-        <strong class="overview-value is-danger">{{ refundableOrderCount }}</strong>
-      </div>
-      <div class="overview-card">
-        <span class="overview-label">当前页实付总额</span>
-        <strong class="overview-value is-primary">¥{{ currentPageRevenue }}</strong>
-      </div>
-    </div>
+          <div class="overview-strip">
+            <div class="overview-card">
+              <span class="overview-label">订单总数</span>
+              <strong class="overview-value">{{ pagination.total }}</strong>
+            </div>
+            <div class="overview-card">
+              <span class="overview-label">当前页待支付</span>
+              <strong class="overview-value is-warning">{{ pendingOrderCount }}</strong>
+            </div>
+            <div class="overview-card">
+              <span class="overview-label">当前页可退款</span>
+              <strong class="overview-value is-danger">{{ refundableOrderCount }}</strong>
+            </div>
+            <div class="overview-card">
+              <span class="overview-label">当前页实付总额</span>
+              <strong class="overview-value is-primary">¥{{ currentPageRevenue }}</strong>
+            </div>
+          </div>
 
-    <div class="toolbar-card orders-toolbar-card">
-      <div class="orders-toolbar">
-        <el-select
-          v-model="filter.status"
-          class="toolbar-field toolbar-field--status"
-          placeholder="订单状态"
-          clearable
-        >
-          <el-option
-            label="待支付"
-            value="pending"
-          />
-          <el-option
-            label="已支付"
-            value="paid"
-          />
-          <el-option
-            label="已完成"
-            value="completed"
-          />
-          <el-option
-            label="已取消"
-            value="cancelled"
-          />
-          <el-option
-            label="已退款"
-            value="refunded"
-          />
-        </el-select>
-        <el-select
-          v-model="filter.paymentMethod"
-          class="toolbar-field toolbar-field--method"
-          placeholder="支付方式"
-          clearable
-        >
-          <el-option
-            v-for="method in paymentMethods"
-            :key="method"
-            :label="getMethodLabel(method)"
-            :value="method"
-          />
-        </el-select>
-        <el-input
-          v-model="filter.search"
-          class="search-input toolbar-field toolbar-field--search"
-          placeholder="搜索订单号或用户 ID"
-          clearable
-          @keyup.enter="applyFilters"
-        />
-        <el-date-picker
-          v-model="filter.dateRange"
-          class="toolbar-field toolbar-field--date"
-          type="daterange"
-          range-separator="至"
-          start-placeholder="开始日期"
-          end-placeholder="结束日期"
-          unlink-panels
-          value-format="YYYY-MM-DD"
-        />
-        <div class="toolbar-field toolbar-field--amount amount-range-field">
-          <el-input-number
-            v-model="filter.minAmount"
-            class="amount-input"
-            :min="0"
-            :precision="2"
-            :step="10"
-            controls-position="right"
-            placeholder="最低实付"
-          />
-          <span class="amount-range-separator">-</span>
-          <el-input-number
-            v-model="filter.maxAmount"
-            class="amount-input"
-            :min="0"
-            :precision="2"
-            :step="10"
-            controls-position="right"
-            placeholder="最高实付"
-          />
-        </div>
-        <div class="filter-actions">
-          <el-button
-            type="primary"
-            @click="applyFilters"
-          >
-            搜索
-          </el-button>
-          <el-button @click="resetFilters">
-            重置
-          </el-button>
-        </div>
-      </div>
-      <div class="toolbar-actions toolbar-actions--summary">
-        <span class="toolbar-summary">当前页 {{ orders.length }} 笔订单，共 {{ pagination.total }} 笔</span>
-      </div>
-    </div>
+          <div class="toolbar-card orders-toolbar-card">
+            <div class="orders-toolbar">
+              <el-select
+                v-model="filter.status"
+                class="toolbar-field toolbar-field--status"
+                placeholder="订单状态"
+                clearable
+              >
+                <el-option
+                  label="待支付"
+                  value="pending"
+                />
+                <el-option
+                  label="已支付"
+                  value="paid"
+                />
+                <el-option
+                  label="已完成"
+                  value="completed"
+                />
+                <el-option
+                  label="已取消"
+                  value="cancelled"
+                />
+                <el-option
+                  label="已退款"
+                  value="refunded"
+                />
+              </el-select>
+              <el-select
+                v-model="filter.paymentMethod"
+                class="toolbar-field toolbar-field--method"
+                placeholder="支付方式"
+                clearable
+              >
+                <el-option
+                  v-for="method in paymentMethods"
+                  :key="method"
+                  :label="getMethodLabel(method)"
+                  :value="method"
+                />
+              </el-select>
+              <el-input
+                v-model="filter.search"
+                class="search-input toolbar-field toolbar-field--search"
+                placeholder="搜索订单号或用户 ID"
+                clearable
+                @keyup.enter="applyFilters"
+              />
+              <el-date-picker
+                v-model="filter.dateRange"
+                class="toolbar-field toolbar-field--date"
+                type="daterange"
+                range-separator="至"
+                start-placeholder="开始日期"
+                end-placeholder="结束日期"
+                unlink-panels
+                value-format="YYYY-MM-DD"
+              />
+              <div class="toolbar-field toolbar-field--amount amount-range-field">
+                <el-input-number
+                  v-model="filter.minAmount"
+                  class="amount-input"
+                  :min="0"
+                  :precision="2"
+                  :step="10"
+                  controls-position="right"
+                  placeholder="最低实付"
+                />
+                <span class="amount-range-separator">-</span>
+                <el-input-number
+                  v-model="filter.maxAmount"
+                  class="amount-input"
+                  :min="0"
+                  :precision="2"
+                  :step="10"
+                  controls-position="right"
+                  placeholder="最高实付"
+                />
+              </div>
+              <div class="filter-actions">
+                <el-button
+                  type="primary"
+                  @click="applyFilters"
+                >
+                  搜索
+                </el-button>
+                <el-button @click="resetFilters">
+                  重置
+                </el-button>
+              </div>
+            </div>
+            <div class="toolbar-actions toolbar-actions--summary">
+              <span class="toolbar-summary">当前页 {{ orders.length }} 笔订单，共 {{ pagination.total }} 笔</span>
+            </div>
+          </div>
+    </AdminStickyChrome>
+    <div class="admin-page-body">
 
     <div class="table-shell">
       <el-table
@@ -373,10 +377,12 @@
         </el-button>
       </template>
     </el-dialog>
-  </div>
+    </div>
+</div>
 </template>
 
 <script setup>
+import AdminStickyChrome from '@/components/AdminStickyChrome.vue'
 import { computed, onMounted, reactive, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { ordersApi, paymentsApi } from '@/api/index'
@@ -393,7 +399,7 @@ const detailVisible = ref(false)
 const refundVisible = ref(false)
 const submittingRefund = ref(false)
 
-const pagination = reactive({ page: 1, pageSize: 20, total: 0 })
+const pagination = reactive({ page: 1, pageSize: 10, total: 0 })
 const filter = reactive({
   status: '',
   paymentMethod: '',

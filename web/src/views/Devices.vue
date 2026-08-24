@@ -1,5 +1,6 @@
 <template>
   <div class="devices-container">
+    <AdminStickyChrome>
     <h1>我的设备</h1>
 
     <!-- 设备槽位信息 -->
@@ -29,6 +30,9 @@
         您的设备数量即将达到上限，如需更多设备请联系管理员
       </div>
     </el-card>
+    </AdminStickyChrome>
+    <div class="admin-page-body">
+
 
     <!-- 设备列表 -->
     <el-card style="margin-top: 20px">
@@ -172,10 +176,12 @@
         <el-table-column prop="userAgent" label="客户端" />
       </el-table>
     </el-card>
+    </div>
   </div>
 </template>
 
 <script setup>
+import AdminStickyChrome from '@/components/AdminStickyChrome.vue'
 import { ref, computed, onMounted, onUnmounted } from "vue";
 import { ElMessage, ElMessageBox } from "element-plus";
 import {

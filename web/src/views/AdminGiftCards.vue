@@ -1,93 +1,97 @@
 <template>
   <div class="admin-giftcards-page">
-    <div class="page-header">
-      <div class="page-heading">
-        <h1 class="page-title">
-          礼品卡管理
-        </h1>
-        <p class="page-subtitle">
-          统一维护礼品卡批次、状态切换和兑换记录
-        </p>
-      </div>
-      <div class="page-actions">
-        <el-button
-          type="primary"
-          @click="showCreateDialog"
-        >
-          <el-icon class="el-icon--left">
-            <Plus />
-          </el-icon>
-          批量创建
-        </el-button>
-      </div>
-    </div>
+    
+    <AdminStickyChrome>
+      <div class="page-header">
+            <div class="page-heading">
+              <h1 class="page-title">
+                礼品卡管理
+              </h1>
+              <p class="page-subtitle">
+                统一维护礼品卡批次、状态切换和兑换记录
+              </p>
+            </div>
+            <div class="page-actions">
+              <el-button
+                type="primary"
+                @click="showCreateDialog"
+              >
+                <el-icon class="el-icon--left">
+                  <Plus />
+                </el-icon>
+                批量创建
+              </el-button>
+            </div>
+          </div>
 
-    <div class="overview-strip">
-      <div class="overview-card">
-        <span class="overview-label">总数量</span>
-        <strong class="overview-value">{{ stats.total_cards || 0 }}</strong>
-      </div>
-      <div class="overview-card">
-        <span class="overview-label">可用</span>
-        <strong class="overview-value is-success">{{ stats.active_cards || 0 }}</strong>
-      </div>
-      <div class="overview-card">
-        <span class="overview-label">已兑换</span>
-        <strong class="overview-value is-muted">{{ stats.redeemed_cards || 0 }}</strong>
-      </div>
-      <div class="overview-card">
-        <span class="overview-label">可用面值</span>
-        <strong class="overview-value is-primary">¥{{ formatPrice(stats.active_value || 0) }}</strong>
-      </div>
-    </div>
+          <div class="overview-strip">
+            <div class="overview-card">
+              <span class="overview-label">总数量</span>
+              <strong class="overview-value">{{ stats.total_cards || 0 }}</strong>
+            </div>
+            <div class="overview-card">
+              <span class="overview-label">可用</span>
+              <strong class="overview-value is-success">{{ stats.active_cards || 0 }}</strong>
+            </div>
+            <div class="overview-card">
+              <span class="overview-label">已兑换</span>
+              <strong class="overview-value is-muted">{{ stats.redeemed_cards || 0 }}</strong>
+            </div>
+            <div class="overview-card">
+              <span class="overview-label">可用面值</span>
+              <strong class="overview-value is-primary">¥{{ formatPrice(stats.active_value || 0) }}</strong>
+            </div>
+          </div>
 
-    <div class="toolbar-card">
-      <div class="toolbar-filters">
-        <el-select
-          v-model="filter.status"
-          placeholder="状态"
-          clearable
-        >
-          <el-option
-            label="可用"
-            value="active"
-          />
-          <el-option
-            label="已兑换"
-            value="redeemed"
-          />
-          <el-option
-            label="已过期"
-            value="expired"
-          />
-          <el-option
-            label="已禁用"
-            value="disabled"
-          />
-        </el-select>
-        <el-input
-          v-model="filter.batch_id"
-          class="toolbar-search"
-          placeholder="筛选批次 ID"
-          clearable
-        />
-        <el-button
-          type="primary"
-          @click="applyFilters"
-        >
-          筛选
-        </el-button>
-        <el-button @click="resetFilters">
-          重置
-        </el-button>
-      </div>
-      <div class="toolbar-actions">
-        <span class="toolbar-summary">当前页 {{ giftCards.length }} 张礼品卡，共 {{ pagination.total }} 张</span>
-        <el-button @click="handleRefresh">
-          刷新
-        </el-button>
-      </div>
-    </div>
+          <div class="toolbar-card">
+            <div class="toolbar-filters">
+              <el-select
+                v-model="filter.status"
+                placeholder="状态"
+                clearable
+              >
+                <el-option
+                  label="可用"
+                  value="active"
+                />
+                <el-option
+                  label="已兑换"
+                  value="redeemed"
+                />
+                <el-option
+                  label="已过期"
+                  value="expired"
+                />
+                <el-option
+                  label="已禁用"
+                  value="disabled"
+                />
+              </el-select>
+              <el-input
+                v-model="filter.batch_id"
+                class="toolbar-search"
+                placeholder="筛选批次 ID"
+                clearable
+              />
+              <el-button
+                type="primary"
+                @click="applyFilters"
+              >
+                筛选
+              </el-button>
+              <el-button @click="resetFilters">
+                重置
+              </el-button>
+            </div>
+            <div class="toolbar-actions">
+              <span class="toolbar-summary">当前页 {{ giftCards.length }} 张礼品卡，共 {{ pagination.total }} 张</span>
+              <el-button @click="handleRefresh">
+                刷新
+              </el-button>
+            </div>
+          </div>
+    </AdminStickyChrome>
+    <div class="admin-page-body">
 
     <div class="table-shell">
       <el-table
@@ -330,10 +334,12 @@
         </el-button>
       </template>
     </el-dialog>
-  </div>
+    </div>
+</div>
 </template>
 
 <script setup>
+import AdminStickyChrome from '@/components/AdminStickyChrome.vue'
 import { ref, reactive, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, CopyDocument } from '@element-plus/icons-vue'
@@ -347,7 +353,7 @@ const { isMobile } = useViewport()
 const loading = ref(false)
 const giftCards = ref([])
 const stats = ref({})
-const pagination = reactive({ page: 1, pageSize: 20, total: 0 })
+const pagination = reactive({ page: 1, pageSize: 10, total: 0 })
 const filter = reactive({ status: '', batch_id: '' })
 const dialogVisible = ref(false)
 const successDialogVisible = ref(false)

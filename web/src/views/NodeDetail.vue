@@ -1,41 +1,45 @@
 <template>
   <div class="node-detail-page">
-    <div class="page-header">
-      <div class="header-left">
-        <el-button
-          link
-          @click="goBack"
-        >
-          <el-icon><ArrowLeft /></el-icon>
-          返回
-        </el-button>
-        <h1 class="page-title">
-          {{ node?.name || '节点详情' }}
-        </h1>
-        <el-tag
-          v-if="node"
-          :type="getStatusType(node.status)"
-          size="large"
-        >
-          {{ getStatusText(node.status) }}
-        </el-tag>
-      </div>
-      <div class="header-actions">
-        <el-button @click="refreshData">
-          <el-icon><Refresh /></el-icon>
-          刷新
-        </el-button>
-        <el-button @click="openOperationsPage">
-          节点运维
-        </el-button>
-        <el-button
-          type="primary"
-          @click="editNode"
-        >
-          编辑
-        </el-button>
-      </div>
-    </div>
+    
+    <AdminStickyChrome>
+      <div class="page-header">
+            <div class="header-left">
+              <el-button
+                link
+                @click="goBack"
+              >
+                <el-icon><ArrowLeft /></el-icon>
+                返回
+              </el-button>
+              <h1 class="page-title">
+                {{ node?.name || '节点详情' }}
+              </h1>
+              <el-tag
+                v-if="node"
+                :type="getStatusType(node.status)"
+                size="large"
+              >
+                {{ getStatusText(node.status) }}
+              </el-tag>
+            </div>
+            <div class="header-actions">
+              <el-button @click="refreshData">
+                <el-icon><Refresh /></el-icon>
+                刷新
+              </el-button>
+              <el-button @click="openOperationsPage">
+                节点运维
+              </el-button>
+              <el-button
+                type="primary"
+                @click="editNode"
+              >
+                编辑
+              </el-button>
+            </div>
+          </div>
+    </AdminStickyChrome>
+    <div class="admin-page-body">
 
     <div
       v-if="node"
@@ -607,10 +611,12 @@
         </el-alert>
       </div>
     </el-dialog>
-  </div>
+    </div>
+</div>
 </template>
 
 <script setup>
+import AdminStickyChrome from '@/components/AdminStickyChrome.vue'
 import { ref, computed, onMounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'

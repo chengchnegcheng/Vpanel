@@ -1,31 +1,35 @@
 <template>
   <div class="auth-settings-page">
-    <div class="page-header">
-      <div class="page-heading-block">
-        <el-button
-          class="back-button"
-          text
-          :icon="ArrowLeft"
-          @click="router.push({ name: 'AdminSettings' })"
-        >
-          配置管理
-        </el-button>
-        <div class="page-heading">
-          <p class="page-kicker">系统设置 / 身份验证</p>
-          <h1>身份验证</h1>
-          <p class="page-subtitle">基本身份验证、OAuth 集成和第三方登录凭据</p>
-        </div>
-      </div>
-      <el-button
-        type="primary"
-        :icon="Key"
-        :loading="saving"
-        class="save-button"
-        @click="saveSettings"
-      >
-        保存设置
-      </el-button>
-    </div>
+    
+    <AdminStickyChrome>
+      <div class="page-header">
+            <div class="page-heading-block">
+              <el-button
+                class="back-button"
+                text
+                :icon="ArrowLeft"
+                @click="router.push({ name: 'AdminSettings' })"
+              >
+                配置管理
+              </el-button>
+              <div class="page-heading">
+                <p class="page-kicker">系统设置 / 身份验证</p>
+                <h1>身份验证</h1>
+                <p class="page-subtitle">基本身份验证、OAuth 集成和第三方登录凭据</p>
+              </div>
+            </div>
+            <el-button
+              type="primary"
+              :icon="Key"
+              :loading="saving"
+              class="save-button"
+              @click="saveSettings"
+            >
+              保存设置
+            </el-button>
+          </div>
+    </AdminStickyChrome>
+    <div class="admin-page-body">
 
     <el-tabs v-model="activeTab" class="auth-tabs">
       <el-tab-pane label="基本身份验证" name="basic-auth">
@@ -221,10 +225,12 @@
         </section>
       </el-tab-pane>
     </el-tabs>
-  </div>
+    </div>
+</div>
 </template>
 
 <script setup>
+import AdminStickyChrome from '@/components/AdminStickyChrome.vue'
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'

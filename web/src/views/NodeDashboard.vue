@@ -1,44 +1,48 @@
 <template>
   <div class="node-dashboard-page">
-    <div class="page-header">
-      <div class="page-heading">
-        <div class="title-row">
-          <h1 class="page-title">
-            节点集群概览
-          </h1>
-          <el-tag
-            size="small"
-            effect="plain"
-            class="refresh-tag"
-          >
-            自动刷新 {{ autoRefreshSeconds }}s
-          </el-tag>
-        </div>
-        <p class="page-subtitle">
-          集中查看节点健康率、负载分布、分组覆盖和待处理风险。
-          <span v-if="lastUpdatedText">上次更新 {{ lastUpdatedText }}</span>
-        </p>
-      </div>
+    
+    <AdminStickyChrome>
+      <div class="page-header">
+            <div class="page-heading">
+              <div class="title-row">
+                <h1 class="page-title">
+                  节点集群概览
+                </h1>
+                <el-tag
+                  size="small"
+                  effect="plain"
+                  class="refresh-tag"
+                >
+                  自动刷新 {{ autoRefreshSeconds }}s
+                </el-tag>
+              </div>
+              <p class="page-subtitle">
+                集中查看节点健康率、负载分布、分组覆盖和待处理风险。
+                <span v-if="lastUpdatedText">上次更新 {{ lastUpdatedText }}</span>
+              </p>
+            </div>
 
-      <div class="page-actions">
-        <el-button
-          :loading="loading"
-          @click="refreshData"
-        >
-          <el-icon><Refresh /></el-icon>
-          刷新
-        </el-button>
-        <el-button @click="router.push('/admin/node-groups')">
-          节点分组
-        </el-button>
-        <el-button
-          type="primary"
-          @click="router.push('/admin/nodes')"
-        >
-          管理节点
-        </el-button>
-      </div>
-    </div>
+            <div class="page-actions">
+              <el-button
+                :loading="loading"
+                @click="refreshData"
+              >
+                <el-icon><Refresh /></el-icon>
+                刷新
+              </el-button>
+              <el-button @click="router.push('/admin/node-groups')">
+                节点分组
+              </el-button>
+              <el-button
+                type="primary"
+                @click="router.push('/admin/nodes')"
+              >
+                管理节点
+              </el-button>
+            </div>
+          </div>
+    </AdminStickyChrome>
+    <div class="admin-page-body">
 
     <el-card
       shadow="never"
@@ -570,10 +574,12 @@
         </el-card>
       </div>
     </div>
+    </div>
   </div>
 </template>
 
 <script setup>
+import AdminStickyChrome from '@/components/AdminStickyChrome.vue'
 import { ref, computed, onMounted, onUnmounted } from "vue";
 import { useRouter } from "vue-router";
 import { ElMessage } from "element-plus";

@@ -1,88 +1,92 @@
 <template>
   <div class="users-container">
-    <div class="page-header">
-      <div class="page-heading">
-        <h1>用户管理</h1>
-        <p class="page-subtitle">
-          统一维护账户资料、权限角色和启用状态
-        </p>
-      </div>
-    </div>
+    
+    <AdminStickyChrome>
+      <div class="page-header">
+            <div class="page-heading">
+              <h1>用户管理</h1>
+              <p class="page-subtitle">
+                统一维护账户资料、权限角色和启用状态
+              </p>
+            </div>
+          </div>
 
-    <div class="overview-strip">
-      <div class="overview-card">
-        <span class="overview-label">当前匹配</span>
-        <strong class="overview-value">{{ displayTotal }}</strong>
-      </div>
-      <div class="overview-card">
-        <span class="overview-label">管理员</span>
-        <strong class="overview-value is-danger">{{ adminUserCount }}</strong>
-      </div>
-      <div class="overview-card">
-        <span class="overview-label">启用中</span>
-        <strong class="overview-value is-success">{{ enabledUserCount }}</strong>
-      </div>
-      <div class="overview-card">
-        <span class="overview-label">已禁用</span>
-        <strong class="overview-value is-muted">{{ disabledUserCount }}</strong>
-      </div>
-    </div>
+          <div class="overview-strip">
+            <div class="overview-card">
+              <span class="overview-label">当前匹配</span>
+              <strong class="overview-value">{{ displayTotal }}</strong>
+            </div>
+            <div class="overview-card">
+              <span class="overview-label">管理员</span>
+              <strong class="overview-value is-danger">{{ adminUserCount }}</strong>
+            </div>
+            <div class="overview-card">
+              <span class="overview-label">启用中</span>
+              <strong class="overview-value is-success">{{ enabledUserCount }}</strong>
+            </div>
+            <div class="overview-card">
+              <span class="overview-label">已禁用</span>
+              <strong class="overview-value is-muted">{{ disabledUserCount }}</strong>
+            </div>
+          </div>
 
-    <div class="toolbar-card">
-      <div class="toolbar-filters">
-        <el-input
-          v-model="searchQuery"
-          class="toolbar-search"
-          placeholder="搜索用户名或邮箱"
-          clearable
-        >
-          <template #prefix>
-            <el-icon><Search /></el-icon>
-          </template>
-        </el-input>
-        <el-select
-          v-model="roleFilter"
-          clearable
-          placeholder="角色"
-          @change="handleFilterChange"
-        >
-          <el-option
-            v-for="role in roleOptions"
-            :key="role.value"
-            :label="role.label"
-            :value="role.value"
-          />
-        </el-select>
-        <el-select
-          v-model="statusFilter"
-          clearable
-          placeholder="状态"
-          @change="handleFilterChange"
-        >
-          <el-option
-            label="启用中"
-            value="enabled"
-          />
-          <el-option
-            label="已禁用"
-            value="disabled"
-          />
-        </el-select>
-        <el-button @click="resetFilters">
-          重置
-        </el-button>
-      </div>
-      <div class="toolbar-actions">
-        <span class="toolbar-summary">当前筛选 {{ displayTotal }} 个账户，当前页 {{ paginatedUsers.length }} 个</span>
-        <el-button
-          type="primary"
-          :disabled="!canManageUsers"
-          @click="showAddDialog"
-        >
-          添加用户
-        </el-button>
-      </div>
-    </div>
+          <div class="toolbar-card">
+            <div class="toolbar-filters">
+              <el-input
+                v-model="searchQuery"
+                class="toolbar-search"
+                placeholder="搜索用户名或邮箱"
+                clearable
+              >
+                <template #prefix>
+                  <el-icon><Search /></el-icon>
+                </template>
+              </el-input>
+              <el-select
+                v-model="roleFilter"
+                clearable
+                placeholder="角色"
+                @change="handleFilterChange"
+              >
+                <el-option
+                  v-for="role in roleOptions"
+                  :key="role.value"
+                  :label="role.label"
+                  :value="role.value"
+                />
+              </el-select>
+              <el-select
+                v-model="statusFilter"
+                clearable
+                placeholder="状态"
+                @change="handleFilterChange"
+              >
+                <el-option
+                  label="启用中"
+                  value="enabled"
+                />
+                <el-option
+                  label="已禁用"
+                  value="disabled"
+                />
+              </el-select>
+              <el-button @click="resetFilters">
+                重置
+              </el-button>
+            </div>
+            <div class="toolbar-actions">
+              <span class="toolbar-summary">当前筛选 {{ displayTotal }} 个账户，当前页 {{ paginatedUsers.length }} 个</span>
+              <el-button
+                type="primary"
+                :disabled="!canManageUsers"
+                @click="showAddDialog"
+              >
+                添加用户
+              </el-button>
+            </div>
+          </div>
+    </AdminStickyChrome>
+    <div class="admin-page-body">
 
     <div class="users-table-wrap table-shell">
       <el-table
@@ -323,10 +327,12 @@
         </el-button>
       </template>
     </el-dialog>
-  </div>
+    </div>
+</div>
 </template>
 
 <script setup>
+import AdminStickyChrome from '@/components/AdminStickyChrome.vue'
 import { computed, h, nextTick, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { MoreFilled, Search } from '@element-plus/icons-vue'

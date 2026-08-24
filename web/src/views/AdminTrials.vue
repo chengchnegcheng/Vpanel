@@ -1,73 +1,77 @@
 <template>
   <div class="admin-trials-page">
-    <div class="page-header">
-      <div class="page-heading">
-        <h1 class="page-title">
-          试用管理
-        </h1>
-        <p class="page-subtitle">
-          查看试用数据、执行过期检查并为指定用户授予试用
-        </p>
-      </div>
-      <div class="page-actions">
-        <el-button
-          type="primary"
-          @click="showGrantDialog"
-        >
-          <el-icon class="el-icon--left">
-            <Plus />
-          </el-icon>
-          授予试用
-        </el-button>
-      </div>
-    </div>
+    
+    <AdminStickyChrome>
+      <div class="page-header">
+            <div class="page-heading">
+              <h1 class="page-title">
+                试用管理
+              </h1>
+              <p class="page-subtitle">
+                查看试用数据、执行过期检查并为指定用户授予试用
+              </p>
+            </div>
+            <div class="page-actions">
+              <el-button
+                type="primary"
+                @click="showGrantDialog"
+              >
+                <el-icon class="el-icon--left">
+                  <Plus />
+                </el-icon>
+                授予试用
+              </el-button>
+            </div>
+          </div>
 
-    <div class="overview-strip">
-      <div class="overview-card">
-        <span class="overview-label">总试用数</span>
-        <strong class="overview-value">{{ stats.total_trials || 0 }}</strong>
-      </div>
-      <div class="overview-card">
-        <span class="overview-label">活跃试用</span>
-        <strong class="overview-value is-success">{{ stats.active_trials || 0 }}</strong>
-      </div>
-      <div class="overview-card">
-        <span class="overview-label">已过期</span>
-        <strong class="overview-value is-warning">{{ stats.expired_trials || 0 }}</strong>
-      </div>
-      <div class="overview-card">
-        <span class="overview-label">已转化</span>
-        <strong class="overview-value is-primary">{{ stats.converted_trials || 0 }}</strong>
-      </div>
-      <div class="overview-card">
-        <span class="overview-label">转化率</span>
-        <strong class="overview-value is-success">{{ (stats.conversion_rate || 0).toFixed(1) }}%</strong>
-      </div>
-    </div>
+          <div class="overview-strip">
+            <div class="overview-card">
+              <span class="overview-label">总试用数</span>
+              <strong class="overview-value">{{ stats.total_trials || 0 }}</strong>
+            </div>
+            <div class="overview-card">
+              <span class="overview-label">活跃试用</span>
+              <strong class="overview-value is-success">{{ stats.active_trials || 0 }}</strong>
+            </div>
+            <div class="overview-card">
+              <span class="overview-label">已过期</span>
+              <strong class="overview-value is-warning">{{ stats.expired_trials || 0 }}</strong>
+            </div>
+            <div class="overview-card">
+              <span class="overview-label">已转化</span>
+              <strong class="overview-value is-primary">{{ stats.converted_trials || 0 }}</strong>
+            </div>
+            <div class="overview-card">
+              <span class="overview-label">转化率</span>
+              <strong class="overview-value is-success">{{ (stats.conversion_rate || 0).toFixed(1) }}%</strong>
+            </div>
+          </div>
 
-    <div class="toolbar-card">
-      <div class="toolbar-actions">
-        <span class="toolbar-summary">
-          当前试用功能{{ trialConfig.enabled ? '已启用' : '已禁用' }}，默认时长 {{ trialConfig.duration || 0 }} 天
-        </span>
-        <el-button
-          type="warning"
-          :loading="expiring"
-          @click="expireTrials"
-        >
-          <el-icon class="el-icon--left">
-            <Timer />
-          </el-icon>
-          手动过期检查
-        </el-button>
-        <el-button @click="refreshAll">
-          <el-icon class="el-icon--left">
-            <Refresh />
-          </el-icon>
-          刷新统计
-        </el-button>
-      </div>
-    </div>
+          <div class="toolbar-card">
+            <div class="toolbar-actions">
+              <span class="toolbar-summary">
+                当前试用功能{{ trialConfig.enabled ? '已启用' : '已禁用' }}，默认时长 {{ trialConfig.duration || 0 }} 天
+              </span>
+              <el-button
+                type="warning"
+                :loading="expiring"
+                @click="expireTrials"
+              >
+                <el-icon class="el-icon--left">
+                  <Timer />
+                </el-icon>
+                手动过期检查
+              </el-button>
+              <el-button @click="refreshAll">
+                <el-icon class="el-icon--left">
+                  <Refresh />
+                </el-icon>
+                刷新统计
+              </el-button>
+            </div>
+          </div>
+    </AdminStickyChrome>
+    <div class="admin-page-body">
 
     <div class="detail-grid">
       <el-card
@@ -213,10 +217,12 @@
         </el-button>
       </template>
     </el-dialog>
-  </div>
+    </div>
+</div>
 </template>
 
 <script setup>
+import AdminStickyChrome from '@/components/AdminStickyChrome.vue'
 import { ref, reactive, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, Timer, Refresh } from '@element-plus/icons-vue'

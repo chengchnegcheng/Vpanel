@@ -1,5 +1,6 @@
 <template>
   <div class="admin-nodes-page">
+    <AdminStickyChrome>
     <div class="page-header">
       <div class="page-heading">
         <h1 class="page-title">节点管理</h1>
@@ -144,6 +145,9 @@
         </div>
       </div>
     </div>
+    </AdminStickyChrome>
+    <div class="admin-page-body">
+
 
     <div v-if="trafficLimitedNodeCount" class="traffic-workspace">
       <div class="traffic-workspace__header">
@@ -1060,10 +1064,12 @@
         </div>
       </div>
     </el-dialog>
+    </div>
   </div>
 </template>
 
 <script setup>
+import AdminStickyChrome from '@/components/AdminStickyChrome.vue'
 import { ref, reactive, computed, onMounted, onUnmounted, watch } from "vue";
 import { useRouter } from "vue-router";
 import { ElMessage, ElMessageBox } from "element-plus";
@@ -1100,7 +1106,7 @@ const nodeStore = useNodeStore();
 const router = useRouter();
 const { isMobile } = useViewport();
 
-const pagination = reactive({ page: 1, pageSize: 20 });
+const pagination = reactive({ page: 1, pageSize: 10 });
 const dialogVisible = ref(false);
 const tokenDialogVisible = ref(false);
 const detailDialogVisible = ref(false);
@@ -1458,7 +1464,57 @@ const getAssignedCertificateDisplay = (certificateId) => {
   const certificate = certificates.value.find(
     (cert) => Number(cert.id) === Number(certificateId),
   );
-  return certificate?.domain || `#${certificateId}`;
+  if (!certificate) return `#${certificateId}`;
+  const state = getCertificateOperationalState(certificate);
+  return state.key === "ready"
+    ? certificate.domain
+    : `${certificate.domain}（${state.label}）`;
+};
+
+const getCertificateOperationalState = (certificate) => {
+  if (!certificate) {
+    return { key: "missing", label: "证书不存在", detail: "节点关联的系统证书记录不存在。" };
+  }
+
+  const status = String(certificate.status || "").toLowerCase();
+  const expiresAt = new Date(certificate.expires_at || certificate.expiresAt || "");
+  const expiresAtMs = expiresAt.getTime();
+  if (status === "expired" || (!Number.isNaN(expiresAtMs) && expiresAtMs <= Date.now())) {
+    return {
+      key: "expired",
+      label: "证书过期",
+      detail: `关联证书 ${certificate.domain} 已过期，请立即重新签发。`,
+    };
+  }
+  if (status === "failed") {
+    return {
+      key: "failed",
+      label: "证书异常",
+      detail: certificate.error_message || certificate.errorMessage || `关联证书 ${certificate.domain} 状态异常。`,
+    };
+  }
+  if (status === "pending") {
+    return { key: "pending", label: "签发中", detail: `关联证书 ${certificate.domain} 正在签发。` };
+  }
+  if (!Number.isNaN(expiresAtMs) && expiresAtMs - Date.now() <= 30 * 24 * 60 * 60 * 1000) {
+    return {
+      key: "expiring",
+      label: "即将过期",
+      detail: `关联证书 ${certificate.domain} 将于 ${formatCertificateDate(expiresAt)} 过期。`,
+    };
+  }
+  return { key: "ready", label: "已就绪", detail: `TLS 证书 ${certificate.domain} 有效。` };
+};
+
+const getNodeCertificateState = (node) => {
+  if (!node?.certificate_id) return null;
+  const certificate = certificates.value.find(
+    (cert) => Number(cert.id) === Number(node.certificate_id),
+  );
+  if (!certificate && certificatesLoading.value) {
+    return { key: "loading", label: "检查中", detail: "正在读取证书状态。" };
+  }
+  return getCertificateOperationalState(certificate);
 };
 
 const handleCertificateChange = (certificateId) => {
@@ -1581,14 +1637,19 @@ const getLoadPercent = (node) => {
 
 const getTlsStatusText = (node) => {
   if (!node.tls_enabled) return "未启用";
-  if (node.certificate_id) return "已就绪";
+  if (node.certificate_id) return getNodeCertificateState(node)?.label || "证书异常";
   if (node.tls_domain) return "缺证书";
   return "待补齐";
 };
 
 const getTlsStatusPillClass = (node) => {
   if (!node.tls_enabled) return "is-muted";
-  if (node.certificate_id) return "is-success";
+  if (node.certificate_id) {
+    const state = getNodeCertificateState(node)?.key;
+    if (state === "ready") return "is-success";
+    if (state === "loading" || state === "pending" || state === "expiring") return "is-warning";
+    return "is-danger";
+  }
   if (node.tls_domain) return "is-warning";
   return "is-danger";
 };
@@ -1599,7 +1660,7 @@ const getTlsHint = (node) => {
   }
 
   if (node.certificate_id) {
-    return "TLS 已启用，证书与域名均已绑定到节点。";
+    return getNodeCertificateState(node)?.detail || "TLS 已启用，但无法读取关联证书状态。";
   }
 
   if (node.tls_domain) {

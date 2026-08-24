@@ -1,54 +1,58 @@
 <template>
   <div class="admin-coupons-page">
-    <div class="page-header">
-      <div class="page-heading">
-        <h1 class="page-title">
-          优惠券管理
-        </h1>
-        <p class="page-subtitle">
-          集中维护优惠策略、使用限制和有效期状态
-        </p>
-      </div>
-      <div class="page-actions">
-        <el-button
-          type="primary"
-          @click="showCreateDialog"
-        >
-          <el-icon class="el-icon--left">
-            <Plus />
-          </el-icon>
-          创建优惠券
-        </el-button>
-      </div>
-    </div>
+    
+    <AdminStickyChrome>
+      <div class="page-header">
+            <div class="page-heading">
+              <h1 class="page-title">
+                优惠券管理
+              </h1>
+              <p class="page-subtitle">
+                集中维护优惠策略、使用限制和有效期状态
+              </p>
+            </div>
+            <div class="page-actions">
+              <el-button
+                type="primary"
+                @click="showCreateDialog"
+              >
+                <el-icon class="el-icon--left">
+                  <Plus />
+                </el-icon>
+                创建优惠券
+              </el-button>
+            </div>
+          </div>
 
-    <div class="overview-strip">
-      <div class="overview-card">
-        <span class="overview-label">优惠券总数</span>
-        <strong class="overview-value">{{ pagination.total }}</strong>
-      </div>
-      <div class="overview-card">
-        <span class="overview-label">当前页有效</span>
-        <strong class="overview-value is-success">{{ validCouponCount }}</strong>
-      </div>
-      <div class="overview-card">
-        <span class="overview-label">当前页已过期</span>
-        <strong class="overview-value is-warning">{{ expiredCouponCount }}</strong>
-      </div>
-      <div class="overview-card">
-        <span class="overview-label">当前页已用完</span>
-        <strong class="overview-value is-danger">{{ exhaustedCouponCount }}</strong>
-      </div>
-    </div>
+          <div class="overview-strip">
+            <div class="overview-card">
+              <span class="overview-label">优惠券总数</span>
+              <strong class="overview-value">{{ pagination.total }}</strong>
+            </div>
+            <div class="overview-card">
+              <span class="overview-label">当前页有效</span>
+              <strong class="overview-value is-success">{{ validCouponCount }}</strong>
+            </div>
+            <div class="overview-card">
+              <span class="overview-label">当前页已过期</span>
+              <strong class="overview-value is-warning">{{ expiredCouponCount }}</strong>
+            </div>
+            <div class="overview-card">
+              <span class="overview-label">当前页已用完</span>
+              <strong class="overview-value is-danger">{{ exhaustedCouponCount }}</strong>
+            </div>
+          </div>
 
-    <div class="toolbar-card">
-      <div class="toolbar-actions">
-        <span class="toolbar-summary">当前页 {{ coupons.length }} 张优惠券，共 {{ pagination.total }} 张</span>
-        <el-button @click="fetchCoupons">
-          刷新
-        </el-button>
-      </div>
-    </div>
+          <div class="toolbar-card">
+            <div class="toolbar-actions">
+              <span class="toolbar-summary">当前页 {{ coupons.length }} 张优惠券，共 {{ pagination.total }} 张</span>
+              <el-button @click="fetchCoupons">
+                刷新
+              </el-button>
+            </div>
+          </div>
+    </AdminStickyChrome>
+    <div class="admin-page-body">
 
     <div class="table-shell">
       <el-table
@@ -307,10 +311,12 @@
         </el-button>
       </template>
     </el-dialog>
-  </div>
+    </div>
+</div>
 </template>
 
 <script setup>
+import AdminStickyChrome from '@/components/AdminStickyChrome.vue'
 import { computed, nextTick, onMounted, reactive, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { CopyDocument, Plus } from '@element-plus/icons-vue'
@@ -323,7 +329,7 @@ const { isMobile } = useViewport()
 
 const loading = ref(false)
 const coupons = ref([])
-const pagination = reactive({ page: 1, pageSize: 20, total: 0 })
+const pagination = reactive({ page: 1, pageSize: 10, total: 0 })
 const dialogVisible = ref(false)
 const isEdit = ref(false)
 const submitting = ref(false)

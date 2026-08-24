@@ -1,35 +1,39 @@
 <template>
   <div class="change-password-container">
-    <div class="page-header">
-      <div class="page-heading">
-        <h1 class="page-title">
-          修改密码
-        </h1>
-        <p class="page-subtitle">
-          更新登录凭据并完成基础安全校验
-        </p>
-      </div>
-    </div>
+    
+    <AdminStickyChrome>
+      <div class="page-header">
+            <div class="page-heading">
+              <h1 class="page-title">
+                修改密码
+              </h1>
+              <p class="page-subtitle">
+                更新登录凭据并完成基础安全校验
+              </p>
+            </div>
+          </div>
 
-    <div class="overview-strip">
-      <div class="overview-card">
-        <span class="overview-label">当前状态</span>
-        <strong
-          class="overview-value"
-          :class="passwordForm.newPassword ? 'is-primary' : ''"
-        >
-          {{ passwordForm.newPassword ? passwordStrengthText : '待输入' }}
-        </strong>
-      </div>
-      <div class="overview-card">
-        <span class="overview-label">最少长度</span>
-        <strong class="overview-value">8 位</strong>
-      </div>
-      <div class="overview-card">
-        <span class="overview-label">安全校验</span>
-        <strong class="overview-value is-success">5 项</strong>
-      </div>
-    </div>
+          <div class="overview-strip">
+            <div class="overview-card">
+              <span class="overview-label">当前状态</span>
+              <strong
+                class="overview-value"
+                :class="passwordForm.newPassword ? 'is-primary' : ''"
+              >
+                {{ passwordForm.newPassword ? passwordStrengthText : '待输入' }}
+              </strong>
+            </div>
+            <div class="overview-card">
+              <span class="overview-label">最少长度</span>
+              <strong class="overview-value">8 位</strong>
+            </div>
+            <div class="overview-card">
+              <span class="overview-label">安全校验</span>
+              <strong class="overview-value is-success">5 项</strong>
+            </div>
+          </div>
+    </AdminStickyChrome>
+    <div class="admin-page-body">
 
     <div class="change-password-layout">
       <el-card
@@ -146,10 +150,12 @@
         </div>
       </el-card>
     </div>
-  </div>
+    </div>
+</div>
 </template>
 
 <script setup>
+import AdminStickyChrome from '@/components/AdminStickyChrome.vue'
 import { ref, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'

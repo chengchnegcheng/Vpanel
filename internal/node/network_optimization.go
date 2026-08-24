@@ -152,8 +152,9 @@ func (s *RemoteDeployService) ApplyNetworkOptimization(ctx context.Context, conf
 		logOutput += inspectLog
 	}
 
+	applied := adjustAppliedNetworkOptimizationSettings(normalized, logOutput)
 	return &NetworkOptimizationExecutionResult{
-		AppliedSettings: normalized,
+		AppliedSettings: applied,
 		State:           state,
 		Log:             strings.TrimSpace(logOutput),
 		BackupPath:      NetworkOptimizationBackupPath,
@@ -294,6 +295,15 @@ func (s *RemoteDeployService) rollbackNetworkOptimizationState(ctx context.Conte
 		return combined, err
 	}
 	return combined, nil
+}
+
+// adjustAppliedNetworkOptimizationSettings reconciles requested settings with runtime results.
+func adjustAppliedNetworkOptimizationSettings(settings NetworkOptimizationSettings, logOutput string) NetworkOptimizationSettings {
+	applied := settings
+	if strings.Contains(logOutput, "已跳过 BBR") {
+		applied.EnableBBR = false
+	}
+	return applied
 }
 
 func filterNonEmptyStrings(values ...string) []string {
@@ -444,11 +454,18 @@ if [ "$ENABLE_BBR" = "1" ]; then
     $SUDO modprobe tcp_bbr >/dev/null 2>&1 || true
   fi
   AVAILABLE_CC=$($SUDO sysctl -n net.ipv4.tcp_available_congestion_control 2>/dev/null || echo "$AVAILABLE_CC")
-  if ! echo " ${AVAILABLE_CC} " | grep -q " bbr "; then
-    echo "当前内核不支持 BBR，请升级内核或加载 tcp_bbr 模块"
-    exit 1
+  if echo " ${AVAILABLE_CC} " | grep -q " bbr "; then
+    TARGET_CC="bbr"
+  else
+    echo "当前内核不支持 BBR，已跳过 BBR，继续应用其他优化项"
+    if [ -n "${ORIGINAL_CONGESTION_CONTROL:-}" ]; then
+      TARGET_CC="${ORIGINAL_CONGESTION_CONTROL}"
+    elif [ -n "$CURRENT_CC" ]; then
+      TARGET_CC="$CURRENT_CC"
+    elif echo " ${AVAILABLE_CC} " | grep -q " cubic "; then
+      TARGET_CC="cubic"
+    fi
   fi
-  TARGET_CC="bbr"
 elif [ -n "${ORIGINAL_CONGESTION_CONTROL:-}" ]; then
   TARGET_CC="${ORIGINAL_CONGESTION_CONTROL}"
 elif echo " ${AVAILABLE_CC} " | grep -q " cubic "; then

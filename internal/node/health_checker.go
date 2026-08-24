@@ -3,6 +3,8 @@ package node
 
 import (
 	"context"
+	"crypto/tls"
+	"crypto/x509"
 	"fmt"
 	"net"
 	"net/http"
@@ -54,6 +56,11 @@ type HealthCheckResult struct {
 	Latency   int // milliseconds
 	Message   string
 	CheckedAt time.Time
+}
+
+type certificateHealth struct {
+	Message string
+	Failed  bool
 }
 
 // HealthChecker performs periodic health checks on nodes.
@@ -306,30 +313,23 @@ func (hc *HealthChecker) performCheck(node *repository.Node) *HealthCheckResult 
 	}
 
 	// Check certificate expiration if node has a certificate
-	certWarning := hc.checkCertificateExpiration(node)
+	certHealth := hc.checkCertificateExpiration(node)
 	heartbeatHealthy := shouldTrustRecentHeartbeat(node, hc.config.Interval, time.Now())
 	proxyHealth := hc.checkReachableProxyEndpoint(node)
 
 	if nodeTrafficLimitExceeded(node) {
 		result.Status = repository.HealthCheckStatusFailed
 		result.Message = "Node traffic limit exceeded"
-		return result
-	}
-
-	// Determine overall status
-	if result.TCPOk && result.APIOk && result.XrayOk && shouldDeferProxyEndpointFailureForConfigSync(node, proxyHealth) {
+	} else if sampledProxyEndpointHasTLSFailure(proxyHealth) {
+		result.Status = repository.HealthCheckStatusFailed
+		result.Message = sampledProxyEndpointTLSFailureMessage(proxyHealth)
+	} else if result.TCPOk && result.APIOk && result.XrayOk && shouldDeferProxyEndpointFailureForConfigSync(node, proxyHealth) {
+		// Determine overall status
 		result.Status = repository.HealthCheckStatusSuccess
 		result.Message = sampledProxyEndpointConfigPendingMessage(proxyHealth)
-		if certWarning != "" {
-			result.Message = fmt.Sprintf("%s. %s", result.Message, certWarning)
-		}
 	} else if result.TCPOk && result.APIOk && result.XrayOk && sampledProxyEndpointsHealthyForPrimary(proxyHealth) {
 		result.Status = repository.HealthCheckStatusSuccess
-		if certWarning != "" {
-			result.Message = fmt.Sprintf("All checks passed. %s", certWarning)
-		} else {
-			result.Message = "All checks passed"
-		}
+		result.Message = "All checks passed"
 	} else if result.TCPOk && result.APIOk && result.XrayOk && proxyHealth.HasSampled && !proxyHealth.AllReachable {
 		if proxyHealth.AnyReachable {
 			result.Status = repository.HealthCheckStatusSuccess
@@ -338,15 +338,9 @@ func (hc *HealthChecker) performCheck(node *repository.Node) *HealthCheckResult 
 			result.Status = repository.HealthCheckStatusFailed
 			result.Message = sampledProxyEndpointFailureMessage(proxyHealth)
 		}
-		if certWarning != "" {
-			result.Message = fmt.Sprintf("%s. %s", result.Message, certWarning)
-		}
 	} else if shouldAcceptHeartbeatFallback(heartbeatHealthy, proxyHealth.HasSampled, proxyHealth.AnyReachable) {
 		result.Status = repository.HealthCheckStatusSuccess
 		result.Message = heartbeatFallbackMessage(proxyHealth.HasSampled)
-		if certWarning != "" {
-			result.Message = fmt.Sprintf("%s. %s", result.Message, certWarning)
-		}
 	} else {
 		result.Status = repository.HealthCheckStatusFailed
 		if heartbeatHealthy && proxyHealth.HasSampled && !proxyHealth.AnyReachable {
@@ -354,19 +348,40 @@ func (hc *HealthChecker) performCheck(node *repository.Node) *HealthCheckResult 
 		} else {
 			result.Message = hc.buildFailureMessage(result)
 		}
-		if certWarning != "" {
-			result.Message = fmt.Sprintf("%s. %s", result.Message, certWarning)
-		}
 	}
 
+	applyCertificateHealth(result, certHealth)
+
 	return result
+}
+
+func applyCertificateHealth(result *HealthCheckResult, health certificateHealth) {
+	if result == nil || health.Message == "" {
+		return
+	}
+
+	if health.Failed {
+		if result.Status == repository.HealthCheckStatusSuccess || result.Message == "" {
+			result.Message = health.Message
+		} else {
+			result.Message = fmt.Sprintf("%s. %s", result.Message, health.Message)
+		}
+		result.Status = repository.HealthCheckStatusFailed
+		return
+	}
+
+	if result.Message == "" {
+		result.Message = health.Message
+	} else {
+		result.Message = fmt.Sprintf("%s. %s", result.Message, health.Message)
+	}
 }
 
 func shouldDeferProxyEndpointFailureForConfigSync(node *repository.Node, proxyHealth sampledProxyEndpointHealth) bool {
 	if node == nil || node.SyncStatus != repository.NodeSyncStatusPending {
 		return false
 	}
-	return proxyHealth.HasSampled && !proxyHealth.AnyReachable
+	return proxyHealth.HasSampled && !proxyHealth.AnyReachable && !proxyHealth.TLSFailure
 }
 
 type sampledProxyEndpointHealth struct {
@@ -375,6 +390,12 @@ type sampledProxyEndpointHealth struct {
 	AllReachable           bool
 	CheckedCount           int
 	FirstUnreachableTarget string
+	FirstFailureReason     string
+	TLSFailure             bool
+}
+
+func sampledProxyEndpointHasTLSFailure(proxyHealth sampledProxyEndpointHealth) bool {
+	return proxyHealth.HasSampled && proxyHealth.TLSFailure
 }
 
 func sampledProxyEndpointsHealthyForPrimary(proxyHealth sampledProxyEndpointHealth) bool {
@@ -383,9 +404,22 @@ func sampledProxyEndpointsHealthyForPrimary(proxyHealth sampledProxyEndpointHeal
 
 func sampledProxyEndpointFailureMessage(proxyHealth sampledProxyEndpointHealth) string {
 	if proxyHealth.FirstUnreachableTarget != "" {
-		return fmt.Sprintf("Agent and Xray checks passed, but sampled proxy endpoint %s is unreachable from the panel", proxyHealth.FirstUnreachableTarget)
+		return formatSampledProxyEndpointFailure(
+			"Agent and Xray checks passed, but sampled proxy endpoint %s is unhealthy from the panel: %s",
+			proxyHealth,
+		)
 	}
 	return "Agent and Xray checks passed, but sampled proxy endpoints are unreachable from the panel"
+}
+
+func sampledProxyEndpointTLSFailureMessage(proxyHealth sampledProxyEndpointHealth) string {
+	if proxyHealth.FirstUnreachableTarget != "" {
+		return formatSampledProxyEndpointFailure(
+			"Sampled TLS proxy endpoint %s is unhealthy: %s",
+			proxyHealth,
+		)
+	}
+	return "A sampled TLS proxy endpoint is unhealthy"
 }
 
 func sampledProxyEndpointConfigPendingMessage(proxyHealth sampledProxyEndpointHealth) string {
@@ -397,9 +431,20 @@ func sampledProxyEndpointConfigPendingMessage(proxyHealth sampledProxyEndpointHe
 
 func sampledProxyEndpointWarningMessage(proxyHealth sampledProxyEndpointHealth) string {
 	if proxyHealth.FirstUnreachableTarget != "" {
-		return fmt.Sprintf("Agent and Xray checks passed, but sampled proxy endpoint %s is unreachable while at least one sampled proxy endpoint is reachable", proxyHealth.FirstUnreachableTarget)
+		return formatSampledProxyEndpointFailure(
+			"Agent and Xray checks passed, but sampled proxy endpoint %s is unhealthy while at least one sampled proxy endpoint is reachable: %s",
+			proxyHealth,
+		)
 	}
 	return "Agent and Xray checks passed, but some sampled proxy endpoints are unreachable"
+}
+
+func formatSampledProxyEndpointFailure(format string, health sampledProxyEndpointHealth) string {
+	reason := strings.TrimSpace(health.FirstFailureReason)
+	if reason == "" {
+		reason = "connection failed"
+	}
+	return fmt.Sprintf(format, health.FirstUnreachableTarget, reason)
 }
 
 // checkTCP checks TCP connectivity to the node.
@@ -504,12 +549,18 @@ func (hc *HealthChecker) checkReachableProxyEndpoint(node *repository.Node) samp
 		}
 		checkedTargets[target] = struct{}{}
 		health.CheckedCount++
-		if hc.checkTCP(host, proxyModel.Port) {
+		usesTLS := proxyUsesTLS(proxyModel)
+		reachable, reason := hc.checkProxyEndpoint(node, proxyModel, host)
+		if reachable {
 			health.AnyReachable = true
 		} else {
 			health.AllReachable = false
+			if usesTLS {
+				health.TLSFailure = true
+			}
 			if health.FirstUnreachableTarget == "" {
 				health.FirstUnreachableTarget = target
+				health.FirstFailureReason = reason
 			}
 		}
 		if health.CheckedCount >= maxSampledProxyTargets {
@@ -522,6 +573,121 @@ func (hc *HealthChecker) checkReachableProxyEndpoint(node *repository.Node) samp
 		health.AllReachable = false
 	}
 	return health
+}
+
+func (hc *HealthChecker) checkProxyEndpoint(node *repository.Node, proxyModel *repository.Proxy, host string) (bool, string) {
+	if !proxyUsesTLS(proxyModel) {
+		if hc.checkTCP(host, proxyModel.Port) {
+			return true, ""
+		}
+		return false, "TCP connection failed"
+	}
+
+	serverName := resolveProxyTLSServerName(node, proxyModel, host)
+	address := fmt.Sprintf("%s:%d", host, proxyModel.Port)
+	rawConn, err := net.DialTimeout("tcp", address, hc.config.Timeout)
+	if err != nil {
+		return false, fmt.Sprintf("TCP connection failed: %v", err)
+	}
+	defer rawConn.Close()
+
+	// The handshake is deliberately permissive so we can report the actual
+	// certificate defect below instead of collapsing expiry/name/chain errors.
+	tlsConn := tls.Client(rawConn, &tls.Config{ // #nosec G402 -- verified immediately below.
+		ServerName:         serverName,
+		InsecureSkipVerify: true,
+	})
+	ctx := hc.ctx
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	handshakeCtx, cancel := context.WithTimeout(ctx, hc.config.Timeout)
+	defer cancel()
+	if err := tlsConn.HandshakeContext(handshakeCtx); err != nil {
+		return false, fmt.Sprintf("TLS handshake failed: %v", err)
+	}
+	if err := verifyServedTLSCertificate(tlsConn.ConnectionState(), serverName, time.Now(), nil); err != nil {
+		return false, err.Error()
+	}
+	return true, ""
+}
+
+func proxyUsesTLS(proxyModel *repository.Proxy) bool {
+	if proxyModel == nil {
+		return false
+	}
+	settings := proxyModel.Settings
+	if security := strings.ToLower(proxyStringSetting(settings, "security")); security != "" {
+		return security == "tls"
+	}
+	if value, exists := settings["tls"]; exists {
+		switch typed := value.(type) {
+		case bool:
+			return typed
+		case string:
+			normalized := strings.ToLower(strings.TrimSpace(typed))
+			return normalized == "tls" || normalized == "true" || normalized == "1"
+		default:
+			return false
+		}
+	}
+	if proxyStringSetting(settings, "server_name", "sni", "tls_domain") != "" {
+		return true
+	}
+	return strings.EqualFold(strings.TrimSpace(proxyModel.Protocol), "trojan")
+}
+
+func resolveProxyTLSServerName(node *repository.Node, proxyModel *repository.Proxy, fallback string) string {
+	if proxyModel != nil {
+		if value := proxyStringSetting(proxyModel.Settings, "server_name", "sni", "tls_domain"); value != "" {
+			return value
+		}
+	}
+	if node != nil && strings.TrimSpace(node.TLSDomain) != "" {
+		return strings.TrimSpace(node.TLSDomain)
+	}
+	return strings.TrimSpace(fallback)
+}
+
+func proxyStringSetting(settings map[string]any, keys ...string) string {
+	for _, key := range keys {
+		if value, ok := settings[key].(string); ok && strings.TrimSpace(value) != "" {
+			return strings.TrimSpace(value)
+		}
+	}
+	return ""
+}
+
+func verifyServedTLSCertificate(state tls.ConnectionState, serverName string, now time.Time, roots *x509.CertPool) error {
+	if len(state.PeerCertificates) == 0 {
+		return fmt.Errorf("TLS peer did not provide a certificate")
+	}
+	leaf := state.PeerCertificates[0]
+	if now.Before(leaf.NotBefore) {
+		return fmt.Errorf("served TLS certificate is not valid before %s", leaf.NotBefore.UTC().Format(time.RFC3339))
+	}
+	if !now.Before(leaf.NotAfter) {
+		return fmt.Errorf("served TLS certificate expired at %s", leaf.NotAfter.UTC().Format(time.RFC3339))
+	}
+	if serverName != "" {
+		if err := leaf.VerifyHostname(serverName); err != nil {
+			return fmt.Errorf("served TLS certificate does not match %s: %w", serverName, err)
+		}
+	}
+
+	intermediates := x509.NewCertPool()
+	for _, cert := range state.PeerCertificates[1:] {
+		intermediates.AddCert(cert)
+	}
+	if _, err := leaf.Verify(x509.VerifyOptions{
+		DNSName:       serverName,
+		Roots:         roots,
+		Intermediates: intermediates,
+		CurrentTime:   now,
+	}); err != nil {
+		return fmt.Errorf("served TLS certificate chain is invalid: %w", err)
+	}
+	return nil
 }
 
 func resolveHealthCheckProxyHost(node *repository.Node, proxyModel *repository.Proxy) string {
@@ -869,10 +1035,13 @@ func (hc *HealthChecker) sendStatusChangeNotification(node *repository.Node, old
 }
 
 // checkCertificateExpiration 检查节点关联证书的过期状态
-func (hc *HealthChecker) checkCertificateExpiration(node *repository.Node) string {
-	// 如果节点没有关联证书，跳过检查
-	if node.CertificateID == nil {
-		return ""
+func (hc *HealthChecker) checkCertificateExpiration(node *repository.Node) certificateHealth {
+	// A retained certificate association is not operational when node TLS is disabled.
+	if !nodeUsesCertificate(node) {
+		return certificateHealth{}
+	}
+	if hc.certRepo == nil {
+		return certificateHealth{Message: "无法检查关联证书状态", Failed: true}
 	}
 
 	// 获取证书信息
@@ -882,49 +1051,68 @@ func (hc *HealthChecker) checkCertificateExpiration(node *repository.Node) strin
 			logger.F("node_id", node.ID),
 			logger.F("cert_id", *node.CertificateID),
 			logger.Err(err))
-		return ""
+		return certificateHealth{
+			Message: fmt.Sprintf("无法读取关联证书 #%d", *node.CertificateID),
+			Failed:  true,
+		}
 	}
 
-	// 检查证书过期时间
-	if cert.ExpiresAt.IsZero() {
-		return ""
-	}
-
-	now := time.Now()
-	timeUntilExpiry := cert.ExpiresAt.Sub(now)
-	daysLeft := int(timeUntilExpiry.Hours() / 24)
-
-	// 证书已过期
-	if daysLeft < 0 {
-		warning := fmt.Sprintf("证书已过期 %d 天", -daysLeft)
-		hc.logger.Error("Certificate expired",
+	health := evaluateCertificateHealth(cert, time.Now())
+	if health.Failed {
+		hc.logger.Error("Certificate is unusable",
 			logger.F("node_id", node.ID),
 			logger.F("node_name", node.Name),
 			logger.F("domain", cert.Domain),
-			logger.F("days_expired", -daysLeft))
+			logger.F("reason", health.Message))
+	} else if health.Message != "" {
+		hc.logger.Warn("Certificate expiring soon",
+			logger.F("node_id", node.ID),
+			logger.F("node_name", node.Name),
+			logger.F("domain", cert.Domain),
+			logger.F("reason", health.Message))
+	}
+	return health
+}
 
-		// TODO: 发送告警通知（需要实现通知服务）
+func nodeUsesCertificate(node *repository.Node) bool {
+	return node != nil && node.TLSEnabled && node.CertificateID != nil
+}
 
-		return warning
+func evaluateCertificateHealth(cert *repository.Certificate, now time.Time) certificateHealth {
+	if cert == nil {
+		return certificateHealth{Message: "关联证书不存在", Failed: true}
+	}
+
+	expiresAt := cert.ExpiresAt
+	if cert.ExpireDate != nil {
+		expiresAt = *cert.ExpireDate
+	}
+	if expiresAt.IsZero() {
+		return certificateHealth{Message: "关联证书缺少有效期信息", Failed: true}
+	}
+
+	timeUntilExpiry := expiresAt.Sub(now)
+	daysLeft := int(timeUntilExpiry.Hours() / 24)
+
+	// 证书已过期
+	if timeUntilExpiry <= 0 || cert.Status == "expired" {
+		daysExpired := int(now.Sub(expiresAt).Hours() / 24)
+		if daysExpired < 0 {
+			daysExpired = 0
+		}
+		warning := "关联证书已过期"
+		if daysExpired > 0 {
+			warning = fmt.Sprintf("关联证书已过期 %d 天", daysExpired)
+		}
+		return certificateHealth{Message: warning, Failed: true}
 	}
 
 	// 证书即将过期（30天内）
 	if daysLeft <= 30 {
 		warning := fmt.Sprintf("证书将在 %d 天后过期", daysLeft)
 
-		// 仅在7天内记录警告日志
-		if daysLeft <= 7 {
-			hc.logger.Warn("Certificate expiring soon",
-				logger.F("node_id", node.ID),
-				logger.F("node_name", node.Name),
-				logger.F("domain", cert.Domain),
-				logger.F("days_left", daysLeft))
-
-			// TODO: 发送告警通知（需要实现通知服务）
-		}
-
-		return warning
+		return certificateHealth{Message: warning}
 	}
 
-	return ""
+	return certificateHealth{}
 }

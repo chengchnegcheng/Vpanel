@@ -1,6 +1,33 @@
 <template>
   <div class="system-monitor">
+    <AdminStickyChrome>
+      <div class="page-header">
+        <div class="page-heading">
+          <h1 class="page-title">系统监控</h1>
+          <p class="page-subtitle">查看运行时资源占用并处理脏代理</p>
+        </div>
+        <div class="page-actions">
+          <el-button
+            :loading="repairingRuntime"
+            type="warning"
+            plain
+            @click="triggerRuntimeReconcile"
+          >
+            修复脏代理
+          </el-button>
+          <el-button
+            :loading="refreshing"
+            type="primary"
+            @click="refreshData({ silent: false })"
+          >
+            刷新数据
+          </el-button>
+        </div>
+      </div>
+    </AdminStickyChrome>
+
     <!-- 错误提示条，添加条件控制只在错误时显示 -->
+    <div class="admin-page-body">
     <el-alert
       v-if="apiError"
       title="获取系统状态失败"
@@ -11,29 +38,6 @@
     />
     
     <el-card class="box-card">
-      <template #header>
-        <div class="card-header">
-          <span>系统监控</span>
-          <div class="card-actions">
-            <el-button
-              :loading="repairingRuntime"
-              type="warning"
-              plain
-              @click="triggerRuntimeReconcile"
-            >
-              修复脏代理
-            </el-button>
-            <el-button
-              :loading="refreshing"
-              type="primary"
-              @click="refreshData({ silent: false })"
-            >
-              刷新数据
-            </el-button>
-          </div>
-        </div>
-      </template>
-      
       <div
         class="monitor-stats-grid"
         :style="{ gap: `${gridGutter}px` }"
@@ -242,10 +246,12 @@
         </div>
       </el-card>
     </el-card>
+    </div>
   </div>
 </template>
 
 <script setup>
+import AdminStickyChrome from '@/components/AdminStickyChrome.vue'
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import echarts from '@/utils/charts'
 import { systemApi } from '@/api'

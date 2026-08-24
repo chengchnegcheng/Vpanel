@@ -1,6 +1,10 @@
 package node
 
-import "testing"
+import (
+	"fmt"
+	"strings"
+	"testing"
+)
 
 func TestNetworkOptimizationSettingsNormalizeDefaultsSockoptFields(t *testing.T) {
 	input := NetworkOptimizationSettings{
@@ -41,5 +45,39 @@ func TestParseNetworkOptimizationSettingsReturnsZeroValueOnInvalidJSON(t *testin
 
 	if !got.IsEmpty() {
 		t.Fatalf("expected invalid json to return empty settings, got %+v", got)
+	}
+}
+
+func TestAdjustAppliedNetworkOptimizationSettingsSkipsBBR(t *testing.T) {
+	input := NetworkOptimizationSettings{
+		EnableBBR:         true,
+		EnableFQ:          true,
+		EnableTCPFastOpen: true,
+	}
+
+	got := adjustAppliedNetworkOptimizationSettings(input, "当前内核不支持 BBR，已跳过 BBR，继续应用其他优化项")
+	if got.EnableBBR {
+		t.Fatal("expected BBR to be disabled after skip log")
+	}
+	if !got.EnableFQ || !got.EnableTCPFastOpen {
+		t.Fatalf("expected other settings to remain enabled, got %+v", got)
+	}
+}
+
+func TestAdjustAppliedNetworkOptimizationSettingsKeepsBBRWithoutSkipLog(t *testing.T) {
+	input := NetworkOptimizationSettings{EnableBBR: true, EnableFQ: true}
+	got := adjustAppliedNetworkOptimizationSettings(input, "已应用节点网络优化")
+	if !got.EnableBBR {
+		t.Fatal("expected BBR to remain enabled without skip log")
+	}
+}
+
+func TestApplyNetworkOptimizationScriptDegradesMissingBBR(t *testing.T) {
+	script := fmt.Sprintf(applyNetworkOptimizationScriptTemplate, NetworkOptimizationBackupPath, networkOptimizationSysctlPath, 1, 1, 1)
+	if !strings.Contains(script, "已跳过 BBR") {
+		t.Fatal("expected apply script to degrade when BBR is unavailable")
+	}
+	if strings.Contains(script, "请升级内核或加载 tcp_bbr 模块") {
+		t.Fatal("expected hard-fail BBR message to be removed")
 	}
 }

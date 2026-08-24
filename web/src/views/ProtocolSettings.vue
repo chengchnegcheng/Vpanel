@@ -1,30 +1,34 @@
 <template>
   <div class="protocol-settings-container">
-    <div class="page-header">
-      <div class="page-heading">
-        <h1 class="page-title">
-          协议设置
-        </h1>
-        <p class="page-subtitle">
-          统一管理基础协议、传输层能力和 Trojan 默认参数
-        </p>
-      </div>
-    </div>
+    
+    <AdminStickyChrome>
+      <div class="page-header">
+            <div class="page-heading">
+              <h1 class="page-title">
+                协议设置
+              </h1>
+              <p class="page-subtitle">
+                统一管理基础协议、传输层能力和 Trojan 默认参数
+              </p>
+            </div>
+          </div>
 
-    <div class="overview-strip">
-      <div class="overview-card">
-        <span class="overview-label">已启用协议</span>
-        <strong class="overview-value is-success">{{ enabledProtocolCount }}</strong>
-      </div>
-      <div class="overview-card">
-        <span class="overview-label">已启用传输层</span>
-        <strong class="overview-value is-primary">{{ enabledTransportCount }}</strong>
-      </div>
-      <div class="overview-card">
-        <span class="overview-label">Trojan 默认端口</span>
-        <strong class="overview-value">{{ trojanDefaultPort }}</strong>
-      </div>
-    </div>
+          <div class="overview-strip">
+            <div class="overview-card">
+              <span class="overview-label">已启用协议</span>
+              <strong class="overview-value is-success">{{ enabledProtocolCount }}</strong>
+            </div>
+            <div class="overview-card">
+              <span class="overview-label">已启用传输层</span>
+              <strong class="overview-value is-primary">{{ enabledTransportCount }}</strong>
+            </div>
+            <div class="overview-card">
+              <span class="overview-label">Trojan 默认端口</span>
+              <strong class="overview-value">{{ trojanDefaultPort }}</strong>
+            </div>
+          </div>
+    </AdminStickyChrome>
+    <div class="admin-page-body">
 
     <el-card
       shadow="hover"
@@ -509,10 +513,12 @@
         </el-button>
       </div>
     </el-card>
-  </div>
+    </div>
+</div>
 </template>
 
 <script setup>
+import AdminStickyChrome from '@/components/AdminStickyChrome.vue'
 import { computed, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useViewport } from '@/composables/useViewport'

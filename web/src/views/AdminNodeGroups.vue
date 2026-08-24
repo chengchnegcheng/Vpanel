@@ -1,102 +1,106 @@
 <template>
   <div class="admin-node-groups-page">
-    <div class="page-header">
-      <div class="page-heading">
-        <h1 class="page-title">
-          节点分组管理
-        </h1>
-        <p class="page-subtitle">
-          统一查看地区分组、调度策略、节点健康度和用户规模
-        </p>
-      </div>
-      <div class="page-actions">
-        <el-button @click="fetchGroups">
-          <el-icon class="el-icon--left">
-            <Refresh />
-          </el-icon>
-          刷新
-        </el-button>
-        <el-button
-          type="primary"
-          @click="showCreateDialog"
-        >
-          <el-icon class="el-icon--left">
-            <Plus />
-          </el-icon>
-          创建分组
-        </el-button>
-      </div>
-    </div>
+    
+    <AdminStickyChrome>
+      <div class="page-header">
+            <div class="page-heading">
+              <h1 class="page-title">
+                节点分组管理
+              </h1>
+              <p class="page-subtitle">
+                统一查看地区分组、调度策略、节点健康度和用户规模
+              </p>
+            </div>
+            <div class="page-actions">
+              <el-button @click="fetchGroups">
+                <el-icon class="el-icon--left">
+                  <Refresh />
+                </el-icon>
+                刷新
+              </el-button>
+              <el-button
+                type="primary"
+                @click="showCreateDialog"
+              >
+                <el-icon class="el-icon--left">
+                  <Plus />
+                </el-icon>
+                创建分组
+              </el-button>
+            </div>
+          </div>
 
-    <div class="overview-strip">
-      <div class="overview-card">
-        <span class="overview-label">当前匹配</span>
-        <strong class="overview-value">{{ displayGroupTotal }}</strong>
-      </div>
-      <div class="overview-card">
-        <span class="overview-label">覆盖节点</span>
-        <strong class="overview-value is-primary">{{ coveredNodeTotal }}</strong>
-      </div>
-      <div class="overview-card">
-        <span class="overview-label">健康节点</span>
-        <strong class="overview-value is-success">{{ healthyNodeTotal }}</strong>
-      </div>
-      <div class="overview-card">
-        <span class="overview-label">覆盖用户</span>
-        <strong class="overview-value">{{ coveredUserTotal }}</strong>
-      </div>
-      <div class="overview-card">
-        <span class="overview-label">空分组</span>
-        <strong class="overview-value is-warning">{{ emptyGroupCount }}</strong>
-      </div>
-    </div>
+          <div class="overview-strip">
+            <div class="overview-card">
+              <span class="overview-label">当前匹配</span>
+              <strong class="overview-value">{{ displayGroupTotal }}</strong>
+            </div>
+            <div class="overview-card">
+              <span class="overview-label">覆盖节点</span>
+              <strong class="overview-value is-primary">{{ coveredNodeTotal }}</strong>
+            </div>
+            <div class="overview-card">
+              <span class="overview-label">健康节点</span>
+              <strong class="overview-value is-success">{{ healthyNodeTotal }}</strong>
+            </div>
+            <div class="overview-card">
+              <span class="overview-label">覆盖用户</span>
+              <strong class="overview-value">{{ coveredUserTotal }}</strong>
+            </div>
+            <div class="overview-card">
+              <span class="overview-label">空分组</span>
+              <strong class="overview-value is-warning">{{ emptyGroupCount }}</strong>
+            </div>
+          </div>
 
-    <div class="toolbar-card">
-      <div class="toolbar-filters">
-        <el-input
-          v-model="groupStore.filters.search"
-          class="toolbar-search"
-          placeholder="搜索分组名称、描述或地区"
-          clearable
-        >
-          <template #prefix>
-            <el-icon><Search /></el-icon>
-          </template>
-        </el-input>
-        <el-select
-          v-model="groupStore.filters.region"
-          placeholder="地区"
-          clearable
-        >
-          <el-option
-            v-for="region in groupStore.regions"
-            :key="region"
-            :label="region"
-            :value="region"
-          />
-        </el-select>
-        <el-select
-          v-model="strategyFilter"
-          placeholder="调度策略"
-          clearable
-        >
-          <el-option
-            v-for="strategy in strategyOptions"
-            :key="strategy.value"
-            :label="strategy.label"
-            :value="strategy.value"
-          />
-        </el-select>
-        <el-button @click="resetFilters">
-          重置
-        </el-button>
-      </div>
-      <div class="toolbar-actions">
-        <span class="toolbar-summary">
-          当前页 {{ paginatedGroups.length }} 个分组，筛选后 {{ displayGroupTotal }} 个，总计 {{ groupStore.total }} 个
-        </span>
-      </div>
-    </div>
+          <div class="toolbar-card">
+            <div class="toolbar-filters">
+              <el-input
+                v-model="groupStore.filters.search"
+                class="toolbar-search"
+                placeholder="搜索分组名称、描述或地区"
+                clearable
+              >
+                <template #prefix>
+                  <el-icon><Search /></el-icon>
+                </template>
+              </el-input>
+              <el-select
+                v-model="groupStore.filters.region"
+                placeholder="地区"
+                clearable
+              >
+                <el-option
+                  v-for="region in groupStore.regions"
+                  :key="region"
+                  :label="region"
+                  :value="region"
+                />
+              </el-select>
+              <el-select
+                v-model="strategyFilter"
+                placeholder="调度策略"
+                clearable
+              >
+                <el-option
+                  v-for="strategy in strategyOptions"
+                  :key="strategy.value"
+                  :label="strategy.label"
+                  :value="strategy.value"
+                />
+              </el-select>
+              <el-button @click="resetFilters">
+                重置
+              </el-button>
+            </div>
+            <div class="toolbar-actions">
+              <span class="toolbar-summary">
+                当前页 {{ paginatedGroups.length }} 个分组，筛选后 {{ displayGroupTotal }} 个，总计 {{ groupStore.total }} 个
+              </span>
+            </div>
+          </div>
+    </AdminStickyChrome>
+    <div class="admin-page-body">
 
     <div
       v-loading="groupStore.loading"
@@ -232,7 +236,7 @@
         v-model:current-page="currentPage"
         v-model:page-size="pageSize"
         :total="displayGroupTotal"
-        :page-sizes="[6, 9, 12, 24]"
+        :page-sizes="[10, 20, 50]"
         :layout="isMobile ? 'total, prev, next' : 'total, sizes, prev, pager, next'"
         @size-change="handleSizeChange"
       />
@@ -495,10 +499,12 @@
         </div>
       </div>
     </el-dialog>
-  </div>
+    </div>
+</div>
 </template>
 
 <script setup>
+import AdminStickyChrome from '@/components/AdminStickyChrome.vue'
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { MoreFilled, Plus, Refresh, Search } from '@element-plus/icons-vue'
@@ -522,7 +528,7 @@ const groupNodes = ref([])
 const selectedNodeIds = ref([])
 const strategyFilter = ref('')
 const currentPage = ref(1)
-const pageSize = ref(9)
+const pageSize = ref(10)
 
 const form = reactive({
   id: null,

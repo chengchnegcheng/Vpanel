@@ -1,58 +1,60 @@
 <template>
   <div class="logs-container">
-    <div class="header">
-      <div class="page-heading">
-        <h1>日志管理</h1>
-        <p class="page-subtitle">
-          按级别、来源和时间范围快速定位后台运行问题
-        </p>
-      </div>
-      <div class="actions">
-        <el-button
-          type="primary"
-          @click="refreshLogs"
-        >
-          <el-icon><Refresh /></el-icon>
-          刷新
-        </el-button>
-        <el-button
-          type="success"
-          @click="handleExport"
-        >
-          <el-icon><Download /></el-icon>
-          导出
-        </el-button>
-        <el-button
-          type="warning"
-          @click="showCleanupDialog"
-        >
-          <el-icon><Delete /></el-icon>
-          清理过期
-        </el-button>
-      </div>
-    </div>
+    
+    <AdminStickyChrome>
+      <div class="header">
+            <div class="page-heading">
+              <h1>日志管理</h1>
+              <p class="page-subtitle">
+                按级别、来源和时间范围快速定位后台运行问题
+              </p>
+            </div>
+            <div class="actions">
+              <el-button
+                type="primary"
+                @click="refreshLogs"
+              >
+                <el-icon><Refresh /></el-icon>
+                刷新
+              </el-button>
+              <el-button
+                type="success"
+                @click="handleExport"
+              >
+                <el-icon><Download /></el-icon>
+                导出
+              </el-button>
+              <el-button
+                type="warning"
+                @click="showCleanupDialog"
+              >
+                <el-icon><Delete /></el-icon>
+                清理过期
+              </el-button>
+            </div>
+          </div>
 
-    <div class="overview-strip">
-      <div class="overview-card">
-        <span class="overview-label">当前筛选总量</span>
-        <strong class="overview-value">{{ total }}</strong>
-      </div>
-      <div class="overview-card">
-        <span class="overview-label">当前页日志</span>
-        <strong class="overview-value is-primary">{{ logs.length }}</strong>
-      </div>
-      <div class="overview-card">
-        <span class="overview-label">当前页错误</span>
-        <strong class="overview-value is-danger">{{ currentErrorCount }}</strong>
-      </div>
-      <div class="overview-card">
-        <span class="overview-label">当前页告警</span>
-        <strong class="overview-value is-warning">{{ currentWarningCount }}</strong>
-      </div>
-    </div>
+          <div class="overview-strip">
+            <div class="overview-card">
+              <span class="overview-label">当前筛选总量</span>
+              <strong class="overview-value">{{ total }}</strong>
+            </div>
+            <div class="overview-card">
+              <span class="overview-label">当前页日志</span>
+              <strong class="overview-value is-primary">{{ logs.length }}</strong>
+            </div>
+            <div class="overview-card">
+              <span class="overview-label">当前页错误</span>
+              <strong class="overview-value is-danger">{{ currentErrorCount }}</strong>
+            </div>
+            <div class="overview-card">
+              <span class="overview-label">当前页告警</span>
+              <strong class="overview-value is-warning">{{ currentWarningCount }}</strong>
+            </div>
+          </div>
 
-    <!-- 过滤控件 -->
-    <el-card class="filter-card">
+      <!-- 过滤控件 -->
+      <el-card class="filter-card">
       <el-form
         :inline="!isMobile"
         :model="filterForm"
@@ -131,6 +133,9 @@
         </el-form-item>
       </el-form>
     </el-card>
+    </AdminStickyChrome>
+    <div class="admin-page-body">
+
 
     <!-- 日志列表 -->
     <div class="table-shell">
@@ -205,7 +210,7 @@
       <el-pagination
         v-model:current-page="currentPage"
         v-model:page-size="pageSize"
-        :page-sizes="[20, 50, 100, 200]"
+        :page-sizes="[10, 20, 50, 100]"
         :layout="isMobile ? 'total, prev, next' : 'total, sizes, prev, pager, next, jumper'"
         :total="total"
         @size-change="handleSizeChange"
@@ -382,10 +387,12 @@
         </el-button>
       </template>
     </el-dialog>
-  </div>
+    </div>
+</div>
 </template>
 
 <script setup>
+import AdminStickyChrome from '@/components/AdminStickyChrome.vue'
 import { computed, ref, reactive, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import { Search, Refresh, Download, Delete } from '@element-plus/icons-vue'
@@ -400,7 +407,7 @@ const logs = ref([])
 const loading = ref(false)
 const total = ref(0)
 const currentPage = ref(1)
-const pageSize = ref(50)
+const pageSize = ref(10)
 
 // 过滤表单
 const filterForm = reactive({

@@ -1,39 +1,43 @@
 <template>
   <div class="node-form-page">
-    <section class="hero-panel">
-      <div class="hero-panel__nav">
-        <el-button link class="back-link" @click="goBack">
-          <el-icon><ArrowLeft /></el-icon>
-          返回节点列表
-        </el-button>
-        <div class="hero-panel__copy">
-          <span class="hero-panel__eyebrow">Node Workspace</span>
-          <h1 class="page-title">
-            {{ pageTitle }}
-          </h1>
-          <p class="page-subtitle">
-            {{ pageDescription }}
-          </p>
-        </div>
-      </div>
+    
+    <AdminStickyChrome>
+      <section class="hero-panel">
+            <div class="hero-panel__nav">
+              <el-button link class="back-link" @click="goBack">
+                <el-icon><ArrowLeft /></el-icon>
+                返回节点列表
+              </el-button>
+              <div class="hero-panel__copy">
+                <span class="hero-panel__eyebrow">Node Workspace</span>
+                <h1 class="page-title">
+                  {{ pageTitle }}
+                </h1>
+                <p class="page-subtitle">
+                  {{ pageDescription }}
+                </p>
+              </div>
+            </div>
 
-      <div class="hero-panel__stats">
-        <div class="hero-stat">
-          <span class="hero-stat__label">命名模式</span>
-          <strong class="hero-stat__value">{{ namingModeLabel }}</strong>
-        </div>
-        <div class="hero-stat">
-          <span class="hero-stat__label">节点地区</span>
-          <strong class="hero-stat__value">{{
-            form.region || "待识别"
-          }}</strong>
-        </div>
-        <div class="hero-stat">
-          <span class="hero-stat__label">部署方式</span>
-          <strong class="hero-stat__value">{{ deploymentModeLabel }}</strong>
-        </div>
-      </div>
-    </section>
+            <div class="hero-panel__stats">
+              <div class="hero-stat">
+                <span class="hero-stat__label">命名模式</span>
+                <strong class="hero-stat__value">{{ namingModeLabel }}</strong>
+              </div>
+              <div class="hero-stat">
+                <span class="hero-stat__label">节点地区</span>
+                <strong class="hero-stat__value">{{
+                  form.region || "待识别"
+                }}</strong>
+              </div>
+              <div class="hero-stat">
+                <span class="hero-stat__label">部署方式</span>
+                <strong class="hero-stat__value">{{ deploymentModeLabel }}</strong>
+              </div>
+            </div>
+          </section>
+    </AdminStickyChrome>
+    <div class="admin-page-body">
 
     <el-form
       ref="formRef"
@@ -639,10 +643,12 @@
         </el-button>
       </template>
     </el-dialog>
-  </div>
+    </div>
+</div>
 </template>
 
 <script setup>
+import AdminStickyChrome from '@/components/AdminStickyChrome.vue'
 import {
   ref,
   reactive,

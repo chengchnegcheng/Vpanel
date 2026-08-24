@@ -1,61 +1,65 @@
 <template>
   <div class="admin-plans-page">
-    <div class="page-header">
-      <div class="page-heading">
-        <h1 class="page-title">
-          套餐管理
-        </h1>
-        <p class="page-subtitle">
-          集中维护销售套餐的价格、时长、流量和上架状态
-        </p>
-      </div>
-      <div class="page-actions">
-        <el-button
-          type="primary"
-          @click="showCreateDialog"
-        >
-          <el-icon class="el-icon--left">
-            <Plus />
-          </el-icon>
-          创建套餐
-        </el-button>
-      </div>
-    </div>
+    
+    <AdminStickyChrome>
+      <div class="page-header">
+            <div class="page-heading">
+              <h1 class="page-title">
+                套餐管理
+              </h1>
+              <p class="page-subtitle">
+                集中维护销售套餐的价格、时长、流量和上架状态
+              </p>
+            </div>
+            <div class="page-actions">
+              <el-button
+                type="primary"
+                @click="showCreateDialog"
+              >
+                <el-icon class="el-icon--left">
+                  <Plus />
+                </el-icon>
+                创建套餐
+              </el-button>
+            </div>
+          </div>
 
-    <div class="overview-strip">
-      <div class="overview-card">
-        <span class="overview-label">套餐总数</span>
-        <strong class="overview-value">{{ pagination.total }}</strong>
-      </div>
-      <div class="overview-card">
-        <span class="overview-label">当前页已启用</span>
-        <strong class="overview-value is-success">{{ activePlanCount }}</strong>
-      </div>
-      <div class="overview-card">
-        <span class="overview-label">当前页已停用</span>
-        <strong class="overview-value is-muted">{{ inactivePlanCount }}</strong>
-      </div>
-      <div class="overview-card">
-        <span class="overview-label">不限流量</span>
-        <strong class="overview-value is-primary">{{ unlimitedPlanCount }}</strong>
-      </div>
-    </div>
+          <div class="overview-strip">
+            <div class="overview-card">
+              <span class="overview-label">套餐总数</span>
+              <strong class="overview-value">{{ pagination.total }}</strong>
+            </div>
+            <div class="overview-card">
+              <span class="overview-label">当前页已启用</span>
+              <strong class="overview-value is-success">{{ activePlanCount }}</strong>
+            </div>
+            <div class="overview-card">
+              <span class="overview-label">当前页已停用</span>
+              <strong class="overview-value is-muted">{{ inactivePlanCount }}</strong>
+            </div>
+            <div class="overview-card">
+              <span class="overview-label">不限流量</span>
+              <strong class="overview-value is-primary">{{ unlimitedPlanCount }}</strong>
+            </div>
+          </div>
 
-    <div class="toolbar-card">
-      <div class="toolbar-filters">
-        <span class="toolbar-summary">显示停用套餐</span>
-        <el-switch
-          v-model="includeInactive"
-          @change="handleIncludeInactiveChange"
-        />
-      </div>
-      <div class="toolbar-actions">
-        <span class="toolbar-summary">当前页 {{ plans.length }} 个套餐，共 {{ pagination.total }} 个</span>
-        <el-button @click="fetchPlans">
-          刷新
-        </el-button>
-      </div>
-    </div>
+          <div class="toolbar-card">
+            <div class="toolbar-filters">
+              <span class="toolbar-summary">显示停用套餐</span>
+              <el-switch
+                v-model="includeInactive"
+                @change="handleIncludeInactiveChange"
+              />
+            </div>
+            <div class="toolbar-actions">
+              <span class="toolbar-summary">当前页 {{ plans.length }} 个套餐，共 {{ pagination.total }} 个</span>
+              <el-button @click="fetchPlans">
+                刷新
+              </el-button>
+            </div>
+          </div>
+    </AdminStickyChrome>
+    <div class="admin-page-body">
 
     <div class="table-shell">
       <el-table
@@ -331,10 +335,12 @@
         </el-button>
       </template>
     </el-dialog>
-  </div>
+    </div>
+</div>
 </template>
 
 <script setup>
+import AdminStickyChrome from '@/components/AdminStickyChrome.vue'
 import { computed, nextTick, onMounted, reactive, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus } from '@element-plus/icons-vue'
@@ -345,7 +351,7 @@ const { isMobile } = useViewport()
 
 const loading = ref(false)
 const plans = ref([])
-const pagination = reactive({ page: 1, pageSize: 20, total: 0 })
+const pagination = reactive({ page: 1, pageSize: 10, total: 0 })
 const includeInactive = ref(true)
 const dialogVisible = ref(false)
 const isEdit = ref(false)

@@ -1,24 +1,28 @@
 <template>
   <div class="node-comparison-page">
-    <div class="page-header">
-      <div class="page-heading">
-        <h1 class="page-title">
-          节点性能对比
-        </h1>
-        <p class="page-subtitle">
-          对比节点延迟、负载、同步状态和基础运行指标
-        </p>
-      </div>
-      <div class="header-actions">
-        <el-button
-          :loading="loading"
-          @click="fetchNodes"
-        >
-          <el-icon><Refresh /></el-icon>
-          刷新
-        </el-button>
-      </div>
-    </div>
+    
+    <AdminStickyChrome>
+      <div class="page-header">
+            <div class="page-heading">
+              <h1 class="page-title">
+                节点性能对比
+              </h1>
+              <p class="page-subtitle">
+                对比节点延迟、负载、同步状态和基础运行指标
+              </p>
+            </div>
+            <div class="header-actions">
+              <el-button
+                :loading="loading"
+                @click="fetchNodes"
+              >
+                <el-icon><Refresh /></el-icon>
+                刷新
+              </el-button>
+            </div>
+          </div>
+    </AdminStickyChrome>
+    <div class="admin-page-body">
 
     <!-- 节点选择 -->
     <el-card
@@ -265,10 +269,12 @@
       v-if="selectedNodes.length === 0"
       description="请选择要对比的节点"
     />
-  </div>
+    </div>
+</div>
 </template>
 
 <script setup>
+import AdminStickyChrome from '@/components/AdminStickyChrome.vue'
 import { ref, computed, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import { Refresh, Trophy } from '@element-plus/icons-vue'

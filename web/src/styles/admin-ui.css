@@ -53,15 +53,15 @@
   background: var(--admin-page-bg);
 }
 
-.app-container .header {
-  height: 64px;
+.app-container .main-content > .header {
+  height: var(--admin-header-height, 60px);
   padding: 0 var(--vp-page-padding);
-  background: rgba(255, 255, 255, 0.72);
+  background: rgba(255, 255, 255, 0.92);
   border-bottom: 1px solid rgba(148, 163, 184, 0.16);
   backdrop-filter: blur(18px);
 }
 
-.app-container.dark-mode .header {
+.app-container.dark-mode .main-content > .header {
   background: rgba(15, 23, 42, 0.68);
   border-bottom-color: rgba(100, 116, 139, 0.18);
 }
@@ -1383,7 +1383,7 @@
 }
 
 @media (max-width: 768px) {
-  .app-container .header {
+  .app-container .main-content > .header {
     padding: 0 16px;
   }
 
@@ -1490,12 +1490,10 @@
 @keyframes admin-fade-up {
   from {
     opacity: 0;
-    transform: translateY(8px);
   }
 
   to {
     opacity: 1;
-    transform: translateY(0);
   }
 }
 
@@ -1576,4 +1574,233 @@
   min-height: 36px;
   padding: 8px 18px;
   font-size: 14px;
+}
+
+/* Keep admin chrome fixed: viewport shell.
+ * Pin page chrome via flex; only .admin-page-body scrolls.
+ * Avoid multi sticky layers (sandwich) and sticky ancestor traps.
+ */
+html.admin-shell-active,
+body.admin-shell-active,
+body.admin-shell-active #app,
+#app.admin-shell-active {
+  height: 100% !important;
+  max-height: 100% !important;
+  overflow: hidden !important;
+}
+
+body.admin-shell-active {
+  overscroll-behavior: none;
+  position: relative;
+}
+
+.app-container {
+  --admin-sidebar-width: 224px;
+  --admin-sidebar-collapsed-width: 64px;
+  --admin-header-height: 60px;
+  position: fixed !important;
+  top: 0 !important;
+  right: 0 !important;
+  bottom: 0 !important;
+  left: 0 !important;
+  width: 100% !important;
+  height: 100% !important;
+  max-height: 100dvh !important;
+  display: flex !important;
+  overflow: hidden !important;
+}
+
+.app-container:has(.sidebar.collapsed):not(.is-mobile) {
+  --admin-sidebar-width: var(--admin-sidebar-collapsed-width);
+}
+
+.app-container .sidebar {
+  position: relative !important;
+  top: auto !important;
+  left: auto !important;
+  bottom: auto !important;
+  flex: 0 0 var(--admin-sidebar-width) !important;
+  width: var(--admin-sidebar-width) !important;
+  height: 100% !important;
+  max-height: 100% !important;
+  z-index: 1001 !important;
+  display: flex !important;
+  flex-direction: column !important;
+  overflow: hidden !important;
+}
+
+.app-container .sidebar .logo {
+  flex: 0 0 auto !important;
+}
+
+.app-container .sidebar .sidebar-menu {
+  flex: 1 1 auto !important;
+  min-height: 0 !important;
+  overflow-x: hidden !important;
+  overflow-y: auto !important;
+  overscroll-behavior: contain;
+}
+
+.app-container .main-content {
+  flex: 1 1 auto !important;
+  margin-left: 0 !important;
+  width: auto !important;
+  min-width: 0 !important;
+  min-height: 0 !important;
+  height: 100% !important;
+  max-height: 100% !important;
+  display: flex !important;
+  flex-direction: column !important;
+  overflow: hidden !important;
+}
+
+/* ONLY the global top bar — never page-level .header (e.g. Logs) */
+.app-container .main-content > .header {
+  position: relative !important;
+  top: auto !important;
+  left: auto !important;
+  right: auto !important;
+  flex: 0 0 var(--admin-header-height) !important;
+  height: var(--admin-header-height) !important;
+  max-height: var(--admin-header-height) !important;
+  z-index: 900 !important;
+}
+
+/* Page area scrolls as one document.
+ * Shell (sidebar + global top bar) stays fixed.
+ * List pages: title/stats scroll away; filter/toolbar sticks when it reaches the top.
+ * display:contents dissolves wrappers so sticky is not trapped above the table.
+ */
+.app-container .content {
+  flex: 1 1 auto !important;
+  margin-top: 0 !important;
+  height: auto !important;
+  min-height: 0 !important;
+  overflow: auto !important;
+  overscroll-behavior: contain !important;
+  -webkit-overflow-scrolling: touch;
+  padding: var(--vp-page-padding, 20px) !important;
+  display: block !important;
+}
+
+/* Page roots: normal document flow, no pin traps */
+.app-container .content > * {
+  max-width: 100%;
+  min-width: 0;
+  min-height: 0 !important;
+  max-height: none !important;
+  overflow: visible !important;
+  transform: none !important;
+  filter: none !important;
+  perspective: none !important;
+  contain: none !important;
+  padding: 0 !important;
+}
+
+/* Dissolve grouping wrappers so sticky toolbars can pin over the list body */
+.app-container .content .admin-sticky-chrome,
+.app-container .content .admin-page-body {
+  display: contents;
+}
+
+/* Title / stats / hero: normal flow, never sticky */
+.app-container .content .admin-sticky-chrome > :is(
+  .page-header,
+  .header,
+  .hero-panel,
+  .overview-strip,
+  .profile-header,
+  .device-quota-card,
+  .panel-header
+) {
+  position: relative !important;
+  top: auto !important;
+  z-index: auto !important;
+}
+
+/* List operational bars: stick only after you scroll past the title/stats */
+.app-container .content .admin-sticky-chrome > :is(
+  .toolbar-card,
+  .filter-card,
+  .filter-bar,
+  .search-card,
+  .orders-toolbar-card,
+  .selector-card
+) {
+  position: sticky !important;
+  top: 0 !important;
+  z-index: 35 !important;
+  /* soft shelf while stuck — light, not a second app bar */
+  background:
+    linear-gradient(
+      180deg,
+      rgba(255, 255, 255, 0.92) 0%,
+      rgba(248, 250, 252, 0.9) 100%
+    ) !important;
+  backdrop-filter: blur(12px) saturate(1.04);
+  -webkit-backdrop-filter: blur(12px) saturate(1.04);
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.65) inset,
+    0 10px 18px -16px rgba(15, 23, 42, 0.28) !important;
+}
+
+.app-container.dark-mode .content .admin-sticky-chrome > :is(
+  .toolbar-card,
+  .filter-card,
+  .filter-bar,
+  .search-card,
+  .orders-toolbar-card,
+  .selector-card
+) {
+  background:
+    linear-gradient(
+      180deg,
+      rgba(30, 41, 59, 0.94) 0%,
+      rgba(15, 23, 42, 0.92) 100%
+    ) !important;
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.04) inset,
+    0 12px 20px -16px rgba(2, 6, 23, 0.7) !important;
+}
+
+.app-container .content .admin-sticky-chrome > .panel-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--vp-inline-gap, 12px);
+  padding: clamp(14px, calc(16px * var(--vp-scale, 1)), 18px);
+  margin-bottom: 0 !important;
+  border-radius: var(--vp-card-radius, 16px);
+  border: 1px solid var(--admin-border);
+  box-shadow: var(--admin-shadow-soft);
+  background:
+    radial-gradient(circle at top right, rgba(59, 130, 246, 0.08), transparent 32%),
+    linear-gradient(135deg, var(--admin-surface-strong) 0%, var(--admin-surface-soft) 100%);
+}
+
+@media (max-width: 1024px) {
+  .app-container.is-mobile,
+  .app-container {
+    --admin-sidebar-width: 0px;
+  }
+
+  .app-container .sidebar {
+    position: fixed !important;
+    top: 0 !important;
+    left: 0 !important;
+    bottom: 0 !important;
+    width: min(82vw, 320px) !important;
+    flex: none !important;
+    height: 100% !important;
+    max-height: 100dvh !important;
+  }
+
+  .app-container .main-content {
+    margin-left: 0 !important;
+    width: 100% !important;
+  }
+
+  .app-container .main-content > .header {
+    left: auto !important;
+  }
 }

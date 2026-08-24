@@ -1,123 +1,127 @@
 <template>
   <div class="inbounds-page">
-    <div class="page-header">
-      <div class="page-heading">
-        <div class="title">
-          代理服务
-        </div>
-        <div class="page-subtitle">
-          更清晰地查看协议、节点、有效期和分享信息
-        </div>
-      </div>
-      <div class="header-actions">
-        <el-button @click="openAutoProxyDialog">
-          <el-icon class="el-icon--left">
-            <Setting />
-          </el-icon>
-          自动生成协议
-        </el-button>
-        <el-button
-          type="primary"
-          class="add-btn"
-          @click="openAddInboundDialog"
-        >
-          <el-icon class="el-icon--left">
-            <Plus />
-          </el-icon> 添加代理
-        </el-button>
-      </div>
-    </div>
+    
+    <AdminStickyChrome>
+      <div class="page-header">
+            <div class="page-heading">
+              <div class="title">
+                代理服务
+              </div>
+              <div class="page-subtitle">
+                更清晰地查看协议、节点、有效期和分享信息
+              </div>
+            </div>
+            <div class="header-actions">
+              <el-button @click="openAutoProxyDialog">
+                <el-icon class="el-icon--left">
+                  <Setting />
+                </el-icon>
+                自动生成协议
+              </el-button>
+              <el-button
+                type="primary"
+                class="add-btn"
+                @click="openAddInboundDialog"
+              >
+                <el-icon class="el-icon--left">
+                  <Plus />
+                </el-icon> 添加代理
+              </el-button>
+            </div>
+          </div>
 
-    <div class="overview-strip">
-      <div class="overview-card">
-        <span class="overview-label">当前页</span>
-        <strong class="overview-value">{{ paginatedInbounds.length }}</strong>
-      </div>
-      <div class="overview-card">
-        <span class="overview-label">本页运行中</span>
-        <strong class="overview-value is-success">{{ enabledInboundCount }}</strong>
-      </div>
-      <div class="overview-card">
-        <span class="overview-label">本页已停止</span>
-        <strong class="overview-value is-danger">{{ disabledInboundCount }}</strong>
-      </div>
-      <div class="overview-card">
-        <span class="overview-label">总记录</span>
-        <strong class="overview-value">{{ total }}</strong>
-      </div>
-    </div>
+          <div class="overview-strip">
+            <div class="overview-card">
+              <span class="overview-label">当前页</span>
+              <strong class="overview-value">{{ paginatedInbounds.length }}</strong>
+            </div>
+            <div class="overview-card">
+              <span class="overview-label">本页运行中</span>
+              <strong class="overview-value is-success">{{ enabledInboundCount }}</strong>
+            </div>
+            <div class="overview-card">
+              <span class="overview-label">本页已停止</span>
+              <strong class="overview-value is-danger">{{ disabledInboundCount }}</strong>
+            </div>
+            <div class="overview-card">
+              <span class="overview-label">总记录</span>
+              <strong class="overview-value">{{ total }}</strong>
+            </div>
+          </div>
 
-    <div class="toolbar-card">
-      <div class="toolbar-filters">
-        <el-input
-          v-model="filters.keyword"
-          clearable
-          class="toolbar-search"
-          placeholder="搜索名称、节点、地址或端口"
-        />
-        <el-select
-          v-model="filters.protocol"
-          clearable
-          placeholder="协议类型"
-        >
-          <el-option
-            v-for="option in protocolOptions"
-            :key="option.value"
-            :label="option.label"
-            :value="option.value"
-          />
-        </el-select>
-        <el-select
-          v-model="filters.status"
-          clearable
-          placeholder="运行状态"
-        >
-          <el-option
-            label="运行中"
-            value="enabled"
-          />
-          <el-option
-            label="已停止"
-            value="disabled"
-          />
-        </el-select>
-        <el-button @click="resetFilters">
-          重置
-        </el-button>
-        <el-button @click="loadInbounds">
-          刷新
-        </el-button>
-      </div>
-      <div class="toolbar-actions">
-        <span class="toolbar-summary">
-          匹配 {{ filteredInbounds.length }} 条，已选 {{ selectedInboundIds.length }} 条
-        </span>
-        <el-button
-          class="toolbar-batch-btn toolbar-batch-btn--success"
-          :disabled="!selectedInboundIds.length"
-          :loading="batchLoading === 'enable'"
-          @click="runBatchOperation('enable')"
-        >
-          批量启用
-        </el-button>
-        <el-button
-          class="toolbar-batch-btn toolbar-batch-btn--warning"
-          :disabled="!selectedInboundIds.length"
-          :loading="batchLoading === 'disable'"
-          @click="runBatchOperation('disable')"
-        >
-          批量停用
-        </el-button>
-        <el-button
-          class="toolbar-batch-btn toolbar-batch-btn--danger"
-          :disabled="!selectedInboundIds.length"
-          :loading="batchLoading === 'delete'"
-          @click="runBatchOperation('delete')"
-        >
-          批量删除
-        </el-button>
-      </div>
-    </div>
+          <div class="toolbar-card">
+            <div class="toolbar-filters">
+              <el-input
+                v-model="filters.keyword"
+                clearable
+                class="toolbar-search"
+                placeholder="搜索名称、节点、地址或端口"
+              />
+              <el-select
+                v-model="filters.protocol"
+                clearable
+                placeholder="协议类型"
+              >
+                <el-option
+                  v-for="option in protocolOptions"
+                  :key="option.value"
+                  :label="option.label"
+                  :value="option.value"
+                />
+              </el-select>
+              <el-select
+                v-model="filters.status"
+                clearable
+                placeholder="运行状态"
+              >
+                <el-option
+                  label="运行中"
+                  value="enabled"
+                />
+                <el-option
+                  label="已停止"
+                  value="disabled"
+                />
+              </el-select>
+              <el-button @click="resetFilters">
+                重置
+              </el-button>
+              <el-button @click="loadInbounds">
+                刷新
+              </el-button>
+            </div>
+            <div class="toolbar-actions">
+              <span class="toolbar-summary">
+                匹配 {{ filteredInbounds.length }} 条，已选 {{ selectedInboundIds.length }} 条
+              </span>
+              <el-button
+                class="toolbar-batch-btn toolbar-batch-btn--success"
+                :disabled="!selectedInboundIds.length"
+                :loading="batchLoading === 'enable'"
+                @click="runBatchOperation('enable')"
+              >
+                批量启用
+              </el-button>
+              <el-button
+                class="toolbar-batch-btn toolbar-batch-btn--warning"
+                :disabled="!selectedInboundIds.length"
+                :loading="batchLoading === 'disable'"
+                @click="runBatchOperation('disable')"
+              >
+                批量停用
+              </el-button>
+              <el-button
+                class="toolbar-batch-btn toolbar-batch-btn--danger"
+                :disabled="!selectedInboundIds.length"
+                :loading="batchLoading === 'delete'"
+                @click="runBatchOperation('delete')"
+              >
+                批量删除
+              </el-button>
+            </div>
+          </div>
+    </AdminStickyChrome>
+    <div class="admin-page-body">
 
     <el-dialog
       v-model="autoProxyDialogVisible"
@@ -1229,10 +1233,12 @@
         </div>
       </template>
     </el-dialog>
-  </div>
+    </div>
+</div>
 </template>
 
 <script setup>
+import AdminStickyChrome from '@/components/AdminStickyChrome.vue'
 import { ref, reactive, onMounted, computed, nextTick, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'

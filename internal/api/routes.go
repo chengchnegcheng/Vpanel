@@ -18,6 +18,7 @@ import (
 	"v/internal/api/middleware"
 	"v/internal/auth"
 	"v/internal/cache"
+	"v/internal/certificate"
 	"v/internal/commercial/balance"
 	"v/internal/commercial/commission"
 	"v/internal/commercial/coupon"
@@ -1045,6 +1046,11 @@ func (r *Router) Setup() {
 		r.setupPortalRoutes(api)
 	}
 
+	// ACME HTTP-01 validation must be served from the public root, even when
+	// the panel UI itself uses a base path.
+	challengeDir := filepath.Join(filepath.Dir(r.config.Certificate.StoragePath), "webroot", ".well-known", "acme-challenge")
+	r.engine.Static("/.well-known/acme-challenge", challengeDir)
+
 	// Static files for frontend (if enabled)
 	if r.config.Server.StaticPath != "" {
 		staticPath := r.config.Server.StaticPath
@@ -1284,6 +1290,11 @@ func (r *Router) applyNotificationSettings(systemSettings *settings.SystemSettin
 	}
 
 	r.notificationService.UpdateConfig(r.buildNotificationConfig(systemSettings))
+	if certificateNotifier, ok := r.certificateService.(interface {
+		SetNotificationService(certificate.AlertNotifier)
+	}); ok {
+		certificateNotifier.SetNotificationService(r.notificationService)
+	}
 	if r.nodeHealthChecker != nil {
 		r.nodeHealthChecker.SetNotificationService(r.notificationService)
 	}
@@ -1389,6 +1400,7 @@ func (r *Router) buildNotificationConfig(systemSettings *settings.SystemSettings
 			notification.NotificationAutoBlacklisted:  true,
 			notification.NotificationNodeStatusChange: true,
 			notification.NotificationNodeTrafficAlert: true,
+			notification.NotificationCertificateAlert: true,
 		},
 		EnabledChannels: map[notification.NotificationChannel]bool{
 			notification.ChannelEmail:    emailEnabled,

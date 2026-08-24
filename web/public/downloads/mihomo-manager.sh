@@ -19,7 +19,7 @@ CONFIG_DIR="${CONFIG_DIR:-/etc/mihomo}"
 SERVICE_NAME="${SERVICE_NAME:-mihomo}"
 BINARY_NAME="${BINARY_NAME:-mihomo}"
 GITHUB_REPO="${GITHUB_REPO:-MetaCubeX/mihomo}"
-DEFAULT_VERSION="${DEFAULT_VERSION:-v1.19.24}"
+DEFAULT_VERSION="${DEFAULT_VERSION:-v1.19.29}"
 GITHUB_PROXY_MODE="${GITHUB_PROXY_MODE:-cn}"
 GITHUB_PROXY_LIST="${GITHUB_PROXY_LIST:-https://gh.llkk.cc/ https://ghfast.top/ https://gh-proxy.com/ https://gh.ddlc.top/ https://ghproxy.net/}"
 GEODATA_MMDB_URLS="${GEODATA_MMDB_URLS:-https://testingcf.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@release/country.mmdb https://cdn.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@release/country.mmdb}"
@@ -30,7 +30,7 @@ DASHBOARD_DIR="$CONFIG_DIR/ui"
 DASHBOARD_SECRET_FILE="$CONFIG_DIR/dashboard.secret"
 DASHBOARD_BIND="${DASHBOARD_BIND:-127.0.0.1}"
 DASHBOARD_PORT="${DASHBOARD_PORT:-9090}"
-SYSTEM_PROXY_FILE="/etc/profile.d/mihomo.sh"
+SYSTEM_PROXY_FILE="${SYSTEM_PROXY_FILE:-/etc/profile.d/mihomo.sh}"
 
 CURL_CONNECT_TIMEOUT="${CURL_CONNECT_TIMEOUT:-8}"
 CURL_METADATA_MAX_TIME="${CURL_METADATA_MAX_TIME:-20}"
@@ -43,10 +43,10 @@ SUBSCRIPTION_CONNECT_TIMEOUT="${SUBSCRIPTION_CONNECT_TIMEOUT:-8}"
 SUBSCRIPTION_MAX_TIME="${SUBSCRIPTION_MAX_TIME:-120}"
 SUBSCRIPTION_RETRY="${SUBSCRIPTION_RETRY:-1}"
 CONFIG_TEST_TIMEOUT="${CONFIG_TEST_TIMEOUT:-30}"
-ENABLE_SYSTEM_PROXY="${ENABLE_SYSTEM_PROXY:-0}"
 VERIFY_CONNECT_TIMEOUT="${VERIFY_CONNECT_TIMEOUT:-8}"
 VERIFY_MAX_TIME="${VERIFY_MAX_TIME:-20}"
 VERIFY_URLS="${VERIFY_URLS:-https://www.google.com/generate_204 https://www.gstatic.com/generate_204 https://cp.cloudflare.com/generate_204}"
+SCRIPT_VERSION="${SCRIPT_VERSION:-2026.07.19}"
 
 print_info() { echo -e "${BLUE}[INFO]${NC} $*"; }
 print_success() { echo -e "${GREEN}[SUCCESS]${NC} $*"; }
@@ -483,13 +483,26 @@ get_yaml_scalar() {
     ' "$file"
 }
 
+is_valid_tcp_port() {
+    local port="$1"
+    [[ "$port" =~ ^[0-9]{1,5}$ ]] && ((10#$port >= 1 && 10#$port <= 65535))
+}
+
 get_http_proxy_port() {
     local mixed_port http_port
     mixed_port=$(get_yaml_scalar "mixed-port")
     http_port=$(get_yaml_scalar "port")
     if [ -n "$mixed_port" ]; then
+        is_valid_tcp_port "$mixed_port" || {
+            print_error "mixed-port 不是有效端口: $mixed_port" >&2
+            return 1
+        }
         echo "$mixed_port"
     elif [ -n "$http_port" ]; then
+        is_valid_tcp_port "$http_port" || {
+            print_error "port 不是有效端口: $http_port" >&2
+            return 1
+        }
         echo "$http_port"
     else
         echo "7890"
@@ -497,35 +510,55 @@ get_http_proxy_port() {
 }
 
 get_socks_proxy_port() {
-    local socks_port
+    local mixed_port socks_port
+    mixed_port=$(get_yaml_scalar "mixed-port")
     socks_port=$(get_yaml_scalar "socks-port")
-    echo "${socks_port:-7892}"
+    if [ -n "$mixed_port" ]; then
+        is_valid_tcp_port "$mixed_port" || return 1
+        echo "$mixed_port"
+    elif [ -n "$socks_port" ]; then
+        is_valid_tcp_port "$socks_port" || {
+            print_error "socks-port 不是有效端口: $socks_port" >&2
+            return 1
+        }
+        echo "$socks_port"
+    fi
 }
 
 configure_system_proxy() {
-    local http_port socks_port
+    local http_port socks_port all_proxy
 
-    if [ "$ENABLE_SYSTEM_PROXY" != "1" ]; then
-        if [ -f "$SYSTEM_PROXY_FILE" ] && grep -q "Mihomo 代理配置" "$SYSTEM_PROXY_FILE"; then
-            mv "$SYSTEM_PROXY_FILE" "${SYSTEM_PROXY_FILE}.disabled"
-            print_warning "已停用旧的全局代理配置: ${SYSTEM_PROXY_FILE}.disabled"
-        fi
-        print_info "默认不写入全局系统代理，避免服务未运行时影响系统下载"
-        print_info "如确实需要全局代理，请先启动服务，再执行: $0 proxy on"
-        return
+    if [ -e "$SYSTEM_PROXY_FILE" ] && ! grep -q '^# Mihomo 代理配置$' "$SYSTEM_PROXY_FILE"; then
+        print_error "目标文件已存在且不是本脚本生成，拒绝覆盖: $SYSTEM_PROXY_FILE"
+        return 1
     fi
 
-    http_port=$(get_http_proxy_port)
-    socks_port=$(get_socks_proxy_port)
+    http_port=$(get_http_proxy_port) || return 1
+    socks_port=$(get_socks_proxy_port) || return 1
+    if [ -n "$socks_port" ] && [ "$socks_port" != "$http_port" ] && ! is_tcp_port_open 127.0.0.1 "$socks_port"; then
+        print_warning "独立 SOCKS 端口未监听，all_proxy 将使用 HTTP 代理: 127.0.0.1:$http_port"
+        socks_port=""
+    fi
+    if [ -n "$socks_port" ]; then
+        all_proxy="socks5h://127.0.0.1:$socks_port"
+    else
+        all_proxy="http://127.0.0.1:$http_port"
+        print_warning "未配置独立 SOCKS 端口，all_proxy 将回退到 HTTP 代理"
+    fi
     cat > "$SYSTEM_PROXY_FILE" <<EOF
 # Mihomo 代理配置
 export http_proxy=http://127.0.0.1:$http_port
 export https_proxy=http://127.0.0.1:$http_port
-export all_proxy=socks5h://127.0.0.1:$socks_port
+export all_proxy=$all_proxy
 export no_proxy=localhost,127.0.0.1,::1
+export HTTP_PROXY=\$http_proxy
+export HTTPS_PROXY=\$https_proxy
+export ALL_PROXY=\$all_proxy
+export NO_PROXY=\$no_proxy
 EOF
     chmod 0644 "$SYSTEM_PROXY_FILE"
-    print_success "系统环境代理已写入: $SYSTEM_PROXY_FILE"
+    rm -f "${SYSTEM_PROXY_FILE}.disabled"
+    print_success "登录终端代理已写入: $SYSTEM_PROXY_FILE"
 }
 
 enable_system_proxy() {
@@ -535,9 +568,9 @@ enable_system_proxy() {
     require_commands timeout
 
     local http_port
-    http_port=$(get_http_proxy_port)
+    http_port=$(get_http_proxy_port) || return 1
     if ! systemctl is-active --quiet "$SERVICE_NAME"; then
-        print_error "Mihomo 服务未运行，拒绝启用系统环境代理"
+        print_error "Mihomo 服务未运行，拒绝启用登录终端代理"
         print_info "请先执行: $0 start"
         return 1
     fi
@@ -545,20 +578,24 @@ enable_system_proxy() {
         print_error "本机 HTTP 代理端口未监听: 127.0.0.1:$http_port"
         return 1
     fi
-
-    ENABLE_SYSTEM_PROXY=1
     configure_system_proxy
-    print_info "重新登录终端后生效；当前终端可执行: source $SYSTEM_PROXY_FILE"
+    print_info "新登录终端后生效；脚本无法修改当前父终端"
+    print_info "当前终端启用请执行: source $SYSTEM_PROXY_FILE"
 }
 
 disable_system_proxy_file() {
     check_root
     if [ -f "$SYSTEM_PROXY_FILE" ]; then
-        mv "$SYSTEM_PROXY_FILE" "${SYSTEM_PROXY_FILE}.disabled"
-        print_success "系统环境代理已停用: ${SYSTEM_PROXY_FILE}.disabled"
+        if ! grep -q '^# Mihomo 代理配置$' "$SYSTEM_PROXY_FILE"; then
+            print_error "目标文件不是本脚本生成，拒绝删除: $SYSTEM_PROXY_FILE"
+            return 1
+        fi
+        rm -f "$SYSTEM_PROXY_FILE" "${SYSTEM_PROXY_FILE}.disabled"
+        print_success "登录终端代理已停用"
     else
-        print_info "系统环境代理未启用"
+        print_info "登录终端代理未启用"
     fi
+    print_info "已打开的终端需执行: unset http_proxy https_proxy all_proxy no_proxy HTTP_PROXY HTTPS_PROXY ALL_PROXY NO_PROXY"
 }
 
 ensure_country_mmdb() {
@@ -757,12 +794,7 @@ install_mihomo() {
     ensure_country_mmdb
     ensure_dashboard_ui
     create_systemd_service
-    if [ "$ENABLE_SYSTEM_PROXY" = "1" ]; then
-        print_warning "安装阶段不启用系统环境代理，避免服务未启动时影响系统网络"
-        print_info "请先执行: $0 start，然后执行: $0 proxy on"
-    else
-        configure_system_proxy
-    fi
+    print_info "安装不会修改登录终端代理；需要时请在服务启动后执行: $0 proxy on"
 
     print_success "Mihomo 安装完成"
     show_usage
@@ -890,7 +922,8 @@ save_subscription_url() {
 is_tcp_port_open() {
     local host="$1"
     local port="$2"
-    timeout 1 bash -c "</dev/tcp/$host/$port" >/dev/null 2>&1
+    is_valid_tcp_port "$port" || return 1
+    timeout 1 bash -c 'exec 3<>"/dev/tcp/$1/$2"' bash "$host" "$port" >/dev/null 2>&1
 }
 
 subscription_proxy_urls() {
@@ -898,9 +931,9 @@ subscription_proxy_urls() {
     mixed_port=$(get_yaml_scalar "mixed-port")
     http_port=$(get_yaml_scalar "port")
     socks_port=$(get_yaml_scalar "socks-port")
-    [ -n "$mixed_port" ] && echo "http://127.0.0.1:$mixed_port"
-    [ -n "$http_port" ] && echo "http://127.0.0.1:$http_port"
-    [ -n "$socks_port" ] && echo "socks5h://127.0.0.1:$socks_port"
+    [ -n "$mixed_port" ] && is_valid_tcp_port "$mixed_port" && echo "http://127.0.0.1:$mixed_port"
+    [ -n "$http_port" ] && is_valid_tcp_port "$http_port" && echo "http://127.0.0.1:$http_port"
+    [ -n "$socks_port" ] && is_valid_tcp_port "$socks_port" && echo "socks5h://127.0.0.1:$socks_port"
     echo "http://127.0.0.1:7890"
     echo "socks5h://127.0.0.1:7892"
 }
@@ -937,26 +970,165 @@ get_controller_base_url() {
     echo "http://$host:$port"
 }
 
-curl_controller_api() {
-    local path="$1"
+controller_api_request() {
+    local method="$1"
+    local path="$2"
     local secret
     local base_url
 
     base_url=$(get_controller_base_url)
     secret=$(get_yaml_scalar "secret")
-
     if [ -n "$secret" ]; then
-        curl_without_proxy -fsS \
+        curl_without_proxy -fsS -X "$method" \
             --connect-timeout "$VERIFY_CONNECT_TIMEOUT" \
             --max-time "$VERIFY_MAX_TIME" \
             -H "Authorization: Bearer $secret" \
-            "$base_url$path" >/dev/null
+            "${@:3}" "$base_url$path"
     else
-        curl_without_proxy -fsS \
+        curl_without_proxy -fsS -X "$method" \
             --connect-timeout "$VERIFY_CONNECT_TIMEOUT" \
             --max-time "$VERIFY_MAX_TIME" \
-            "$base_url$path" >/dev/null
+            "${@:3}" "$base_url$path"
     fi
+}
+
+curl_controller_api() {
+    controller_api_request GET "$1" >/dev/null
+}
+
+url_encode_component() {
+    python3 - "$1" <<'PY'
+import sys
+from urllib.parse import quote
+print(quote(sys.argv[1], safe=""))
+PY
+}
+
+proxy_groups_from_json() {
+    python3 - "$1" <<'PY'
+import json
+import sys
+
+with open(sys.argv[1], "r", encoding="utf-8") as fh:
+    data = json.load(fh)
+
+for name, proxy in (data.get("proxies") or {}).items():
+    if not isinstance(proxy, dict) or proxy.get("type") != "Selector":
+        continue
+    choices = proxy.get("all") or []
+    if choices:
+        print(f"{name}\t{proxy.get('now', '')}")
+PY
+}
+
+proxy_nodes_from_json() {
+    python3 - "$1" "$2" <<'PY'
+import json
+import sys
+
+with open(sys.argv[1], "r", encoding="utf-8") as fh:
+    data = json.load(fh)
+
+proxy = (data.get("proxies") or {}).get(sys.argv[2]) or {}
+for name in proxy.get("all") or []:
+    print(name)
+PY
+}
+
+switch_proxy_node() {
+    check_root
+    check_installed
+    require_commands curl mktemp
+    check_systemd
+
+    if ! command -v python3 >/dev/null 2>&1; then
+        print_warning "节点切换需要 python3，尝试自动安装..."
+        install_package_if_possible python3 || {
+            print_error "python3 安装失败，无法使用节点切换"
+            return 1
+        }
+    fi
+
+    if ! systemctl is-active --quiet "$SERVICE_NAME"; then
+        print_error "Mihomo 服务未运行，请先执行: $0 start"
+        return 1
+    fi
+
+    local proxy_json group_choice group_row group_name current_name node_choice selected_node encoded_group encoded_node payload
+    local -a group_rows node_names
+    proxy_json=$(mktemp "$CONFIG_DIR/proxies.XXXXXX.json")
+    if ! controller_api_request GET "/proxies" > "$proxy_json"; then
+        rm -f "$proxy_json"
+        print_error "无法读取 Mihomo 代理组，请检查控制 API 和 secret"
+        return 1
+    fi
+
+    mapfile -t group_rows < <(proxy_groups_from_json "$proxy_json")
+    if [ "${#group_rows[@]}" -eq 0 ]; then
+        rm -f "$proxy_json"
+        print_warning "当前没有可切换的 Selector 代理组"
+        print_info "请先更新订阅配置，或确认配置中存在 type: select 的代理组"
+        return 1
+    fi
+
+    echo ""
+    echo "可切换的代理组:"
+    local index=1
+    for group_row in "${group_rows[@]}"; do
+        IFS=$'\t' read -r group_name current_name <<< "$group_row"
+        printf '  %d) %s（当前: %s）\n' "$index" "$group_name" "${current_name:-未选择}"
+        index=$((index + 1))
+    done
+    read -r -p "请选择代理组 [1-${#group_rows[@]}，回车取消]: " group_choice
+    if [ -z "$group_choice" ]; then
+        rm -f "$proxy_json"
+        return 0
+    fi
+    if ! [[ "$group_choice" =~ ^[0-9]+$ ]] || [ "$group_choice" -lt 1 ] || [ "$group_choice" -gt "${#group_rows[@]}" ]; then
+        rm -f "$proxy_json"
+        print_error "代理组编号无效"
+        return 1
+    fi
+
+    group_row="${group_rows[$((group_choice - 1))]}"
+    IFS=$'\t' read -r group_name current_name <<< "$group_row"
+    mapfile -t node_names < <(proxy_nodes_from_json "$proxy_json" "$group_name")
+    if [ "${#node_names[@]}" -eq 0 ]; then
+        rm -f "$proxy_json"
+        print_warning "代理组没有可用节点: $group_name"
+        return 1
+    fi
+
+    echo ""
+    echo "代理组 $group_name 的节点:"
+    index=1
+    for selected_node in "${node_names[@]}"; do
+        printf '  %d) %s%s\n' "$index" "$selected_node" "$([ "$selected_node" = "$current_name" ] && printf '（当前）' || true)"
+        index=$((index + 1))
+    done
+    read -r -p "请选择节点 [1-${#node_names[@]}，回车取消]: " node_choice
+    if [ -z "$node_choice" ]; then
+        rm -f "$proxy_json"
+        return 0
+    fi
+    if ! [[ "$node_choice" =~ ^[0-9]+$ ]] || [ "$node_choice" -lt 1 ] || [ "$node_choice" -gt "${#node_names[@]}" ]; then
+        rm -f "$proxy_json"
+        print_error "节点编号无效"
+        return 1
+    fi
+
+    selected_node="${node_names[$((node_choice - 1))]}"
+    encoded_group=$(url_encode_component "$group_name")
+    encoded_node=$(python3 -c 'import json,sys; print(json.dumps(sys.argv[1]))' "$selected_node")
+    payload="{\"name\":$encoded_node}"
+    if controller_api_request PUT "/proxies/$encoded_group" -H 'Content-Type: application/json' --data "$payload" >/dev/null; then
+        print_success "代理节点已切换: $group_name -> $selected_node"
+    else
+        print_error "代理节点切换失败: $group_name -> $selected_node"
+        rm -f "$proxy_json"
+        return 1
+    fi
+    rm -f "$proxy_json"
 }
 
 try_proxy_access() {
@@ -1242,6 +1414,7 @@ install_dashboard() {
         print_success "面板资源已修复，服务当前未运行"
     fi
 
+    print_info "脚本版本: $SCRIPT_VERSION"
     print_info "控制面板: http://服务器IP:9090/ui"
     print_warning "如果服务器有公网 IP，请在安全组/防火墙中限制 9090 访问来源"
 }
@@ -1298,12 +1471,13 @@ show_menu() {
     echo "  9) 禁用开机自启"
     echo " 10) 校验配置"
     echo " 11) 验证是否可用"
-    echo " 12) 修复/下载控制面板"
-    echo " 13) 编辑配置"
-    echo " 14) 启用系统环境代理"
-    echo " 15) 停用系统环境代理"
-    echo " 16) 卸载 Mihomo"
-    echo " 17) 显示帮助"
+    echo " 12) 切换代理节点"
+    echo " 13) 修复/下载控制面板"
+    echo " 14) 编辑配置"
+    echo " 15) 启用登录终端代理"
+    echo " 16) 停用登录终端代理"
+    echo " 17) 卸载 Mihomo"
+    echo " 18) 显示帮助"
     echo "  0) 退出"
     echo ""
     echo "=========================================="
@@ -1330,7 +1504,7 @@ interactive_menu() {
 
     while true; do
         show_menu
-        read -r -p "请选择操作 [0-17]: " choice
+        read -r -p "请选择操作 [0-18]: " choice
         echo ""
 
         case "$choice" in
@@ -1369,21 +1543,24 @@ interactive_menu() {
                 run_menu_action verify_service
                 ;;
             12)
-                run_menu_action install_dashboard
+                run_menu_action switch_proxy_node
                 ;;
             13)
-                run_menu_action edit_config
+                run_menu_action install_dashboard
                 ;;
             14)
-                run_menu_action enable_system_proxy
+                run_menu_action edit_config
                 ;;
             15)
-                run_menu_action disable_system_proxy_file
+                run_menu_action enable_system_proxy
                 ;;
             16)
-                run_menu_action uninstall_mihomo
+                run_menu_action disable_system_proxy_file
                 ;;
             17)
+                run_menu_action uninstall_mihomo
+                ;;
+            18)
                 run_menu_action show_usage
                 ;;
             0)
@@ -1413,6 +1590,7 @@ show_usage() {
   $0 enable|disable
   $0 test
   $0 verify
+  $0 switch
   $0 edit
   $0 dashboard
   $0 proxy on|off
@@ -1426,7 +1604,7 @@ show_usage() {
   sudo systemctl status $SERVICE_NAME
 
 下载环境变量:
-  MIHOMO_VERSION=v1.19.24
+  MIHOMO_VERSION=v1.19.29
   MIHOMO_VARIANT=compatible
   GITHUB_PROXY_MODE=cn|direct|proxy
   CLASH_META_GITHUB_PROXY=https://gh.llkk.cc/
@@ -1438,6 +1616,7 @@ show_usage() {
   CURL_LOW_SPEED_TIME=20
   VERIFY_URLS='https://www.google.com/generate_204 ...'
 
+脚本版本: $SCRIPT_VERSION
 配置文件: $CONFIG_DIR/config.yaml
 订阅链接: $SUBSCRIPTION_FILE
 配置备份: $BACKUP_DIR
@@ -1463,6 +1642,7 @@ main() {
         update) update_subscription "${2:-}" ;;
         test) test_config ;;
         verify) verify_service ;;
+        switch|node) switch_proxy_node ;;
         edit) edit_config ;;
         dashboard) install_dashboard ;;
         proxy)

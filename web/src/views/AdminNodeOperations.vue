@@ -1,115 +1,119 @@
 <template>
   <div class="node-operations-index-page">
-    <div class="page-header">
-      <div class="page-heading">
-        <h1 class="page-title">
-          节点运维
-        </h1>
-        <p class="page-subtitle">
-          集中处理节点内核控制、网络优化和运维入口分发
-        </p>
-      </div>
-      <div class="page-actions">
-        <el-button @click="fetchNodes">
-          <el-icon class="el-icon--left">
-            <Refresh />
-          </el-icon>
-          刷新
-        </el-button>
-      </div>
-    </div>
-
-    <div class="overview-strip">
-      <div class="overview-card">
-        <span class="overview-label">当前页节点</span>
-        <strong class="overview-value">{{ filteredNodes.length }}</strong>
-      </div>
-      <div class="overview-card">
-        <span class="overview-label">在线节点</span>
-        <strong class="overview-value is-success">{{ onlineCount }}</strong>
-      </div>
-      <div class="overview-card">
-        <span class="overview-label">内核运行中</span>
-        <strong class="overview-value is-primary">{{ xrayRunningCount }}</strong>
-      </div>
-      <div class="overview-card">
-        <span class="overview-label">待同步</span>
-        <strong class="overview-value is-warning">{{ pendingSyncCount }}</strong>
-      </div>
-      <div class="overview-card">
-        <span class="overview-label">平均延迟</span>
-        <strong class="overview-value">{{ averageLatency }}ms</strong>
-      </div>
-    </div>
-
-    <div class="toolbar-card">
-      <div class="toolbar-main">
-        <div class="toolbar-copy">
-          <div class="toolbar-title">
-            运维筛选区
+    
+    <AdminStickyChrome>
+      <div class="page-header">
+            <div class="page-heading">
+              <h1 class="page-title">
+                节点运维
+              </h1>
+              <p class="page-subtitle">
+                集中处理节点内核控制、网络优化和运维入口分发
+              </p>
+            </div>
+            <div class="page-actions">
+              <el-button @click="fetchNodes">
+                <el-icon class="el-icon--left">
+                  <Refresh />
+                </el-icon>
+                刷新
+              </el-button>
+            </div>
           </div>
-          <div class="toolbar-description">
-            先筛出需要处理的节点，再从列表直接进入单节点运维工作台。
+
+          <div class="overview-strip">
+            <div class="overview-card">
+              <span class="overview-label">当前页节点</span>
+              <strong class="overview-value">{{ filteredNodes.length }}</strong>
+            </div>
+            <div class="overview-card">
+              <span class="overview-label">在线节点</span>
+              <strong class="overview-value is-success">{{ onlineCount }}</strong>
+            </div>
+            <div class="overview-card">
+              <span class="overview-label">内核运行中</span>
+              <strong class="overview-value is-primary">{{ xrayRunningCount }}</strong>
+            </div>
+            <div class="overview-card">
+              <span class="overview-label">待同步</span>
+              <strong class="overview-value is-warning">{{ pendingSyncCount }}</strong>
+            </div>
+            <div class="overview-card">
+              <span class="overview-label">平均延迟</span>
+              <strong class="overview-value">{{ averageLatency }}ms</strong>
+            </div>
           </div>
-        </div>
-        <div class="toolbar-filters">
-          <el-input
-            v-model="filters.search"
-            class="toolbar-search"
-            placeholder="搜索节点名称、地址或地区"
-            clearable
-          />
-          <el-select
-            v-model="filters.status"
-            placeholder="状态"
-            clearable
-            @change="handleFilterChange"
-          >
-            <el-option
-              label="在线"
-              value="online"
-            />
-            <el-option
-              label="离线"
-              value="offline"
-            />
-            <el-option
-              label="不健康"
-              value="unhealthy"
-            />
-          </el-select>
-          <el-select
-            v-model="filters.region"
-            placeholder="地区"
-            clearable
-            @change="handleFilterChange"
-          >
-            <el-option
-              v-for="region in regions"
-              :key="region"
-              :label="region"
-              :value="region"
-            />
-          </el-select>
-          <el-button @click="resetFilters">
-            重置
-          </el-button>
-        </div>
-      </div>
-      <div class="toolbar-side">
-        <div class="toolbar-summary">
-          当前页共 {{ nodeStore.total }} 条，筛选后 {{ filteredNodes.length }} 条
-        </div>
-        <div class="toolbar-chip-row">
-          <span class="toolbar-chip">
-            {{ activeFilterCount ? `已启用 ${activeFilterCount} 个筛选` : "当前查看全部节点" }}
-          </span>
-          <span class="toolbar-chip toolbar-chip--primary">
-            待同步 {{ pendingSyncCount }}
-          </span>
-        </div>
-      </div>
-    </div>
+
+          <div class="toolbar-card">
+            <div class="toolbar-main">
+              <div class="toolbar-copy">
+                <div class="toolbar-title">
+                  运维筛选区
+                </div>
+                <div class="toolbar-description">
+                  先筛出需要处理的节点，再从列表直接进入单节点运维工作台。
+                </div>
+              </div>
+              <div class="toolbar-filters">
+                <el-input
+                  v-model="filters.search"
+                  class="toolbar-search"
+                  placeholder="搜索节点名称、地址或地区"
+                  clearable
+                />
+                <el-select
+                  v-model="filters.status"
+                  placeholder="状态"
+                  clearable
+                  @change="handleFilterChange"
+                >
+                  <el-option
+                    label="在线"
+                    value="online"
+                  />
+                  <el-option
+                    label="离线"
+                    value="offline"
+                  />
+                  <el-option
+                    label="不健康"
+                    value="unhealthy"
+                  />
+                </el-select>
+                <el-select
+                  v-model="filters.region"
+                  placeholder="地区"
+                  clearable
+                  @change="handleFilterChange"
+                >
+                  <el-option
+                    v-for="region in regions"
+                    :key="region"
+                    :label="region"
+                    :value="region"
+                  />
+                </el-select>
+                <el-button @click="resetFilters">
+                  重置
+                </el-button>
+              </div>
+            </div>
+            <div class="toolbar-side">
+              <div class="toolbar-summary">
+                当前页共 {{ nodeStore.total }} 条，筛选后 {{ filteredNodes.length }} 条
+              </div>
+              <div class="toolbar-chip-row">
+                <span class="toolbar-chip">
+                  {{ activeFilterCount ? `已启用 ${activeFilterCount} 个筛选` : "当前查看全部节点" }}
+                </span>
+                <span class="toolbar-chip toolbar-chip--primary">
+                  待同步 {{ pendingSyncCount }}
+                </span>
+              </div>
+            </div>
+          </div>
+    </AdminStickyChrome>
+    <div class="admin-page-body">
 
     <el-card shadow="never">
       <template #header>
@@ -289,10 +293,12 @@
         />
       </div>
     </el-card>
+    </div>
   </div>
 </template>
 
 <script setup>
+import AdminStickyChrome from '@/components/AdminStickyChrome.vue'
 import { computed, onMounted, onUnmounted, reactive, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
@@ -312,7 +318,7 @@ const filters = reactive({
 
 const pagination = reactive({
   page: 1,
-  pageSize: 20
+  pageSize: 10
 })
 
 const regions = computed(() => {

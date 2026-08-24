@@ -1,44 +1,48 @@
 <template>
   <div class="roles-page">
-    <div class="page-header">
-      <div class="page-heading">
-        <h1 class="page-title">
-          角色管理
-        </h1>
-        <p class="page-subtitle">
-          整理角色权限、系统角色和用户归属关系
-        </p>
-      </div>
-      <div class="page-actions">
-        <el-button
-          type="primary"
-          :disabled="!canManageRoles"
-          @click="showCreateDialog"
-        >
-          <el-icon><Plus /></el-icon>
-          新建角色
-        </el-button>
-      </div>
-    </div>
+    
+    <AdminStickyChrome>
+      <div class="page-header">
+            <div class="page-heading">
+              <h1 class="page-title">
+                角色管理
+              </h1>
+              <p class="page-subtitle">
+                整理角色权限、系统角色和用户归属关系
+              </p>
+            </div>
+            <div class="page-actions">
+              <el-button
+                type="primary"
+                :disabled="!canManageRoles"
+                @click="showCreateDialog"
+              >
+                <el-icon><Plus /></el-icon>
+                新建角色
+              </el-button>
+            </div>
+          </div>
 
-    <div class="overview-strip">
-      <div class="overview-card">
-        <span class="overview-label">角色总数</span>
-        <strong class="overview-value">{{ roles.length }}</strong>
-      </div>
-      <div class="overview-card">
-        <span class="overview-label">系统角色</span>
-        <strong class="overview-value is-warning">{{ systemRoleCount }}</strong>
-      </div>
-      <div class="overview-card">
-        <span class="overview-label">自定义角色</span>
-        <strong class="overview-value is-primary">{{ customRoleCount }}</strong>
-      </div>
-      <div class="overview-card">
-        <span class="overview-label">角色关联用户</span>
-        <strong class="overview-value is-success">{{ assignedUserCount }}</strong>
-      </div>
-    </div>
+          <div class="overview-strip">
+            <div class="overview-card">
+              <span class="overview-label">角色总数</span>
+              <strong class="overview-value">{{ roles.length }}</strong>
+            </div>
+            <div class="overview-card">
+              <span class="overview-label">系统角色</span>
+              <strong class="overview-value is-warning">{{ systemRoleCount }}</strong>
+            </div>
+            <div class="overview-card">
+              <span class="overview-label">自定义角色</span>
+              <strong class="overview-value is-primary">{{ customRoleCount }}</strong>
+            </div>
+            <div class="overview-card">
+              <span class="overview-label">角色关联用户</span>
+              <strong class="overview-value is-success">{{ assignedUserCount }}</strong>
+            </div>
+          </div>
+    </AdminStickyChrome>
+    <div class="admin-page-body">
 
     <el-card>
       <template #header>
@@ -201,10 +205,12 @@
         </el-button>
       </template>
     </el-dialog>
-  </div>
+    </div>
+</div>
 </template>
 
 <script setup>
+import AdminStickyChrome from '@/components/AdminStickyChrome.vue'
 import { computed, onMounted, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus } from '@element-plus/icons-vue'

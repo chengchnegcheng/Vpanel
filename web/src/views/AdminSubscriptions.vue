@@ -1,128 +1,132 @@
 <template>
   <div class="admin-subscriptions-page">
-    <div class="page-header">
-      <div class="page-heading">
-        <div class="title">
-          订阅管理
-        </div>
-        <div class="page-subtitle">
-          统一查看订阅凭据、访问活跃度和最后使用记录
-        </div>
-      </div>
-      <el-button
-        type="primary"
-        class="refresh-btn"
-        @click="fetchSubscriptions"
-      >
-        <el-icon class="el-icon--left">
-          <RefreshRight />
-        </el-icon> 刷新列表
-      </el-button>
-    </div>
+    
+    <AdminStickyChrome>
+      <div class="page-header">
+            <div class="page-heading">
+              <div class="title">
+                订阅管理
+              </div>
+              <div class="page-subtitle">
+                统一查看订阅凭据、访问活跃度和最后使用记录
+              </div>
+            </div>
+            <el-button
+              type="primary"
+              class="refresh-btn"
+              @click="fetchSubscriptions"
+            >
+              <el-icon class="el-icon--left">
+                <RefreshRight />
+              </el-icon> 刷新列表
+            </el-button>
+          </div>
 
-    <div class="overview-strip">
-      <div class="overview-card">
-        <span class="overview-label">当前匹配</span>
-        <strong class="overview-value">{{ total }}</strong>
-      </div>
-      <div class="overview-card">
-        <span class="overview-label">当前页已访问</span>
-        <strong class="overview-value is-success">{{ visitedCount }}</strong>
-      </div>
-      <div class="overview-card">
-        <span class="overview-label">当前页未访问</span>
-        <strong class="overview-value is-muted">{{ neverVisitedCount }}</strong>
-      </div>
-      <div class="overview-card">
-        <span class="overview-label">当前页近 7 天活跃</span>
-        <strong class="overview-value is-primary">{{ recentActiveCount }}</strong>
-      </div>
-    </div>
+          <div class="overview-strip">
+            <div class="overview-card">
+              <span class="overview-label">当前匹配</span>
+              <strong class="overview-value">{{ total }}</strong>
+            </div>
+            <div class="overview-card">
+              <span class="overview-label">当前页已访问</span>
+              <strong class="overview-value is-success">{{ visitedCount }}</strong>
+            </div>
+            <div class="overview-card">
+              <span class="overview-label">当前页未访问</span>
+              <strong class="overview-value is-muted">{{ neverVisitedCount }}</strong>
+            </div>
+            <div class="overview-card">
+              <span class="overview-label">当前页近 7 天活跃</span>
+              <strong class="overview-value is-primary">{{ recentActiveCount }}</strong>
+            </div>
+          </div>
 
-    <div class="toolbar-card">
-      <div class="toolbar-filters">
-        <el-input
-          v-model="filters.keyword"
-          clearable
-          class="toolbar-search"
-          placeholder="搜索用户ID、用户名、短码、IP或令牌"
-        >
-          <template #prefix>
-            <el-icon><Search /></el-icon>
-          </template>
-        </el-input>
-        <el-select
-          v-model="filters.accessRange"
-          clearable
-          placeholder="访问次数"
-        >
-          <el-option
-            label="从未访问"
-            value="0"
-          />
-          <el-option
-            label="1-10 次"
-            value="1-10"
-          />
-          <el-option
-            label="11-100 次"
-            value="11-100"
-          />
-          <el-option
-            label="100 次以上"
-            value="100+"
-          />
-        </el-select>
-        <el-select
-          v-model="filters.activity"
-          clearable
-          placeholder="活跃状态"
-        >
-          <el-option
-            label="从未访问"
-            value="never"
-          />
-          <el-option
-            label="近 7 天活跃"
-            value="recent"
-          />
-          <el-option
-            label="30 天未访问"
-            value="stale"
-          />
-        </el-select>
-        <el-select
-          v-model="sortKey"
-          placeholder="排序方式"
-        >
-          <el-option
-            label="最近访问优先"
-            value="recent_access"
-          />
-          <el-option
-            label="访问次数优先"
-            value="access_desc"
-          />
-          <el-option
-            label="创建时间优先"
-            value="created_desc"
-          />
-          <el-option
-            label="用户 ID 优先"
-            value="user_desc"
-          />
-        </el-select>
-        <el-button @click="resetFilters">
-          重置
-        </el-button>
-        <el-button @click="fetchSubscriptions">
-          刷新
-        </el-button>
-      </div>
-      <div class="toolbar-summary">
-        总记录 {{ total }} 条，当前页 {{ subscriptions.length }} 条
-      </div>
-    </div>
+          <div class="toolbar-card">
+            <div class="toolbar-filters">
+              <el-input
+                v-model="filters.keyword"
+                clearable
+                class="toolbar-search"
+                placeholder="搜索用户ID、用户名、短码、IP或令牌"
+              >
+                <template #prefix>
+                  <el-icon><Search /></el-icon>
+                </template>
+              </el-input>
+              <el-select
+                v-model="filters.accessRange"
+                clearable
+                placeholder="访问次数"
+              >
+                <el-option
+                  label="从未访问"
+                  value="0"
+                />
+                <el-option
+                  label="1-10 次"
+                  value="1-10"
+                />
+                <el-option
+                  label="11-100 次"
+                  value="11-100"
+                />
+                <el-option
+                  label="100 次以上"
+                  value="100+"
+                />
+              </el-select>
+              <el-select
+                v-model="filters.activity"
+                clearable
+                placeholder="活跃状态"
+              >
+                <el-option
+                  label="从未访问"
+                  value="never"
+                />
+                <el-option
+                  label="近 7 天活跃"
+                  value="recent"
+                />
+                <el-option
+                  label="30 天未访问"
+                  value="stale"
+                />
+              </el-select>
+              <el-select
+                v-model="sortKey"
+                placeholder="排序方式"
+              >
+                <el-option
+                  label="最近访问优先"
+                  value="recent_access"
+                />
+                <el-option
+                  label="访问次数优先"
+                  value="access_desc"
+                />
+                <el-option
+                  label="创建时间优先"
+                  value="created_desc"
+                />
+                <el-option
+                  label="用户 ID 优先"
+                  value="user_desc"
+                />
+              </el-select>
+              <el-button @click="resetFilters">
+                重置
+              </el-button>
+              <el-button @click="fetchSubscriptions">
+                刷新
+              </el-button>
+            </div>
+            <div class="toolbar-summary">
+              总记录 {{ total }} 条，当前页 {{ subscriptions.length }} 条
+            </div>
+          </div>
+    </AdminStickyChrome>
+    <div class="admin-page-body">
 
     <el-table
       v-if="!isMobile"
@@ -376,10 +380,12 @@
         @current-change="handleCurrentChange"
       />
     </div>
-  </div>
+    </div>
+</div>
 </template>
 
 <script setup>
+import AdminStickyChrome from '@/components/AdminStickyChrome.vue'
 import { computed, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'

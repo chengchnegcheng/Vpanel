@@ -29,6 +29,7 @@ import (
 	"v/internal/database/repository"
 	"v/internal/logger"
 	nodepkg "v/internal/node"
+	"v/internal/notification"
 	apperrors "v/pkg/errors"
 )
 
@@ -402,6 +403,10 @@ type Service struct {
 	deploymentRepo repository.CertificateDeploymentRepository
 	logger         logger.Logger
 	certDir        string // 证书存储目录
+	checkInterval  time.Duration
+	renewThreshold time.Duration
+	notifier       AlertNotifier
+	notifierMu     sync.RWMutex
 
 	// 自动续期控制
 	renewCtx    context.Context
@@ -410,6 +415,11 @@ type Service struct {
 
 	// acme.sh 安装锁
 	installMu sync.Mutex
+}
+
+// AlertNotifier delivers administrator-facing certificate alerts.
+type AlertNotifier interface {
+	NotifyCertificateAlert(data notification.CertificateAlertData) error
 }
 
 // NewService creates a new certificate service.
@@ -426,6 +436,61 @@ func NewService(
 		deploymentRepo: deploymentRepo,
 		logger:         log,
 		certDir:        certDir,
+		checkInterval:  24 * time.Hour,
+		renewThreshold: 30 * 24 * time.Hour,
+	}
+}
+
+// WithAutoRenewConfig applies the configured scheduler interval and renewal window.
+func (s *Service) WithAutoRenewConfig(checkInterval time.Duration, renewThresholdDays int) *Service {
+	if checkInterval > 0 {
+		s.checkInterval = checkInterval
+	}
+	if renewThresholdDays > 0 {
+		s.renewThreshold = time.Duration(renewThresholdDays) * 24 * time.Hour
+	}
+	return s
+}
+
+// SetNotificationService wires certificate lifecycle alerts to the notification service.
+func (s *Service) SetNotificationService(notifier AlertNotifier) {
+	s.notifierMu.Lock()
+	defer s.notifierMu.Unlock()
+	s.notifier = notifier
+}
+
+func (s *Service) notifyCertificateAlert(cert *repository.Certificate, level, reason string) {
+	if cert == nil {
+		return
+	}
+	s.notifierMu.RLock()
+	notifier := s.notifier
+	s.notifierMu.RUnlock()
+	if notifier == nil {
+		return
+	}
+
+	expiresAt := cert.ExpiresAt
+	if cert.ExpireDate != nil {
+		expiresAt = *cert.ExpireDate
+	}
+	daysLeft := 0
+	if !expiresAt.IsZero() {
+		daysLeft = int(time.Until(expiresAt).Hours() / 24)
+	}
+	if err := notifier.NotifyCertificateAlert(notification.CertificateAlertData{
+		CertificateID: cert.ID,
+		Domain:        cert.Domain,
+		Level:         level,
+		DaysLeft:      daysLeft,
+		Reason:        strings.TrimSpace(reason),
+		Timestamp:     time.Now(),
+	}); err != nil {
+		s.logger.Error("发送证书告警失败",
+			logger.F("cert_id", cert.ID),
+			logger.F("domain", cert.Domain),
+			logger.F("level", level),
+			logger.Err(err))
 	}
 }
 
@@ -996,6 +1061,7 @@ func (s *Service) parseAcmeError(err error) string {
 		"invalidcontact":                       "证书邮箱无效或被 ACME 拒绝，请使用真实可用邮箱地址",
 		"forbidden domain":                     "证书邮箱域名被 ACME 拒绝，请更换邮箱地址（不要使用示例域名）",
 		"contact email has forbidden domain":   "证书邮箱域名被 ACME 拒绝，请更换邮箱地址（不要使用示例域名）",
+		"not an issued domain":                 "ACME 签发状态缺失，无法直接续期；请重新申请该域名证书以恢复自动续期",
 	}
 
 	for pattern, friendlyMsg := range patterns {
@@ -1372,7 +1438,7 @@ func (s *Service) UpdateMaterial(ctx context.Context, id int64, certData, keyDat
 }
 
 // Renew renews a certificate.
-func (s *Service) Renew(ctx context.Context, id int64) error {
+func (s *Service) Renew(ctx context.Context, id int64) (renewErr error) {
 	cert, err := s.certRepo.GetByID(ctx, id)
 	if err != nil {
 		return fmt.Errorf("获取证书失败: %w", err)
@@ -1381,6 +1447,26 @@ func (s *Service) Renew(ctx context.Context, id int64) error {
 	if cert.Provider == "manual" {
 		return fmt.Errorf("手动上传的证书不支持自动续期")
 	}
+
+	defer func() {
+		if renewErr == nil {
+			return
+		}
+		cert.ErrorMessage = s.parseAcmeError(renewErr)
+		expiresAt := cert.ExpiresAt
+		if cert.ExpireDate != nil {
+			expiresAt = *cert.ExpireDate
+		}
+		if !expiresAt.IsZero() && !expiresAt.After(time.Now()) {
+			cert.Status = "expired"
+		}
+		if updateErr := s.certRepo.Update(context.Background(), cert); updateErr != nil {
+			s.logger.Error("更新证书续期失败状态失败",
+				logger.F("domain", cert.Domain),
+				logger.Err(updateErr))
+		}
+		s.notifyCertificateAlert(cert, "renewal_failed", cert.ErrorMessage)
+	}()
 
 	s.logger.Info("续期证书", logger.F("domain", cert.Domain))
 
@@ -1687,7 +1773,9 @@ func (s *Service) StartAutoRenew(ctx context.Context) error {
 	s.renewWg.Add(1)
 	go s.autoRenewLoop()
 
-	s.logger.Info("证书自动续期服务已启动")
+	s.logger.Info("证书自动续期服务已启动",
+		logger.F("check_interval", s.checkInterval),
+		logger.F("renew_threshold", s.renewThreshold))
 	return nil
 }
 
@@ -1717,8 +1805,7 @@ func (s *Service) StopAutoRenew() error {
 func (s *Service) autoRenewLoop() {
 	defer s.renewWg.Done()
 
-	// 每天检查一次
-	ticker := time.NewTicker(24 * time.Hour)
+	ticker := time.NewTicker(s.checkInterval)
 	defer ticker.Stop()
 
 	// 启动时立即检查一次
@@ -1734,6 +1821,10 @@ func (s *Service) autoRenewLoop() {
 	}
 }
 
+func certificateNeedsRenewal(expireDate *time.Time, now time.Time, renewThreshold time.Duration) bool {
+	return expireDate != nil && expireDate.Sub(now) < renewThreshold
+}
+
 // checkAndRenewCertificates 检查并续期证书
 func (s *Service) checkAndRenewCertificates() {
 	ctx := context.Background()
@@ -1745,35 +1836,33 @@ func (s *Service) checkAndRenewCertificates() {
 	}
 
 	now := time.Now()
-	renewThreshold := 30 * 24 * time.Hour // 30 天内过期
-
 	for _, cert := range certs {
-		if cert.ExpireDate == nil {
+		if !certificateNeedsRenewal(cert.ExpireDate, now, s.renewThreshold) {
 			continue
 		}
 
 		timeUntilExpiry := cert.ExpireDate.Sub(now)
+		daysLeft := int(timeUntilExpiry.Hours() / 24)
+		message := "证书即将过期，开始自动续期"
+		if timeUntilExpiry <= 0 {
+			message = "证书已过期，重试自动续期"
+		}
+		s.logger.Info(message,
+			logger.F("domain", cert.Domain),
+			logger.F("days_left", daysLeft))
 
-		// 检查是否即将过期
-		if timeUntilExpiry < renewThreshold && timeUntilExpiry > 0 {
-			daysLeft := int(timeUntilExpiry.Hours() / 24)
-			s.logger.Info("证书即将过期，开始自动续期",
+		if err := s.Renew(ctx, cert.ID); err != nil {
+			s.logger.Error("自动续期失败",
 				logger.F("domain", cert.Domain),
-				logger.F("days_left", daysLeft))
+				logger.F("error", err.Error()))
+		} else {
+			s.logger.Info("自动续期成功", logger.F("domain", cert.Domain))
 
-			if err := s.Renew(ctx, cert.ID); err != nil {
-				s.logger.Error("自动续期失败",
+			// 续期成功后，部署到关联的节点
+			if err := s.DeployToAssignedNodes(ctx, cert.ID); err != nil {
+				s.logger.Error("部署证书到节点失败",
 					logger.F("domain", cert.Domain),
 					logger.F("error", err.Error()))
-			} else {
-				s.logger.Info("自动续期成功", logger.F("domain", cert.Domain))
-
-				// 续期成功后，部署到关联的节点
-				if err := s.DeployToAssignedNodes(ctx, cert.ID); err != nil {
-					s.logger.Error("部署证书到节点失败",
-						logger.F("domain", cert.Domain),
-						logger.F("error", err.Error()))
-				}
 			}
 		}
 	}
@@ -1826,6 +1915,16 @@ func (s *Service) DeployToNode(ctx context.Context, certID int64, nodeID int64) 
 		deployment.Message = fmt.Sprintf("证书材料无效: %v", err)
 		s.deploymentRepo.Update(ctx, deployment)
 		return fmt.Errorf("证书材料无效: %w", err)
+	}
+
+	// Xray configurations embed the current certificate material. Mark the node
+	// pending before the SSH copy so its next heartbeat fetches and applies the
+	// renewed certificate even when Xray does not read the uploaded file path.
+	if err := s.nodeRepo.UpdateSyncStatus(ctx, nodeID, repository.NodeSyncStatusPending, nil); err != nil {
+		deployment.Status = "failed"
+		deployment.Message = fmt.Sprintf("排队节点配置同步失败: %v", err)
+		s.deploymentRepo.Update(ctx, deployment)
+		return fmt.Errorf("排队节点配置同步失败: %w", err)
 	}
 
 	// 通过 SSH 部署到节点
@@ -1903,7 +2002,11 @@ func (s *Service) DeployToAssignedNodes(ctx context.Context, certID int64) error
 	}
 
 	if len(errors) > 0 {
-		return fmt.Errorf("部分节点部署失败: %v", errors)
+		deployErr := fmt.Errorf("部分节点部署失败: %v", errors)
+		if cert, certErr := s.certRepo.GetByID(context.Background(), certID); certErr == nil {
+			s.notifyCertificateAlert(cert, "deployment_failed", deployErr.Error())
+		}
+		return deployErr
 	}
 
 	return nil

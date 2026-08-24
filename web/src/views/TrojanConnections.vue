@@ -1,18 +1,22 @@
 <template>
   <div class="connections-container">
-    <div class="page-header">
-      <div class="title">
-        Trojan 连接管理
-      </div>
-      <el-button
-        type="primary"
-        @click="refresh"
-      >
-        <el-icon class="el-icon--left">
-          <Refresh />
-        </el-icon> 刷新
-      </el-button>
-    </div>
+    
+    <AdminStickyChrome>
+      <div class="page-header">
+            <div class="title">
+              Trojan 连接管理
+            </div>
+            <el-button
+              type="primary"
+              @click="refresh"
+            >
+              <el-icon class="el-icon--left">
+                <Refresh />
+              </el-icon> 刷新
+            </el-button>
+          </div>
+    </AdminStickyChrome>
+    <div class="admin-page-body">
     
     <div class="stats-cards">
       <el-card
@@ -171,10 +175,12 @@
         @current-change="handleCurrentChange"
       />
     </div>
-  </div>
+    </div>
+</div>
 </template>
 
 <script setup>
+import AdminStickyChrome from '@/components/AdminStickyChrome.vue'
 import { ref, reactive, onMounted, onUnmounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Refresh } from '@element-plus/icons-vue'
@@ -186,7 +192,7 @@ const loading = ref(false)
 
 // 分页
 const currentPage = ref(1)
-const pageSize = ref(20)
+const pageSize = ref(10)
 const total = ref(0)
 
 // 统计数据

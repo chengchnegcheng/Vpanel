@@ -1,35 +1,39 @@
 <template>
   <div class="admin-reports-page">
-    <div class="page-header">
-      <div class="page-heading">
-        <h1 class="page-title">
-          商业化报表
-        </h1>
-        <p class="page-subtitle">
-          按订单收款、在线充值、余额消费和人工调整拆分查看，后台口径更清楚。
-        </p>
-      </div>
-      <div class="page-actions">
-        <el-date-picker
-          v-model="dateRange"
-          type="daterange"
-          value-format="YYYY-MM-DD"
-          :style="{ width: datePickerWidth }"
-          start-placeholder="开始日期"
-          end-placeholder="结束日期"
-          range-separator="至"
-          @change="fetchReports"
-        />
-        <el-button
-          type="primary"
-          :loading="loadingOverview || loadingOperations"
-          @click="fetchReports"
-        >
-          <el-icon><Refresh /></el-icon>
-          刷新报表
-        </el-button>
-      </div>
-    </div>
+    
+    <AdminStickyChrome>
+      <div class="page-header">
+            <div class="page-heading">
+              <h1 class="page-title">
+                商业化报表
+              </h1>
+              <p class="page-subtitle">
+                按订单收款、在线充值、余额消费和人工调整拆分查看，后台口径更清楚。
+              </p>
+            </div>
+            <div class="page-actions">
+              <el-date-picker
+                v-model="dateRange"
+                type="daterange"
+                value-format="YYYY-MM-DD"
+                :style="{ width: datePickerWidth }"
+                start-placeholder="开始日期"
+                end-placeholder="结束日期"
+                range-separator="至"
+                @change="fetchReports"
+              />
+              <el-button
+                type="primary"
+                :loading="loadingOverview || loadingOperations"
+                @click="fetchReports"
+              >
+                <el-icon><Refresh /></el-icon>
+                刷新报表
+              </el-button>
+            </div>
+          </div>
+    </AdminStickyChrome>
+    <div class="admin-page-body">
 
     <el-card
       shadow="never"
@@ -321,10 +325,12 @@
         </div>
       </el-card>
     </div>
-  </div>
+    </div>
+</div>
 </template>
 
 <script setup>
+import AdminStickyChrome from '@/components/AdminStickyChrome.vue'
 import { computed, onMounted, reactive, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import { Refresh } from '@element-plus/icons-vue'

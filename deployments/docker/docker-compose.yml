@@ -53,6 +53,7 @@ x-vpanel-volumes: &vpanel-volumes
   - v-panel-data:${VPANEL_DATA_DIR:-/app/data}
   - v-panel-logs:${VPANEL_LOG_DIR:-/app/logs}
   - v-panel-xray:${VPANEL_XRAY_DIR:-/app/xray}
+  - v-panel-acme:/home/vpanel/.acme.sh
   - ${VPANEL_CERT_DIR:-./certs}:/app/certs:ro
 
 x-vpanel-healthcheck: &vpanel-healthcheck
@@ -124,6 +125,8 @@ volumes:
     name: v-panel-logs
   v-panel-xray:
     name: v-panel-xray
+  v-panel-acme:
+    name: v-panel-acme
 
 networks:
   v-panel-network:

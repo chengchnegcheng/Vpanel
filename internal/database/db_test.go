@@ -101,6 +101,44 @@ func TestDatabaseConnectionRetry_HealthCheckUpdatesStatus(t *testing.T) {
 	}
 }
 
+func TestNewSQLiteUsesSafeConcurrencySettings(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "concurrency.db")
+	db, err := New(&Config{
+		Driver:       "sqlite",
+		DSN:          dbPath,
+		MaxOpenConns: 10,
+		MaxIdleConns: 5,
+	})
+	if err != nil {
+		t.Fatalf("create sqlite database: %v", err)
+	}
+	defer db.Close()
+
+	sqlDB, err := db.DB().DB()
+	if err != nil {
+		t.Fatalf("get sql database: %v", err)
+	}
+	if got := sqlDB.Stats().MaxOpenConnections; got != 1 {
+		t.Fatalf("expected sqlite access to be serialized, got %d open connections", got)
+	}
+
+	var busyTimeout int
+	if err := db.DB().Raw("PRAGMA busy_timeout").Scan(&busyTimeout).Error; err != nil {
+		t.Fatalf("read busy_timeout: %v", err)
+	}
+	if busyTimeout != 10000 {
+		t.Fatalf("expected busy_timeout=10000, got %d", busyTimeout)
+	}
+
+	var journalMode string
+	if err := db.DB().Raw("PRAGMA journal_mode").Scan(&journalMode).Error; err != nil {
+		t.Fatalf("read journal_mode: %v", err)
+	}
+	if journalMode != "wal" {
+		t.Fatalf("expected journal_mode=wal, got %q", journalMode)
+	}
+}
+
 func TestDatabaseConnectionRetry_WithRetrySucceeds(t *testing.T) {
 	// Create a temporary database
 	tmpDir := t.TempDir()

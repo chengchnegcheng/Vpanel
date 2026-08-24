@@ -1,62 +1,66 @@
 <template>
   <div class="admin-balances-page">
-    <div class="page-header">
-      <div class="page-heading">
-        <h1 class="page-title">
-          余额管理
-        </h1>
-        <p class="page-subtitle">
-          查看用户余额、交易流水，并执行人工余额调整
-        </p>
-      </div>
-      <div class="page-actions">
-        <el-button
-          :loading="loadingUsers"
-          @click="loadUsers"
-        >
-          刷新用户
-        </el-button>
-        <el-button
-          :loading="loadingBalance || loadingTransactions"
-          :disabled="!selectedUserId"
-          @click="refreshCurrentUserData"
-        >
-          刷新余额
-        </el-button>
-      </div>
-    </div>
-
-    <el-card
-      shadow="never"
-      class="selector-card"
-    >
-      <div class="selector-grid">
-        <el-select
-          v-model="selectedUserId"
-          filterable
-          clearable
-          placeholder="选择用户（支持搜索用户名、邮箱、ID）"
-          class="selector-control"
-        >
-          <el-option
-            v-for="user in users"
-            :key="user.id"
-            :label="getUserOptionLabel(user)"
-            :value="user.id"
-          />
-        </el-select>
-        <div class="selector-user-meta">
-          <template v-if="selectedUser">
-            <span class="selector-user-name">{{ selectedUser.username }}</span>
-            <span class="selector-user-hint">UID {{ selectedUser.id }} · {{ selectedUser.email || '未填写邮箱' }}</span>
-          </template>
-          <span v-else class="selector-user-hint">请选择一个用户后查看余额详情</span>
+    
+    <AdminStickyChrome>
+      <div class="page-header">
+        <div class="page-heading">
+          <h1 class="page-title">
+            余额管理
+          </h1>
+          <p class="page-subtitle">
+            查看用户余额、交易流水，并执行人工余额调整
+          </p>
+        </div>
+        <div class="page-actions">
+          <el-button
+            :loading="loadingUsers"
+            @click="loadUsers"
+          >
+            刷新用户
+          </el-button>
+          <el-button
+            :loading="loadingBalance || loadingTransactions"
+            :disabled="!selectedUserId"
+            @click="refreshCurrentUserData"
+          >
+            刷新余额
+          </el-button>
         </div>
       </div>
-    </el-card>
 
-    <template v-if="selectedUserId">
-      <div class="overview-strip">
+      <el-card
+        shadow="never"
+        class="selector-card"
+      >
+        <div class="selector-grid">
+          <el-select
+            v-model="selectedUserId"
+            filterable
+            clearable
+            placeholder="选择用户（支持搜索用户名、邮箱、ID）"
+            class="selector-control"
+          >
+            <el-option
+              v-for="user in users"
+              :key="user.id"
+              :label="getUserOptionLabel(user)"
+              :value="user.id"
+            />
+          </el-select>
+          <div class="selector-user-meta">
+            <template v-if="selectedUser">
+              <span class="selector-user-name">{{ selectedUser.username }}</span>
+              <span class="selector-user-hint">UID {{ selectedUser.id }} · {{ selectedUser.email || '未填写邮箱' }}</span>
+            </template>
+            <span v-else class="selector-user-hint">请选择一个用户后查看余额详情</span>
+          </div>
+        </div>
+      </el-card>
+
+      <div
+        v-if="selectedUserId"
+        class="overview-strip"
+      >
         <div class="overview-card">
           <span class="overview-label">当前可用余额</span>
           <strong class="overview-value is-primary">¥{{ formattedBalance }}</strong>
@@ -74,7 +78,10 @@
           <strong class="overview-value is-danger">¥{{ currentPageExpense }}</strong>
         </div>
       </div>
+    </AdminStickyChrome>
+    <div class="admin-page-body">
 
+    <template v-if="selectedUserId">
       <div class="detail-grid">
         <el-card shadow="never" class="adjust-card">
           <template #header>
@@ -239,10 +246,12 @@
         </div>
       </el-card>
     </template>
-  </div>
+    </div>
+</div>
 </template>
 
 <script setup>
+import AdminStickyChrome from '@/components/AdminStickyChrome.vue'
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import { balanceApi, usersApi } from '@/api'
@@ -259,7 +268,7 @@ const submittingAdjust = ref(false)
 
 const transactionPagination = reactive({
   page: 1,
-  pageSize: 20,
+  pageSize: 10,
   total: 0
 })
 

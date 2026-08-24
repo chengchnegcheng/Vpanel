@@ -161,7 +161,12 @@ func (h *NodeNetworkOptimizationHandler) Apply(c *gin.Context) {
 		return
 	}
 
-	encodedSettings, err := json.Marshal(settings)
+	persistedSettings := settings
+	if result != nil {
+		persistedSettings = result.AppliedSettings
+	}
+
+	encodedSettings, err := json.Marshal(persistedSettings)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to encode network optimization settings"})
 		return
@@ -179,12 +184,17 @@ func (h *NodeNetworkOptimizationHandler) Apply(c *gin.Context) {
 
 	command, queued := h.queueConfigSync(nodeData.ID, "管理员应用节点网络优化后同步配置")
 
+	message := "节点网络优化已应用"
+	if settings.EnableBBR && !persistedSettings.EnableBBR {
+		message = "节点网络优化已应用（内核不支持 BBR，已自动跳过）"
+	}
+
 	c.JSON(http.StatusOK, gin.H{
-		"message":        "节点网络优化已应用",
+		"message":        message,
 		"result":         result,
 		"sync_queued":    queued,
 		"command_id":     command.ID,
-		"saved_settings": settings,
+		"saved_settings": persistedSettings,
 	})
 }
 

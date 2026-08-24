@@ -3,6 +3,7 @@ package notification
 import (
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestBuildSMTPMessage_UsesRFCCompliantHeaders(t *testing.T) {
@@ -44,5 +45,26 @@ func TestBuildSMTPMessage_UsesRFCCompliantHeaders(t *testing.T) {
 	}
 	if !strings.Contains(raw, "Message-ID: <") || !strings.Contains(raw, "@shcrystal.com>") {
 		t.Fatalf("missing message id header: %q", raw)
+	}
+}
+
+func TestBuildCertificateAlertContentIncludesFailureAndNode(t *testing.T) {
+	subject, message := buildCertificateAlertContent(CertificateAlertData{
+		CertificateID: 5,
+		Domain:        "*.example.com",
+		Level:         "renewal_failed",
+		Reason:        "ACME 签发状态缺失",
+		NodeID:        19,
+		NodeName:      "edge-hk",
+		Timestamp:     time.Date(2026, 8, 24, 10, 30, 0, 0, time.Local),
+	})
+
+	if !strings.Contains(subject, "证书续期失败") || !strings.Contains(subject, "*.example.com") {
+		t.Fatalf("unexpected certificate alert subject: %q", subject)
+	}
+	for _, expected := range []string{"证书ID: 5", "edge-hk (#19)", "ACME 签发状态缺失"} {
+		if !strings.Contains(message, expected) {
+			t.Fatalf("certificate alert message missing %q: %q", expected, message)
+		}
 	}
 }

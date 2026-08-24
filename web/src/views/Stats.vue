@@ -1,5 +1,14 @@
 <template>
   <div class="stats-page">
+    <AdminStickyChrome>
+      <div class="page-header">
+        <div class="page-heading">
+          <h1 class="page-title">数据统计</h1>
+          <p class="page-subtitle">查看用户、代理与流量核心指标</p>
+        </div>
+      </div>
+    </AdminStickyChrome>
+    <div class="admin-page-body">
     <!-- 概览卡片 -->
     <el-row
       :gutter="isMobile ? 12 : 20"
@@ -379,10 +388,12 @@
         暂无用户统计数据
       </div>
     </el-card>
+    </div>
   </div>
 </template>
 
 <script setup>
+import AdminStickyChrome from '@/components/AdminStickyChrome.vue'
 import { ref, onMounted, onUnmounted, computed, watch } from 'vue'
 import { User, Connection, DataLine, Monitor, Refresh } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'

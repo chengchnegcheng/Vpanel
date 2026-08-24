@@ -1,13 +1,16 @@
 <template>
   <div class="profile-container">
-    <div class="profile-header">
-      <h2 class="profile-title">
-        个人资料
-      </h2>
-      <p class="profile-subtitle">
-        管理当前管理员账号的基础信息
-      </p>
-    </div>
+    <AdminStickyChrome>
+      <div class="profile-header">
+        <h2 class="profile-title">
+          个人资料
+        </h2>
+        <p class="profile-subtitle">
+          管理当前管理员账号的基础信息
+        </p>
+      </div>
+    </AdminStickyChrome>
+    <div class="admin-page-body">
 
     <div class="profile-content">
       <el-card
@@ -85,10 +88,12 @@
         </el-form>
       </el-card>
     </div>
-  </div>
+    </div>
+</div>
 </template>
 
 <script setup>
+import AdminStickyChrome from '@/components/AdminStickyChrome.vue'
 import { computed, onMounted, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import { useUserStore } from '@/stores/user'

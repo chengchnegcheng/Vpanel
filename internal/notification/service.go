@@ -28,6 +28,7 @@ const (
 	NotificationAutoBlacklisted  NotificationType = "auto_blacklisted"
 	NotificationNodeStatusChange NotificationType = "node_status_change"
 	NotificationNodeTrafficAlert NotificationType = "node_traffic_alert"
+	NotificationCertificateAlert NotificationType = "certificate_alert"
 )
 
 // NotificationChannel represents the notification channel
@@ -93,6 +94,18 @@ type NodeTrafficAlertData struct {
 	UsagePercent     float64
 	ThresholdPercent float64
 	Timestamp        time.Time
+}
+
+// CertificateAlertData contains administrator-facing certificate alert details.
+type CertificateAlertData struct {
+	CertificateID int64
+	Domain        string
+	Level         string // expiring, expired, renewal_failed, deployment_failed, renewed
+	DaysLeft      int
+	Reason        string
+	NodeID        int64
+	NodeName      string
+	Timestamp     time.Time
 }
 
 // Service handles sending notifications
@@ -334,6 +347,59 @@ func (s *Service) NotifyNodeTrafficAlert(data NodeTrafficAlertData) error {
 	)
 
 	return s.sendToAdmin(subject, message)
+}
+
+// NotifyCertificateAlert sends certificate lifecycle and deployment alerts to administrators.
+func (s *Service) NotifyCertificateAlert(data CertificateAlertData) error {
+	if !s.isEnabled(NotificationCertificateAlert) {
+		return nil
+	}
+	subject, message := buildCertificateAlertContent(data)
+	return s.sendToAdmin(subject, message)
+}
+
+func buildCertificateAlertContent(data CertificateAlertData) (string, string) {
+	emoji := "⚠️"
+	levelText := "证书异常"
+	switch data.Level {
+	case "expiring":
+		levelText = "证书即将过期"
+	case "expired":
+		emoji = "❌"
+		levelText = "证书已过期"
+	case "renewal_failed":
+		emoji = "❌"
+		levelText = "证书续期失败"
+	case "deployment_failed":
+		emoji = "❌"
+		levelText = "证书下发失败"
+	case "renewed":
+		emoji = "✅"
+		levelText = "证书续期成功"
+	}
+
+	subject := fmt.Sprintf("%s %s: %s", emoji, levelText, data.Domain)
+	message := fmt.Sprintf(
+		"证书告警\n\n证书ID: %d\n域名: %s\n告警类型: %s",
+		data.CertificateID,
+		data.Domain,
+		levelText,
+	)
+	if data.Level == "expiring" {
+		message += fmt.Sprintf("\n剩余天数: %d", data.DaysLeft)
+	}
+	if data.Level == "expired" {
+		message += fmt.Sprintf("\n已过期天数: %d", -data.DaysLeft)
+	}
+	if data.NodeID > 0 {
+		message += fmt.Sprintf("\n关联节点: %s (#%d)", data.NodeName, data.NodeID)
+	}
+	if strings.TrimSpace(data.Reason) != "" {
+		message += "\n原因: " + strings.TrimSpace(data.Reason)
+	}
+	message += "\n时间: " + data.Timestamp.Format("2006-01-02 15:04:05")
+
+	return subject, message
 }
 
 // isEnabled checks if a notification type is enabled

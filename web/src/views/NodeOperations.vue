@@ -1,46 +1,50 @@
 <template>
   <div class="node-operations-page">
-    <div class="page-header">
-      <div class="header-left">
-        <el-button
-          link
-          @click="goBack"
-        >
-          <el-icon><ArrowLeft /></el-icon>
-          返回运维列表
-        </el-button>
-        <div class="header-copy">
-          <h1 class="page-title">
-            {{ node?.name || '节点运维' }}
-          </h1>
-          <p class="page-subtitle">
-            统一处理内核管理、网络优化和操作记录
-          </p>
-        </div>
-        <el-tag
-          v-if="node"
-          :type="getStatusType(node.status)"
-          size="large"
-        >
-          {{ getStatusText(node.status) }}
-        </el-tag>
-      </div>
-      <div class="header-actions">
-        <el-button @click="refreshData">
-          <el-icon><Refresh /></el-icon>
-          刷新
-        </el-button>
-        <el-button @click="goToDetail">
-          查看详情
-        </el-button>
-        <el-button
-          type="primary"
-          @click="editNode"
-        >
-          编辑节点
-        </el-button>
-      </div>
-    </div>
+    
+    <AdminStickyChrome>
+      <div class="page-header">
+            <div class="header-left">
+              <el-button
+                link
+                @click="goBack"
+              >
+                <el-icon><ArrowLeft /></el-icon>
+                返回运维列表
+              </el-button>
+              <div class="header-copy">
+                <h1 class="page-title">
+                  {{ node?.name || '节点运维' }}
+                </h1>
+                <p class="page-subtitle">
+                  统一处理内核管理、网络优化和操作记录
+                </p>
+              </div>
+              <el-tag
+                v-if="node"
+                :type="getStatusType(node.status)"
+                size="large"
+              >
+                {{ getStatusText(node.status) }}
+              </el-tag>
+            </div>
+            <div class="header-actions">
+              <el-button @click="refreshData">
+                <el-icon><Refresh /></el-icon>
+                刷新
+              </el-button>
+              <el-button @click="goToDetail">
+                查看详情
+              </el-button>
+              <el-button
+                type="primary"
+                @click="editNode"
+              >
+                编辑节点
+              </el-button>
+            </div>
+          </div>
+    </AdminStickyChrome>
+    <div class="admin-page-body">
 
     <div
       v-if="node"
@@ -333,45 +337,90 @@
             </div>
           </div>
           <div class="optimization-options">
-            <el-checkbox v-model="networkOptimizationForm.enable_bbr">
-              启用 BBR
-            </el-checkbox>
-            <el-checkbox v-model="networkOptimizationForm.enable_fq">
-              启用 fq 队列
-            </el-checkbox>
-            <el-checkbox v-model="networkOptimizationForm.enable_tcp_fastopen">
-              启用 TCP Fast Open
-            </el-checkbox>
-            <el-checkbox v-model="networkOptimizationForm.enable_xray_sockopt">
-              同步 Xray Sockopt
-            </el-checkbox>
-            <el-checkbox
-              v-model="networkOptimizationForm.xray_tcp_fastopen"
-              :disabled="!networkOptimizationForm.enable_xray_sockopt"
-            >
-              Xray 开启 TCP Fast Open
-            </el-checkbox>
+            <div class="optimization-option-row">
+              <el-checkbox
+                v-model="networkOptimizationForm.enable_bbr"
+                :disabled="isBbrUnavailable"
+              >
+                启用 BBR
+              </el-checkbox>
+              <span
+                class="optimization-option-status"
+                :class="`is-${optimizationOptionStatus.bbr.tone}`"
+              >
+                {{ optimizationOptionStatus.bbr.text }}
+              </span>
+            </div>
+            <div class="optimization-option-row">
+              <el-checkbox v-model="networkOptimizationForm.enable_fq">
+                启用 fq 队列
+              </el-checkbox>
+              <span
+                class="optimization-option-status"
+                :class="`is-${optimizationOptionStatus.fq.tone}`"
+              >
+                {{ optimizationOptionStatus.fq.text }}
+              </span>
+            </div>
+            <div class="optimization-option-row">
+              <el-checkbox v-model="networkOptimizationForm.enable_tcp_fastopen">
+                启用 TCP Fast Open
+              </el-checkbox>
+              <span
+                class="optimization-option-status"
+                :class="`is-${optimizationOptionStatus.tfo.tone}`"
+              >
+                {{ optimizationOptionStatus.tfo.text }}
+              </span>
+            </div>
+            <div class="optimization-option-row">
+              <el-checkbox v-model="networkOptimizationForm.enable_xray_sockopt">
+                同步 Xray Sockopt
+              </el-checkbox>
+              <span
+                class="optimization-option-status"
+                :class="`is-${optimizationOptionStatus.sockopt.tone}`"
+              >
+                {{ optimizationOptionStatus.sockopt.text }}
+              </span>
+            </div>
+            <div class="optimization-option-row">
+              <el-checkbox
+                v-model="networkOptimizationForm.xray_tcp_fastopen"
+                :disabled="!networkOptimizationForm.enable_xray_sockopt"
+              >
+                Xray 开启 TCP Fast Open
+              </el-checkbox>
+              <span
+                class="optimization-option-status"
+                :class="`is-${optimizationOptionStatus.xrayTfo.tone}`"
+              >
+                {{ optimizationOptionStatus.xrayTfo.text }}
+              </span>
+            </div>
           </div>
           <div class="status-item">
             <span class="status-label">Xray TCP 拥塞控制</span>
-            <el-select
-              v-model="networkOptimizationForm.xray_tcp_congestion"
-              class="optimization-select"
-              :disabled="!networkOptimizationForm.enable_xray_sockopt"
-            >
-              <el-option
-                label="bbr"
-                value="bbr"
-              />
-              <el-option
-                label="cubic"
-                value="cubic"
-              />
-              <el-option
-                label="不设置"
-                value=""
-              />
-            </el-select>
+            <div class="optimization-congestion">
+              <el-select
+                v-model="networkOptimizationForm.xray_tcp_congestion"
+                class="optimization-select"
+                :disabled="!networkOptimizationForm.enable_xray_sockopt"
+              >
+                <el-option
+                  v-for="option in congestionControlOptions"
+                  :key="`cc-${option.value || 'none'}`"
+                  :label="option.label"
+                  :value="option.value"
+                />
+              </el-select>
+              <span
+                class="optimization-option-status"
+                :class="`is-${optimizationOptionStatus.congestion.tone}`"
+              >
+                {{ optimizationOptionStatus.congestion.text }}
+              </span>
+            </div>
           </div>
           <div
             v-if="networkOptimizationState"
@@ -404,7 +453,7 @@
           </el-alert>
           <el-empty
             v-else
-            description="尚未检测远端网络优化状态"
+            :description="networkEmptyDescription"
             :image-size="56"
           />
           <div
@@ -421,13 +470,22 @@
           </div>
           <div class="core-actions">
             <el-button @click="networkOptimizationDialogVisible = true">
-              SSH 配置
+              {{ hasSavedSSHCredentials ? 'SSH 设置' : '配置 SSH' }}
             </el-button>
+            <el-tag
+              v-if="hasSavedSSHCredentials"
+              size="small"
+              type="success"
+              effect="plain"
+              class="ssh-credential-chip"
+            >
+              已保存凭据
+            </el-tag>
             <el-button
               :loading="networkOptimizationAction === 'inspect'"
               @click="inspectNetworkOptimization"
             >
-              检测
+              {{ hasSavedSSHCredentials ? '使用已保存凭据检测' : '检测' }}
             </el-button>
             <el-button
               type="primary"
@@ -446,7 +504,16 @@
             </el-button>
           </div>
           <div class="core-tip">
-            系统层修改会立即通过 SSH 生效，Xray Sockopt 会加入配置同步队列。没有保存 SSH 凭据时，请先填写密码或私钥。
+            系统层修改会立即通过 SSH 生效，Xray Sockopt 会加入配置同步队列。
+            <template v-if="hasSavedSSHCredentials">
+              已保存 SSH 凭据，检测/应用/回滚都会自动复用，无需重复输入密码。
+            </template>
+            <template v-else-if="sshForm.password || sshForm.private_key">
+              当前会话已填写凭据；建议点「配置 SSH」保存，下次不用重填。
+            </template>
+            <template v-else>
+              还没有可用 SSH 凭据，请先点「配置 SSH」保存密码或私钥（一次即可）。
+            </template>
           </div>
           <el-collapse
             v-if="networkOptimizationLogs"
@@ -525,12 +592,17 @@
     >
       <div class="network-dialog-content">
         <el-alert
-          type="info"
+          :type="hasSavedSSHCredentials ? 'success' : 'info'"
           :closable="false"
           show-icon
         >
           <template #title>
-            网络优化会直接修改节点的 Linux `sysctl` 参数。请使用具备 root 或 sudo 权限的 SSH 账户。
+            <template v-if="hasSavedSSHCredentials">
+              已保存 SSH 凭据，无需重复输入。可直接检测，或仅修改主机/端口/用户名。
+            </template>
+            <template v-else>
+              网络优化会通过 SSH 修改节点 `sysctl`。请使用 root/sudo 账户，并保存密码或私钥（一次即可）。
+            </template>
           </template>
         </el-alert>
         <div
@@ -553,7 +625,7 @@
           >
             已保存 SSH 私钥
           </el-tag>
-          <span>留空密码和私钥时，将继续使用已保存凭据。</span>
+          <span>默认复用已保存凭据，不用每次重填。</span>
         </div>
         <el-form
           :label-position="isMobile ? 'top' : 'right'"
@@ -580,22 +652,51 @@
               placeholder="root"
             />
           </el-form-item>
-          <el-form-item label="SSH 密码">
-            <el-input
-              v-model="sshForm.password"
-              type="password"
-              show-password
-              :placeholder="networkOptimizationMeta.ssh_defaults?.has_saved_password ? '已保存密码，留空继续使用' : '请输入 SSH 密码'"
-            />
-          </el-form-item>
-          <el-form-item label="SSH 私钥">
-            <el-input
-              v-model="sshForm.private_key"
-              type="textarea"
-              :rows="7"
-              :placeholder="networkOptimizationMeta.ssh_defaults?.has_saved_private_key ? '已保存私钥，留空继续使用' : '粘贴 SSH 私钥内容'"
-            />
-          </el-form-item>
+          <template v-if="!hasSavedSSHCredentials">
+            <el-form-item label="SSH 密码">
+              <el-input
+                v-model="sshForm.password"
+                type="password"
+                show-password
+                placeholder="请输入 SSH 密码"
+              />
+            </el-form-item>
+            <el-form-item label="SSH 私钥">
+              <el-input
+                v-model="sshForm.private_key"
+                type="textarea"
+                :rows="7"
+                placeholder="也可粘贴 SSH 私钥内容"
+              />
+            </el-form-item>
+          </template>
+          <el-collapse
+            v-else
+            v-model="sshCredentialPanels"
+            class="network-credential-collapse"
+          >
+            <el-collapse-item
+              name="replace-credential"
+              title="更换密码或私钥（可选，一般不用填）"
+            >
+              <el-form-item label="SSH 密码">
+                <el-input
+                  v-model="sshForm.password"
+                  type="password"
+                  show-password
+                  placeholder="仅在更换密码时填写"
+                />
+              </el-form-item>
+              <el-form-item label="SSH 私钥">
+                <el-input
+                  v-model="sshForm.private_key"
+                  type="textarea"
+                  :rows="6"
+                  placeholder="仅在更换私钥时粘贴"
+                />
+              </el-form-item>
+            </el-collapse-item>
+          </el-collapse>
         </el-form>
       </div>
       <template #footer>
@@ -604,19 +705,36 @@
             关闭
           </el-button>
           <el-button
+            :loading="savingSSHConfig"
+            @click="saveSSHConfig()"
+          >
+            {{ hasSavedSSHCredentials ? '仅保存连接信息' : '保存 SSH 配置' }}
+          </el-button>
+          <el-button
+            v-if="hasSavedSSHCredentials"
+            type="primary"
+            :loading="networkOptimizationAction === 'inspect' || savingSSHConfig"
+            @click="useSavedSSHAndInspect"
+          >
+            使用已保存凭据并检测
+          </el-button>
+          <el-button
+            v-else
             type="primary"
             :loading="savingSSHConfig"
-            @click="saveSSHConfig"
+            @click="saveSSHConfig({ inspectAfter: true })"
           >
-            保存 SSH 配置
+            保存并检测
           </el-button>
         </div>
       </template>
     </el-dialog>
-  </div>
+    </div>
+</div>
 </template>
 
 <script setup>
+import AdminStickyChrome from '@/components/AdminStickyChrome.vue'
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
@@ -657,6 +775,8 @@ const availableVersionsCachedAt = ref('')
 const activeWorkspace = ref('core')
 const networkOptimizationDialogVisible = ref(false)
 const networkOptimizationAction = ref('')
+const networkAutoInspectedNodeId = ref(null)
+const sshCredentialPanels = ref([])
 const networkLogPanels = ref([])
 const networkOptimizationLogs = ref('')
 const networkOptimizationState = ref(null)
@@ -685,7 +805,7 @@ const networkOptimizationMeta = ref({
 
 const sshForm = reactive({
   host: '',
-  port: 22,
+  port: 0,
   username: 'root',
   password: '',
   private_key: ''
@@ -767,6 +887,15 @@ const hasSavedSSHCredentials = computed(() => Boolean(
   networkOptimizationMeta.value?.ssh_defaults?.has_saved_password ||
   networkOptimizationMeta.value?.ssh_defaults?.has_saved_private_key
 ))
+const networkEmptyDescription = computed(() => {
+  if (networkOptimizationAction.value === 'inspect') {
+    return '正在检测远端网络优化状态...'
+  }
+  if (!hasSavedSSHCredentials.value && !sshForm.password && !sshForm.private_key) {
+    return '尚未配置 SSH 凭据，请先点「配置 SSH」保存一次'
+  }
+  return '凭据已就绪，可点「使用已保存凭据检测」查看远端状态'
+})
 const sshEndpoint = computed(() => {
   const host = sshForm.host || networkOptimizationMeta.value?.ssh_defaults?.host || node.value?.address || '-'
   const port = sshForm.port || networkOptimizationMeta.value?.ssh_defaults?.port || 22
@@ -813,6 +942,107 @@ const optimizationStateItems = computed(() => {
     { label: 'BBR 可用', value: networkOptimizationState.value.bbr_available ? '是' : '否' },
     { label: '备份状态', value: networkOptimizationState.value.backup_exists ? '已创建' : '未创建' }
   ]
+})
+
+const isBbrUnavailable = computed(() => (
+  Boolean(networkOptimizationState.value) && !networkOptimizationState.value.bbr_available
+))
+
+const congestionControlOptions = computed(() => {
+  const available = (networkOptimizationState.value?.available_congestion_controls || [])
+    .map((item) => String(item || '').trim().toLowerCase())
+    .filter(Boolean)
+  const values = available.length ? [...available] : ['bbr', 'cubic']
+  const current = String(networkOptimizationForm.xray_tcp_congestion || '').trim().toLowerCase()
+  if (current && !values.includes(current)) {
+    values.unshift(current)
+  }
+  const unique = []
+  for (const value of values) {
+    if (!unique.includes(value)) unique.push(value)
+  }
+  return [
+    { label: '不设置', value: '' },
+    ...unique.map((value) => ({ label: value, value }))
+  ]
+})
+
+const pendingInspectStatus = computed(() => {
+  if (networkOptimizationAction.value === 'inspect') {
+    return { text: '检测中...', tone: 'muted' }
+  }
+  if (!canAutoInspectNetwork()) {
+    return { text: '需配置 SSH', tone: 'warn' }
+  }
+  return { text: '未检测', tone: 'muted' }
+})
+
+const buildOptionStatus = (desired, actualOn, actualLabel, unavailableText = '') => {
+  if (!networkOptimizationState.value) {
+    return pendingInspectStatus.value
+  }
+  if (unavailableText) {
+    return { text: unavailableText, tone: 'warn' }
+  }
+  if (desired && actualOn) {
+    return { text: `已生效 · ${actualLabel}`, tone: 'ok' }
+  }
+  if (desired && !actualOn) {
+    return { text: `未生效 · 当前 ${actualLabel}`, tone: 'warn' }
+  }
+  if (!desired && actualOn) {
+    return { text: `将关闭 · 当前 ${actualLabel}`, tone: 'warn' }
+  }
+  return { text: `保持 · 当前 ${actualLabel}`, tone: 'muted' }
+}
+
+const optimizationOptionStatus = computed(() => {
+  const state = networkOptimizationState.value
+  const currentCC = state?.current_congestion_control || '-'
+  const bbrOn = /^bbr/i.test(String(currentCC))
+  const fqOn = Boolean(state?.fq_enabled) || state?.default_qdisc === 'fq'
+  const tfoRaw = String(state?.tcp_fastopen ?? '')
+  const tfoOn = tfoRaw !== '' && tfoRaw !== '0'
+  const desiredCongestion = String(networkOptimizationForm.xray_tcp_congestion || '').trim().toLowerCase()
+  const congestionMatched = desiredCongestion
+    ? String(currentCC).toLowerCase() === desiredCongestion
+    : true
+
+  return {
+    bbr: buildOptionStatus(
+      networkOptimizationForm.enable_bbr,
+      bbrOn,
+      currentCC,
+      isBbrUnavailable.value ? '内核不可用，已禁用' : ''
+    ),
+    fq: buildOptionStatus(networkOptimizationForm.enable_fq, fqOn, state?.default_qdisc || '-'),
+    tfo: buildOptionStatus(networkOptimizationForm.enable_tcp_fastopen, tfoOn, tfoRaw || '-'),
+    sockopt: state
+      ? {
+          text: networkOptimizationForm.enable_xray_sockopt
+            ? (state.xray_config_exists ? '应用后经配置同步生效' : '未找到 Xray 配置，仅系统层可应用')
+            : '不同步 Xray',
+          tone: networkOptimizationForm.enable_xray_sockopt && !state.xray_config_exists ? 'warn' : 'muted'
+        }
+      : pendingInspectStatus.value,
+    xrayTfo: state
+      ? {
+          text: networkOptimizationForm.enable_xray_sockopt
+            ? (networkOptimizationForm.xray_tcp_fastopen ? '配置同步后写入 sockopt' : '不写入 Xray TFO')
+            : '需先启用 Xray Sockopt',
+          tone: 'muted'
+        }
+      : pendingInspectStatus.value,
+    congestion: state
+      ? (
+          !networkOptimizationForm.enable_xray_sockopt
+            ? { text: '需先启用 Xray Sockopt', tone: 'muted' }
+            : !desiredCongestion
+              ? { text: `不设置 · 系统当前 ${currentCC}`, tone: 'muted' }
+              : buildOptionStatus(true, congestionMatched, currentCC)
+        )
+      : pendingInspectStatus.value
+  }
 })
 
 const applyNetworkOptimizationForm = (settings) => {
@@ -880,7 +1110,7 @@ const fetchNode = async () => {
   }
 }
 
-const fetchNetworkOptimizationProfile = async (forceSSHDefaults = false) => {
+const fetchNetworkOptimizationProfile = async (forceSSHDefaults = false, { autoInspect = true } = {}) => {
   if (!node.value) return
 
   try {
@@ -894,6 +1124,9 @@ const fetchNetworkOptimizationProfile = async (forceSSHDefaults = false) => {
       applyNetworkOptimizationForm(response.saved_settings)
     } else {
       applyNetworkOptimizationForm(response?.recommended_settings)
+    }
+    if (autoInspect && activeWorkspace.value === 'network') {
+      await maybeAutoInspectNetwork()
     }
   } catch (error) {
     console.error('获取网络优化配置失败:', error)
@@ -1032,20 +1265,20 @@ const getNetworkOptimizationSSHPayload = () => ({
   private_key: sshForm.private_key
 })
 
-const saveSSHConfig = async () => {
+const saveSSHConfig = async ({ inspectAfter = false } = {}) => {
   if (!node.value) return
 
   if (!sshForm.host || !sshForm.username) {
     ElMessage.warning('请先填写 SSH 主机和用户名')
-    return
+    return false
   }
   if (!sshForm.port || sshForm.port < 1 || sshForm.port > 65535) {
     ElMessage.warning('SSH 端口必须在 1-65535 之间')
-    return
+    return false
   }
   if (!sshForm.password && !sshForm.private_key && !hasSavedSSHCredentials.value) {
     ElMessage.warning('首次保存 SSH 配置时请输入密码或私钥')
-    return
+    return false
   }
 
   savingSSHConfig.value = true
@@ -1066,15 +1299,31 @@ const saveSSHConfig = async () => {
     await nodesApi.update(node.value.id, { ssh })
     sshForm.password = ''
     sshForm.private_key = ''
-    ElMessage.success('SSH 配置已保存')
+    sshCredentialPanels.value = []
+    ElMessage.success('SSH 配置已保存，后续检测/应用将自动复用凭据')
     networkOptimizationDialogVisible.value = false
     await fetchNode()
-    await fetchNetworkOptimizationProfile(true)
+    await fetchNetworkOptimizationProfile(true, { autoInspect: false })
+    networkAutoInspectedNodeId.value = null
+    if (inspectAfter || activeWorkspace.value === 'network') {
+      await inspectNetworkOptimization({ silent: !inspectAfter })
+    }
+    return true
   } catch (error) {
     ElMessage.error(extractErrorMessage(error) || '保存 SSH 配置失败')
+    return false
   } finally {
     savingSSHConfig.value = false
   }
+}
+
+const useSavedSSHAndInspect = async () => {
+  if (!validateNetworkOptimizationSSH()) return
+  // Save host/port/username (password optional), then inspect with stored credentials.
+  const saved = await saveSSHConfig({ inspectAfter: true })
+  if (saved) return
+  networkOptimizationDialogVisible.value = false
+  await inspectNetworkOptimization()
 }
 
 const validateNetworkOptimizationSSH = () => {
@@ -1102,8 +1351,28 @@ const validateNetworkOptimizationSSH = () => {
   return true
 }
 
-const inspectNetworkOptimization = async () => {
-  if (!node.value || !validateNetworkOptimizationSSH()) return
+const alignFormWithInspectedCapabilities = () => {
+  const state = networkOptimizationState.value
+  if (!state) return
+
+  if (!state.bbr_available && networkOptimizationForm.enable_bbr) {
+    networkOptimizationForm.enable_bbr = false
+  }
+}
+
+const canAutoInspectNetwork = () => {
+  if (!node.value) return false
+  ensureSSHDefaults()
+  if (!sshForm.host || !sshForm.username) return false
+  if (!sshForm.port || sshForm.port < 1 || sshForm.port > 65535) return false
+  return Boolean(sshForm.password || sshForm.private_key || hasSavedSSHCredentials.value)
+}
+
+const inspectNetworkOptimization = async ({ silent = false } = {}) => {
+  if (!node.value) return
+  if (!silent && !validateNetworkOptimizationSSH()) return
+  if (silent && !canAutoInspectNetwork()) return
+
   networkOptimizationAction.value = 'inspect'
   try {
     clearNetworkOptimizationError()
@@ -1111,19 +1380,39 @@ const inspectNetworkOptimization = async () => {
       ssh: getNetworkOptimizationSSHPayload()
     })
     networkOptimizationState.value = response?.state || null
+    networkAutoInspectedNodeId.value = node.value.id
     updateNetworkLogs(response?.logs)
     if (response?.saved_settings) {
       networkOptimizationMeta.value.saved_settings = response.saved_settings
     }
-    ElMessage.success('节点网络状态检测完成')
+    alignFormWithInspectedCapabilities()
+    if (!silent) {
+      ElMessage.success('节点网络状态检测完成')
+    }
   } catch (error) {
     updateNetworkLogs(error?.logs || error?.response?.data?.logs)
     const message = extractErrorMessage(error) || '检测节点网络优化状态失败'
-    setNetworkOptimizationError('检测失败', error, message)
-    ElMessage.error(message)
+    if (silent) {
+      // Keep page usable; surface one soft error so "未检测" is explainable.
+      setNetworkOptimizationError('自动检测失败', error, message)
+      networkAutoInspectedNodeId.value = node.value?.id
+    } else {
+      setNetworkOptimizationError('检测失败', error, message)
+      ElMessage.error(message)
+    }
   } finally {
     networkOptimizationAction.value = ''
   }
+}
+
+const maybeAutoInspectNetwork = async () => {
+  if (activeWorkspace.value !== 'network') return
+  if (!canAutoInspectNetwork()) return
+  if (networkOptimizationAction.value) return
+  if (networkAutoInspectedNodeId.value === node.value?.id) {
+    return
+  }
+  await inspectNetworkOptimization({ silent: true })
 }
 
 const applyNetworkOptimization = async () => {
@@ -1149,7 +1438,13 @@ const applyNetworkOptimization = async () => {
     networkOptimizationState.value = response?.result?.state || null
     updateNetworkLogs(response?.result?.log)
     networkOptimizationMeta.value.has_saved_settings = true
-    networkOptimizationMeta.value.saved_settings = { ...networkOptimizationForm }
+    if (response?.saved_settings) {
+      networkOptimizationMeta.value.saved_settings = response.saved_settings
+      applyNetworkOptimizationForm(response.saved_settings)
+    } else {
+      networkOptimizationMeta.value.saved_settings = { ...networkOptimizationForm }
+    }
+    alignFormWithInspectedCapabilities()
     ElMessage.success(response?.message || '节点网络优化已应用')
     await refreshData()
   } catch (error) {
@@ -1210,11 +1505,12 @@ watch(
     activeWorkspace.value = 'core'
     updateNetworkLogs('')
     networkOptimizationState.value = null
+    networkAutoInspectedNodeId.value = null
     clearNetworkOptimizationError()
     networkOptimizationMeta.value.has_saved_settings = false
     networkOptimizationMeta.value.saved_settings = {}
     sshForm.host = ''
-    sshForm.port = 22
+    sshForm.port = 0
     sshForm.username = 'root'
     sshForm.password = ''
     sshForm.private_key = ''
@@ -1222,6 +1518,12 @@ watch(
     await refreshData()
   }
 )
+
+watch(activeWorkspace, async (value) => {
+  if (value === 'network') {
+    await maybeAutoInspectNetwork()
+  }
+})
 </script>
 
 <style scoped>
@@ -1511,6 +1813,44 @@ watch(
   padding: 16px 0;
 }
 
+.optimization-option-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 32px;
+}
+
+.optimization-option-status {
+  flex-shrink: 0;
+  max-width: 58%;
+  font-size: 12px;
+  line-height: 1.4;
+  text-align: right;
+  color: var(--el-text-color-secondary);
+  word-break: break-word;
+}
+
+.optimization-option-status.is-ok {
+  color: var(--el-color-success);
+}
+
+.optimization-option-status.is-warn {
+  color: var(--el-color-warning);
+}
+
+.optimization-option-status.is-muted {
+  color: var(--el-text-color-secondary);
+}
+
+.optimization-congestion {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+  max-width: 72%;
+}
+
 .optimization-select {
   width: 180px;
 }
@@ -1699,6 +2039,18 @@ watch(
     grid-template-columns: 1fr;
   }
 
+  .optimization-option-row,
+  .optimization-congestion {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .optimization-option-status,
+  .optimization-congestion {
+    max-width: 100%;
+    text-align: left;
+  }
+
   .workspace-toolbar__switcher {
     width: 100%;
   }
@@ -1769,5 +2121,48 @@ watch(
     width: 100%;
     margin: 0;
   }
+}
+
+.ssh-credential-chip {
+  align-self: center;
+}
+
+.network-credential-summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: var(--el-color-success-light-9);
+  color: var(--el-text-color-regular);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.network-credential-collapse {
+  width: 100%;
+  margin-top: 4px;
+  border: none;
+}
+
+.network-credential-collapse :deep(.el-collapse-item__header) {
+  height: auto;
+  min-height: 40px;
+  line-height: 1.5;
+  font-size: 13px;
+  color: var(--el-text-color-secondary);
+  background: transparent;
+}
+
+.network-credential-collapse :deep(.el-collapse-item__wrap) {
+  background: transparent;
+}
+
+.network-dialog-footer {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
 }
 </style>

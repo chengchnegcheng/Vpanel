@@ -1,42 +1,46 @@
 <template>
   <div class="traffic-monitor">
-    <div class="page-header">
-      <div class="page-heading">
-        <h1 class="page-title">
-          流量监控
-        </h1>
-        <p class="page-subtitle">
-          查看最近 5 分钟节点流量和历史流量趋势
-        </p>
-      </div>
-      <div class="page-actions">
-        <el-select
-          v-model="historyPeriod"
-          size="small"
-          style="width: 120px"
-          @change="refreshData"
-        >
-          <el-option
-            label="今日"
-            value="today"
-          />
-          <el-option
-            label="本周"
-            value="week"
-          />
-          <el-option
-            label="本月"
-            value="month"
-          />
-        </el-select>
-        <el-button
-          type="primary"
-          @click="refreshData"
-        >
-          刷新数据
-        </el-button>
-      </div>
-    </div>
+    
+    <AdminStickyChrome>
+      <div class="page-header">
+            <div class="page-heading">
+              <h1 class="page-title">
+                流量监控
+              </h1>
+              <p class="page-subtitle">
+                查看最近 5 分钟节点流量和历史流量趋势
+              </p>
+            </div>
+            <div class="page-actions">
+              <el-select
+                v-model="historyPeriod"
+                size="small"
+                style="width: 120px"
+                @change="refreshData"
+              >
+                <el-option
+                  label="今日"
+                  value="today"
+                />
+                <el-option
+                  label="本周"
+                  value="week"
+                />
+                <el-option
+                  label="本月"
+                  value="month"
+                />
+              </el-select>
+              <el-button
+                type="primary"
+                @click="refreshData"
+              >
+                刷新数据
+              </el-button>
+            </div>
+          </div>
+    </AdminStickyChrome>
+    <div class="admin-page-body">
 
     <el-card class="box-card">
       <template #header>
@@ -188,10 +192,12 @@
         </article>
       </div>
     </el-card>
-  </div>
+    </div>
+</div>
 </template>
 
 <script setup>
+import AdminStickyChrome from '@/components/AdminStickyChrome.vue'
 import { computed, ref, onMounted, onUnmounted, watch } from 'vue'
 import * as echarts from 'echarts/core'
 import { BarChart, LineChart } from 'echarts/charts'

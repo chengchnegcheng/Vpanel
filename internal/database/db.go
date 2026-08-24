@@ -3,6 +3,7 @@ package database
 import (
 	"context"
 	"fmt"
+	"net/url"
 	"strings"
 	"sync"
 	"time"
@@ -61,10 +62,12 @@ type Database struct {
 // New creates a new database connection.
 func New(cfg *Config) (*Database, error) {
 	var dialector gorm.Dialector
+	isSQLite := false
 
 	switch cfg.Driver {
 	case "sqlite", "sqlite3", "":
-		dialector = sqlite.Open(cfg.DSN)
+		isSQLite = true
+		dialector = sqlite.Open(sqliteDSN(cfg.DSN))
 	case "postgres", "postgresql":
 		dialector = postgres.Open(cfg.DSN)
 	case "mysql":
@@ -105,12 +108,21 @@ func New(cfg *Config) (*Database, error) {
 		return nil, fmt.Errorf("failed to get underlying DB: %w", err)
 	}
 
-	// Configure connection pool
-	if cfg.MaxOpenConns > 0 {
-		sqlDB.SetMaxOpenConns(cfg.MaxOpenConns)
+	// SQLite permits only one writer. Serializing access avoids transaction
+	// collisions between request logging, node heartbeats, and auth middleware.
+	maxOpenConns := cfg.MaxOpenConns
+	maxIdleConns := cfg.MaxIdleConns
+	if isSQLite {
+		maxOpenConns = 1
+		maxIdleConns = 1
 	}
-	if cfg.MaxIdleConns > 0 {
-		sqlDB.SetMaxIdleConns(cfg.MaxIdleConns)
+
+	// Configure connection pool
+	if maxOpenConns > 0 {
+		sqlDB.SetMaxOpenConns(maxOpenConns)
+	}
+	if maxIdleConns > 0 {
+		sqlDB.SetMaxIdleConns(maxIdleConns)
 	}
 	if cfg.ConnMaxLifetime > 0 {
 		sqlDB.SetConnMaxLifetime(cfg.ConnMaxLifetime)
@@ -127,6 +139,23 @@ func New(cfg *Config) (*Database, error) {
 	go database.healthCheckLoop()
 
 	return database, nil
+}
+
+func sqliteDSN(dsn string) string {
+	separator := "?"
+	if strings.Contains(dsn, "?") {
+		separator = "&"
+	}
+
+	pragmas := []string{
+		"busy_timeout(10000)",
+		"journal_mode(WAL)",
+	}
+	for _, pragma := range pragmas {
+		dsn += separator + "_pragma=" + url.QueryEscape(pragma)
+		separator = "&"
+	}
+	return dsn
 }
 
 // DB returns the underlying GORM database.

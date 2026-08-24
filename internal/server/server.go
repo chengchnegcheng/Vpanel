@@ -54,7 +54,7 @@ func New(
 		repos.CertificateDeployment,
 		log,
 		cfg.Certificate.StoragePath,
-	)
+	).WithAutoRenewConfig(cfg.Certificate.CheckInterval, cfg.Certificate.RenewThreshold)
 
 	return &Server{
 		config:             cfg,

@@ -1,11 +1,15 @@
 <template>
   <div class="audit-logs-page">
-    <div class="page-header">
-      <h1>操作日志</h1>
-      <p class="subtitle">
-        管理员关键操作（登录、用户管理、设置变更等）的审计记录。在 系统设置 → 日志配置 中可启用/关闭。
-      </p>
-    </div>
+    
+    <AdminStickyChrome>
+      <div class="page-header">
+            <h1>操作日志</h1>
+            <p class="subtitle">
+              管理员关键操作（登录、用户管理、设置变更等）的审计记录。在 系统设置 → 日志配置 中可启用/关闭。
+            </p>
+          </div>
+    </AdminStickyChrome>
+    <div class="admin-page-body">
 
     <el-card v-loading="loading" shadow="never">
       <template #header>
@@ -52,17 +56,19 @@
           v-model:current-page="page"
           v-model:page-size="pageSize"
           :total="total"
-          :page-sizes="[20, 50, 100, 200]"
+          :page-sizes="[10, 20, 50, 100]"
           layout="total, sizes, prev, pager, next"
           @current-change="load"
           @size-change="load"
         />
       </div>
     </el-card>
-  </div>
+    </div>
+</div>
 </template>
 
 <script setup>
+import AdminStickyChrome from '@/components/AdminStickyChrome.vue'
 import { ref, onMounted } from 'vue'
 import { Refresh } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
@@ -72,7 +78,7 @@ import { extractErrorMessage } from '@/utils/entitlement'
 const logs = ref([])
 const total = ref(0)
 const page = ref(1)
-const pageSize = ref(50)
+const pageSize = ref(10)
 const loading = ref(false)
 
 const formatDate = (s) => {

@@ -1,13 +1,16 @@
 <template>
   <div class="dashboard-container">
     <!-- 系统概览 -->
-    <div class="panel-box">
-      <div class="panel-header">
+    <AdminStickyChrome>
+      <div class="panel-header panel-header--sticky-top">
         <span class="panel-title">系统概览</span>
         <el-button type="primary" size="small" @click="refreshStats">
           刷新
         </el-button>
       </div>
+    </AdminStickyChrome>
+    <div class="admin-page-body">
+    <div class="panel-box">
       <div class="stats-cards">
         <el-row :gutter="20">
           <el-col :xs="24" :sm="12" :lg="8">
@@ -308,10 +311,12 @@
         </el-row>
       </div>
     </div>
-  </div>
+    </div>
+</div>
 </template>
 
 <script setup>
+import AdminStickyChrome from '@/components/AdminStickyChrome.vue'
 import { ref, computed, onMounted, onUnmounted } from "vue";
 import { ElMessage } from "element-plus";
 import { statsApi, systemApi } from "@/api";

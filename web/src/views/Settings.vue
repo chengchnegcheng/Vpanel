@@ -1,14 +1,17 @@
 <template>
   <div class="settings-container">
-    <div class="page-header">
-      <div class="page-heading">
-        <h1>系统设置</h1>
-        <p class="page-subtitle">
-          维护面板、数据库、邮件和核心运行参数
-        </p>
+    <AdminStickyChrome>
+      <div class="page-header">
+        <div class="page-heading">
+          <h1>系统设置</h1>
+          <p class="page-subtitle">
+            维护面板、数据库、邮件和核心运行参数
+          </p>
+        </div>
       </div>
-    </div>
-    
+    </AdminStickyChrome>
+    <div class="admin-page-body">
+
     <el-tabs
       v-model="activeName"
       class="settings-tabs"
@@ -1137,10 +1140,12 @@
         </el-form>
       </el-tab-pane>
     </el-tabs>
+    </div>
   </div>
 </template>
 
 <script setup>
+import AdminStickyChrome from '@/components/AdminStickyChrome.vue'
 import { ref, reactive, onMounted, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'

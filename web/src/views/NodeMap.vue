@@ -1,64 +1,68 @@
 <template>
   <div class="node-map-page">
-    <div class="page-header">
-      <div class="page-heading">
-        <h1 class="page-title">
-          节点地理分布
-        </h1>
-        <p class="page-subtitle">
-          用真实世界地图查看节点覆盖区域、状态分布和地区负载密度
-        </p>
-      </div>
-      <div class="page-actions">
-        <el-button
-          :loading="loading"
-          @click="fetchNodes"
-        >
-          <el-icon class="el-icon--left">
-            <Refresh />
-          </el-icon>
-          刷新
-        </el-button>
-      </div>
-    </div>
+    
+    <AdminStickyChrome>
+      <div class="page-header">
+            <div class="page-heading">
+              <h1 class="page-title">
+                节点地理分布
+              </h1>
+              <p class="page-subtitle">
+                用真实世界地图查看节点覆盖区域、状态分布和地区负载密度
+              </p>
+            </div>
+            <div class="page-actions">
+              <el-button
+                :loading="loading"
+                @click="fetchNodes"
+              >
+                <el-icon class="el-icon--left">
+                  <Refresh />
+                </el-icon>
+                刷新
+              </el-button>
+            </div>
+          </div>
 
-    <div class="overview-strip">
-      <div class="overview-card">
-        <span class="overview-label">当前视图节点</span>
-        <strong class="overview-value">{{ visibleNodeCount }}</strong>
-      </div>
-      <div class="overview-card">
-        <span class="overview-label">在线节点</span>
-        <strong class="overview-value is-success">{{ visibleOnlineCount }}</strong>
-      </div>
-      <div class="overview-card">
-        <span class="overview-label">覆盖地区</span>
-        <strong class="overview-value is-primary">{{ mappedRegionsCount }}</strong>
-      </div>
-      <div class="overview-card">
-        <span class="overview-label">平均延迟</span>
-        <strong class="overview-value is-warning">{{ visibleAverageLatency }}ms</strong>
-      </div>
-      <div class="overview-card">
-        <span class="overview-label">热点地区</span>
-        <strong class="overview-value">{{ topRegionName }}</strong>
-      </div>
-    </div>
+          <div class="overview-strip">
+            <div class="overview-card">
+              <span class="overview-label">当前视图节点</span>
+              <strong class="overview-value">{{ visibleNodeCount }}</strong>
+            </div>
+            <div class="overview-card">
+              <span class="overview-label">在线节点</span>
+              <strong class="overview-value is-success">{{ visibleOnlineCount }}</strong>
+            </div>
+            <div class="overview-card">
+              <span class="overview-label">覆盖地区</span>
+              <strong class="overview-value is-primary">{{ mappedRegionsCount }}</strong>
+            </div>
+            <div class="overview-card">
+              <span class="overview-label">平均延迟</span>
+              <strong class="overview-value is-warning">{{ visibleAverageLatency }}ms</strong>
+            </div>
+            <div class="overview-card">
+              <span class="overview-label">热点地区</span>
+              <strong class="overview-value">{{ topRegionName }}</strong>
+            </div>
+          </div>
 
-    <div class="toolbar-card">
-      <div class="toolbar-filters">
-        <span class="toolbar-summary">当前区域：{{ selectedRegionLabel }}</span>
-        <span class="toolbar-summary">在线 {{ visibleOnlineCount }} / 离线 {{ visibleOfflineCount }} / 异常 {{ visibleUnhealthyCount }}</span>
-      </div>
-      <div class="toolbar-actions">
-        <el-button
-          v-if="selectedRegion"
-          @click="clearRegionFilter"
-        >
-          显示全部地区
-        </el-button>
-      </div>
-    </div>
+          <div class="toolbar-card">
+            <div class="toolbar-filters">
+              <span class="toolbar-summary">当前区域：{{ selectedRegionLabel }}</span>
+              <span class="toolbar-summary">在线 {{ visibleOnlineCount }} / 离线 {{ visibleOfflineCount }} / 异常 {{ visibleUnhealthyCount }}</span>
+            </div>
+            <div class="toolbar-actions">
+              <el-button
+                v-if="selectedRegion"
+                @click="clearRegionFilter"
+              >
+                显示全部地区
+              </el-button>
+            </div>
+          </div>
+    </AdminStickyChrome>
+    <div class="admin-page-body">
 
     <div class="map-layout">
       <el-card
@@ -249,10 +253,12 @@
         </el-card>
       </div>
     </div>
-  </div>
+    </div>
+</div>
 </template>
 
 <script setup>
+import AdminStickyChrome from '@/components/AdminStickyChrome.vue'
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'

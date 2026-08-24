@@ -653,7 +653,6 @@ func (h *CertificateHandler) Renew(c *gin.Context) {
 		return
 	}
 
-	// TODO: 实现证书续期逻辑
 	if h.certSvc == nil {
 		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "证书服务不可用"})
 		return
@@ -661,7 +660,11 @@ func (h *CertificateHandler) Renew(c *gin.Context) {
 
 	if err := h.certSvc.Renew(c.Request.Context(), id); err != nil {
 		h.logger.Error("Failed to renew certificate", logger.Err(err), logger.F("id", id), logger.F("domain", cert.Domain))
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		clientMessage := certificateClientErrorMessage(err)
+		if failedCert, fetchErr := h.certRepo.GetByID(c.Request.Context(), id); fetchErr == nil && strings.TrimSpace(failedCert.ErrorMessage) != "" {
+			clientMessage = failedCert.ErrorMessage
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": clientMessage})
 		return
 	}
 
